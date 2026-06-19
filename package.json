@@ -1,0 +1,14 @@
+{
+  "name": "geoip-analytics",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter @geoip/api --filter @geoip/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "db:migrate": "pnpm --filter @geoip/api db:migrate"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

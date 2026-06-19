@@ -1,0 +1,128 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: geoip_postgres
+    shm_size: '512mb'
+    environment:
+      POSTGRES_USER: geoip
+      POSTGRES_PASSWORD: geoip
+      POSTGRES_DB: geoip
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=4GB
+      - -c
+      - work_mem=32MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_parallel_workers_per_gather=4
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geoip -d geoip"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.22.1-p0
+    container_name: geoip_pgbouncer
+    volumes:
+      - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - "6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    container_name: geoip_api
+    command: node dist/server.js
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://geoip:geoip@pgbouncer:6432/geoip
+      DATABASE_DIRECT_URL: postgresql://geoip:geoip@postgres:5432/geoip
+      DATABASE_POOL_MAX: 8
+      API_PORT: 3000
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    volumes:
+      - import_tmp:/tmp/geoip-import
+
+  import-worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    container_name: geoip_worker
+    command: node dist/jobs/import-worker.js
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://geoip:geoip@pgbouncer:6432/geoip
+      DATABASE_DIRECT_URL: postgresql://geoip:geoip@postgres:5432/geoip
+      DATABASE_POOL_MAX: 4
+      ASN_MAP_BATCH_SIZE: 50000
+      ASN_MAP_WORKERS: 6
+      IMPORT_ZIP_CACHE_ENABLED: "true"
+      IMPORT_SKIP_UNCHANGED_DATASET: "true"
+      NODE_OPTIONS: --max-old-space-size=4096
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    volumes:
+      - import_tmp:/tmp/geoip-import
+
+  export-worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    container_name: geoip_export_worker
+    command: node dist/jobs/export-worker.js
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://geoip:geoip@pgbouncer:6432/geoip
+      DATABASE_DIRECT_URL: postgresql://geoip:geoip@postgres:5432/geoip
+      DATABASE_POOL_MAX: 2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    volumes:
+      - import_tmp:/tmp/geoip-import
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    container_name: geoip_web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
+  import_tmp:
