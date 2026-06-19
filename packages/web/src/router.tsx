@@ -1,10 +1,9 @@
-import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { AppLayout } from '@/components/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { ImportsPage } from '@/pages/ImportsPage';
 import { LookupPage } from '@/pages/LookupPage';
-import { AdminPage } from '@/pages/AdminPage';
 import { BrowsePage } from '@/pages/BrowsePage';
+import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
 
 const rootRoute = createRootRoute({
   component: AppLayout,
@@ -16,67 +15,36 @@ const indexRoute = createRoute({
   component: DashboardPage,
 });
 
-const importsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/imports',
-  component: ImportsPage,
-});
-
 const lookupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/lookup',
   component: LookupPage,
 });
 
-const adminRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/admin',
-  component: AdminPage,
-});
-
 const browseSearchSchema = (search: Record<string, unknown>) => ({
-  page: Number(search.page ?? 1),
-  pageSize: Number(search.pageSize ?? 50),
-  sort: String(search.sort ?? '[]'),
-  filters: String(search.filters ?? '[]'),
-  afterId: search.afterId != null ? Number(search.afterId) : undefined,
-  afterNetwork: search.afterNetwork != null ? String(search.afterNetwork) : undefined,
-  afterSortValue: search.afterSortValue != null ? String(search.afterSortValue) : undefined,
+  sort: String(search.sort ?? DEFAULT_BROWSE_SEARCH.sort),
+  filters: String(search.filters ?? DEFAULT_BROWSE_SEARCH.filters),
 });
 
 const browseCityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/city',
-  component: BrowsePage,
+  component: () => <BrowsePage tableType="city" />,
   validateSearch: browseSearchSchema,
 });
 
-const browseCountryRedirectRoute = createRoute({
+const browseCountryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/country',
-  beforeLoad: () => {
-    throw redirect({
-      to: '/browse/city',
-      search: {
-        page: 1,
-        pageSize: 50,
-        sort: '[]',
-        filters: '[]',
-        afterId: undefined,
-        afterNetwork: undefined,
-        afterSortValue: undefined,
-      },
-    });
-  },
+  component: () => <BrowsePage tableType="country" />,
+  validateSearch: browseSearchSchema,
 });
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  importsRoute,
   lookupRoute,
-  adminRoute,
   browseCityRoute,
-  browseCountryRedirectRoute,
+  browseCountryRoute,
 ]);
 
 export const router = createRouter({ routeTree });

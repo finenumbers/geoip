@@ -11,6 +11,21 @@ describe('mv-view-resolver', () => {
     expect(resolved.ruPartial).toBe(true);
   });
 
+  it('uses partial RU MV for city + country_iso_code in [RU]', () => {
+    const filters = [{ field: 'country_iso_code', op: 'in' as const, value: ['RU'] }];
+    expect(isRuScopedCityQuery(filters)).toBe(true);
+    const resolved = resolveBrowseView('city', filters);
+    expect(resolved.view).toBe('mv_city_blocks_ru');
+    expect(resolved.filters).toEqual([]);
+    expect(resolved.ruPartial).toBe(true);
+  });
+
+  it('keeps full MV for country_iso_code in [RU, US]', () => {
+    const filters = [{ field: 'country_iso_code', op: 'in' as const, value: ['RU', 'US'] }];
+    expect(isRuScopedCityQuery(filters)).toBe(false);
+    expect(resolveBrowseView('city', filters).view).toBe('mv_city_blocks_analytics');
+  });
+
   it('uses partial RU MV with additional filters', () => {
     const filters = [
       { field: 'country_iso_code', op: 'eq' as const, value: 'RU' },

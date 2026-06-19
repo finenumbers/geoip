@@ -1,7 +1,20 @@
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
 import { getDatasetState } from '../repositories/dataset-repository.js';
-import { query } from '../db/client.js';
+import { getImportRunById } from '../repositories/dataset-repository.js';
+import { getDb } from '../db/client.js';
+import { importRunSteps } from '../db/schema.js';
 import { getTopPgStatStatements } from '../sql/pg-stat-statements.js';
+import type { MetricsResponse } from '@geoip/shared';
+import { formatPrometheusMetrics } from '../services/prometheus-metrics.js';
+import {
+  getTableQueryByModeMetrics,
+  recordTableQueryMetric as recordTableQueryMetricBucket,
+  type TableQueryFilterScope,
+  type TableQueryMode,
+} from './table-query-metrics.js';
+
+export type { TableQueryFilterScope, TableQueryMode };
 
 const metrics = {
   lookupLatencyMs: [] as number[],
@@ -13,9 +26,19 @@ export function recordLookupLatency(ms: number): void {
   if (metrics.lookupLatencyMs.length > 1000) metrics.lookupLatencyMs.shift();
 }
 
+/** @deprecated Use recordTableQueryMetric for mode/filter breakdown. */
 export function recordTableQueryLatency(ms: number): void {
   metrics.tableQueryLatencyMs.push(ms);
   if (metrics.tableQueryLatencyMs.length > 1000) metrics.tableQueryLatencyMs.shift();
+}
+
+export function recordTableQueryMetric(input: {
+  queryMs: number;
+  mode: TableQueryMode;
+  hasFilters: boolean;
+}): void {
+  recordTableQueryMetricBucket(input);
+  recordTableQueryLatency(input.queryMs);
 }
 
 function percentile(arr: number[], p: number): number {
@@ -25,39 +48,68 @@ function percentile(arr: number[], p: number): number {
   return sorted[Math.max(0, idx)] ?? 0;
 }
 
+async function getActiveImportBenchmark(activeImportRunId: string | null) {
+  if (!activeImportRunId) return null;
+
+  const run = await getImportRunById(activeImportRunId);
+  if (!run || run.status !== 'succeeded' || !run.startedAt || !run.finishedAt) {
+    return null;
+  }
+
+  const db = getDb();
+  const steps = await db
+    .select()
+    .from(importRunSteps)
+    .where(eq(importRunSteps.importRunId, activeImportRunId))
+    .orderBy(importRunSteps.id);
+
+  return {
+    importRunId: run.id,
+    datasetDate: run.datasetDate ?? null,
+    wallMs: new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime(),
+    steps: steps.map((step) => ({
+      name: step.name,
+      status: step.status,
+      durationMs: step.durationMs,
+      rows: step.rows,
+      message: step.message,
+    })),
+  };
+}
+
+async function buildMetricsResponse(): Promise<MetricsResponse> {
+  const state = await getDatasetState();
+  const latestBenchmark = await getActiveImportBenchmark(state.activeImportRunId);
+  const pgStatStatements = await getTopPgStatStatements(10);
+
+  return {
+    activeDatasetDate: state.datasetDate,
+    mvStatus: state.mvStatus,
+    import: {
+      latestBenchmark,
+    },
+    latency: {
+      lookupP95Ms: percentile(metrics.lookupLatencyMs, 95),
+      tableQueryP95Ms: percentile(metrics.tableQueryLatencyMs, 95),
+      sampleCount: {
+        lookup: metrics.lookupLatencyMs.length,
+        tableQuery: metrics.tableQueryLatencyMs.length,
+      },
+      tableQueryByMode: getTableQueryByModeMetrics(),
+    },
+    pgStatStatements,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export async function registerMetricsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/v1/metrics', async () => {
-    const state = await getDatasetState();
+  app.get('/api/v1/metrics', { preHandler: [app.verifyApiKeyIfEnabled] }, async () => {
+    return buildMetricsResponse();
+  });
 
-    const importStats = await query<{
-      last_success: string | null;
-      avg_duration_ms: number | null;
-      total_runs: number;
-    }>(
-      `SELECT
-         MAX(finished_at) FILTER (WHERE status = 'succeeded') AS last_success,
-         AVG(EXTRACT(EPOCH FROM (finished_at - started_at)) * 1000) FILTER (WHERE status = 'succeeded') AS avg_duration_ms,
-         COUNT(*)::int AS total_runs
-       FROM import_runs`,
-    );
-
-    const row = importStats.rows[0];
-    const pgStatStatements = await getTopPgStatStatements(10);
-
-    return {
-      activeDatasetDate: state.datasetDate,
-      mvStatus: state.mvStatus,
-      import: {
-        lastSuccess: row?.last_success,
-        avgDurationMs: row?.avg_duration_ms,
-        totalRuns: row?.total_runs ?? 0,
-      },
-      latency: {
-        lookupP95Ms: percentile(metrics.lookupLatencyMs, 95),
-        tableQueryP95Ms: percentile(metrics.tableQueryLatencyMs, 95),
-      },
-      pgStatStatements,
-      timestamp: new Date().toISOString(),
-    };
+  app.get('/api/v1/metrics/prometheus', { preHandler: [app.verifyApiKeyIfEnabled] }, async (_request, reply) => {
+    const payload = await buildMetricsResponse();
+    reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return formatPrometheusMetrics(payload);
   });
 }

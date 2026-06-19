@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geoip
+          POSTGRES_PASSWORD: geoip
+          POSTGRES_DB: geoip
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U geoip -d geoip"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://geoip:geoip@localhost:5432/geoip
+      DATABASE_DIRECT_URL: postgresql://geoip:geoip@localhost:5432/geoip
+      IMPORT_API_KEY: ci-test-api-key-12345
+      RUN_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Docker build smoke
+        run: docker compose build api web
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: E2E smoke
+        run: pnpm e2e

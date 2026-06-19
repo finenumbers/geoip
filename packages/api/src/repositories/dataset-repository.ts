@@ -12,8 +12,20 @@ import {
 import {
   parseFacetCountCache,
 } from '../sql/facet-count-cache.js';
+import { IMPORT_HISTORY_LIMIT } from '../constants/import-history-limit.js';
 
 const DATASET_STATE_CACHE_MS = 60_000;
+
+export type DatasetVolumes = {
+  cityBlocks: number;
+  countryBlocks: number;
+  asnBlocks: number;
+  cityLocations: number;
+  countryLocations: number;
+  ruCityBlocks: number;
+  ipv4Addresses: string;
+  ipv6Addresses: string;
+};
 
 type DatasetStateSnapshot = {
   datasetDate: string | null;
@@ -21,8 +33,10 @@ type DatasetStateSnapshot = {
   activeImportRunId: string | null;
   mvStatus: 'ready' | 'refreshing' | 'unavailable';
   mvRefreshedAt: string | null;
+  datasetFingerprint: string | null;
   cityRowCount: number;
   countryRowCount: number;
+  volumes: DatasetVolumes;
   filterCountCache: ReturnType<typeof parseFilterCountCache>;
   facetCountCache: ReturnType<typeof parseFacetCountCache>;
 };
@@ -55,8 +69,19 @@ async function loadDatasetStateFromDb(): Promise<DatasetStateSnapshot> {
     activeImportRunId: state?.activeImportRunId ?? null,
     mvStatus: (state?.mvStatus ?? 'unavailable') as 'ready' | 'refreshing' | 'unavailable',
     mvRefreshedAt: state?.mvRefreshedAt?.toISOString() ?? null,
+    datasetFingerprint: state?.datasetFingerprint ?? null,
     cityRowCount: state?.cityRowCount ?? 0,
     countryRowCount: state?.countryRowCount ?? 0,
+    volumes: {
+      cityBlocks: state?.cityRowCount ?? 0,
+      countryBlocks: state?.countryRowCount ?? 0,
+      asnBlocks: state?.asnBlocksCount ?? 0,
+      cityLocations: state?.cityLocationsCount ?? 0,
+      countryLocations: state?.countryLocationsCount ?? 0,
+      ruCityBlocks: state?.ruCityBlocksCount ?? 0,
+      ipv4Addresses: String(state?.ipv4AddressCount ?? '0'),
+      ipv6Addresses: String(state?.ipv6AddressCount ?? '0'),
+    },
     filterCountCache: parseFilterCountCache(state?.filterCountCache),
     facetCountCache: parseFacetCountCache(state?.facetCountCache),
   };
@@ -73,24 +98,17 @@ export async function getDatasetState(): Promise<DatasetStateSnapshot> {
   return data;
 }
 
-export async function listImportRuns(limit = 50, offset = 0) {
+export async function listImportRuns(limit = IMPORT_HISTORY_LIMIT) {
   const db = getDb();
+  const cappedLimit = Math.min(Math.max(limit, 1), IMPORT_HISTORY_LIMIT);
   const items = await db
     .select()
     .from(importRuns)
     .orderBy(desc(importRuns.startedAt))
-    .limit(limit)
-    .offset(offset);
-
-  const countResult = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(importRuns);
-
-  const total = countResult[0]?.count ?? 0;
+    .limit(cappedLimit);
 
   return {
     items: items.map(mapImportRun),
-    total,
   };
 }
 
@@ -123,7 +141,7 @@ export async function getRunningImport() {
     .select()
     .from(importRuns)
     .where(
-      sql`${importRuns.status} IN ('queued', 'running', 'validating', 'swapping', 'refreshing_mv')`,
+      sql`${importRuns.status} IN ('running', 'validating', 'swapping', 'refreshing_mv')`,
     )
     .limit(1);
   return run ?? null;

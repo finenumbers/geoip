@@ -1,12 +1,16 @@
 import { mkdirSync } from 'node:fs';
 import type { Logger } from 'pino';
-import { IMPORT_LOCK_KEY } from '@geoip/shared';
 import { loadEnv } from '../config/env.js';
 import { createChildLogger } from '../config/logger.js';
 import { getDb, query } from '../db/client.js';
 import { GrchcClient } from './grchc-client.js';
 import { importAllZipsParallel } from './import-downloads.js';
 import { datasetFingerprint } from './dataset-zip-cache.js';
+import {
+  createStagingSnapshot,
+  findValidStagingSnapshot,
+  restoreStagingSnapshot,
+} from './staging-snapshot.js';
 import { getDatasetState } from '../repositories/dataset-repository.js';
 import {
   truncateStaging,
@@ -22,6 +26,7 @@ import { populateBlockAsnMappings, repointAsnMappingForeignKeys } from '../sql/a
 import { fixSwappedPrimaryKeyNames } from '../sql/index-rename.js';
 import { DATASET_CACHE_VERSION } from '../sql/dataset-cache-version.js';
 import { markAsnMappingReady } from '../sql/asn-mapping-status.js';
+import { ADDRESS_SPACE_COUNT_SQL } from '../sql/dataset-volumes-backfill.js';
 import { buildFilterCountCache } from '../sql/filter-count-cache.js';
 import {
   buildAsnOrgFacetCountCache,
@@ -29,8 +34,15 @@ import {
   mergeFacetCountCaches,
 } from '../sql/facet-count-cache.js';
 import { invalidateDatasetStateCache } from '../repositories/dataset-repository.js';
+import { invalidateFilterMetadataCache } from '../services/filter-metadata-cache.js';
+import { invalidateReadyCache } from '../services/ready-cache.js';
 import { logImportBenchmarkSummary } from './import-benchmark.js';
-import { eq } from 'drizzle-orm';
+import { pruneImportHistory } from './import-history-retention.js';
+import {
+  releaseImportLock,
+  tryAcquireImportLock,
+} from './import-lock.js';
+import { and, eq } from 'drizzle-orm';
 import { importRuns, importRunSteps, datasetState } from '../db/schema.js';
 
 interface FileManifestEntry {
@@ -91,15 +103,11 @@ async function recordStep(
 }
 
 async function tryAcquireLock(): Promise<boolean> {
-  const result = await query<{ acquired: boolean }>(
-    'SELECT pg_try_advisory_lock($1) AS acquired',
-    [IMPORT_LOCK_KEY],
-  );
-  return result.rows[0]?.acquired ?? false;
+  return tryAcquireImportLock();
 }
 
 async function releaseLock(): Promise<void> {
-  await query('SELECT pg_advisory_unlock($1)', [IMPORT_LOCK_KEY]);
+  await releaseImportLock();
 }
 
 export async function runImportPipeline(importRunId: string, logger?: Logger): Promise<void> {
@@ -108,12 +116,13 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
 
   if (!env.GEOIP_LK_EMAIL || !env.GEOIP_LK_PASSWORD) {
     await failImport(importRunId, 'MISSING_CREDENTIALS', 'GEOIP_LK_EMAIL and GEOIP_LK_PASSWORD are required');
+    await pruneImportHistory(log);
     return;
   }
 
   const acquired = await tryAcquireLock();
   if (!acquired) {
-    await failImport(importRunId, 'LOCK_NOT_ACQUIRED', 'Another import is in progress');
+    log.info('Import advisory lock busy — leaving run queued for next poll');
     return;
   }
 
@@ -154,6 +163,7 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
       if (
         run?.triggeredBy === 'cron' &&
         activeDateRaw === datasetDateRaw &&
+        active.datasetFingerprint === fingerprint &&
         active.mvStatus === 'ready'
       ) {
         log.info({ datasetDate, fingerprint }, 'Dataset unchanged — skipping cron import');
@@ -181,67 +191,136 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
     let totalCity = 0;
     let totalCountry = 0;
     let totalAsn = 0;
+    let validationCounts: Record<string, number> = {};
+    let snapshotRestored = false;
+    const directDatabaseUrl = env.DATABASE_DIRECT_URL ?? env.DATABASE_URL;
 
-    for (const type of ['city', 'country', 'asn'] as const) {
-      await recordStep(importRunId, `download_${type}`, 'running');
+    if (env.IMPORT_STAGING_SNAPSHOT_ENABLED) {
+      const snapshot = await findValidStagingSnapshot(
+        env.IMPORT_DOWNLOAD_DIR,
+        datasetDateRaw,
+        fingerprint,
+      );
+      if (snapshot) {
+        await recordStep(importRunId, 'restore_staging_snapshot', 'running');
+        stepStart = Date.now();
+        await restoreStagingSnapshot(snapshot.dumpPath, directDatabaseUrl);
+        const snapshotValidation = await validateStagingData();
+        if (!snapshotValidation.valid) {
+          throw new Error(
+            `Snapshot restore validation failed: ${snapshotValidation.errors.join('; ')}`,
+          );
+        }
+        totalCity = snapshotValidation.counts.stg_geo_city_blocks ?? 0;
+        totalCountry = snapshotValidation.counts.stg_geo_country_blocks ?? 0;
+        totalAsn = snapshotValidation.counts.stg_geo_asn_blocks ?? 0;
+        validationCounts = snapshotValidation.counts;
+        await recordStep(importRunId, 'restore_staging_snapshot', 'succeeded', {
+          durationMs: Date.now() - stepStart,
+          message: JSON.stringify(snapshotValidation.counts),
+        });
+        snapshotRestored = true;
+        log.info({ datasetDateRaw, fingerprint }, 'Restored staging tables from snapshot');
+      }
     }
 
-    stepStart = Date.now();
-    const downloadOutcomes = await importAllZipsParallel(
-      links,
-      client,
-      {
-        downloadDir: env.IMPORT_DOWNLOAD_DIR,
-        cacheEnabled: env.IMPORT_ZIP_CACHE_ENABLED,
-      },
-      log,
-    );
-
-    for (const outcome of downloadOutcomes) {
-      for (const reject of outcome.imported.rejects) {
-        allRejects.push(reject);
+    if (!snapshotRestored) {
+      for (const type of ['city', 'country', 'asn'] as const) {
+        await recordStep(importRunId, `download_${type}`, 'running');
       }
-      for (const file of outcome.imported.files) {
-        manifest.push({ filename: file.path, rowCount: file.rowCount });
-      }
-      totalCity += outcome.imported.cityRows;
-      totalCountry += outcome.imported.countryRows;
-      totalAsn += outcome.imported.asnRows;
 
-      await recordStep(importRunId, `download_${outcome.type}`, 'succeeded', {
-        durationMs: outcome.durationMs,
-        rows: outcome.imported.files.length,
-        message: `source=${outcome.source} city=${outcome.imported.cityRows} country=${outcome.imported.countryRows} asn=${outcome.imported.asnRows}`,
+      stepStart = Date.now();
+      const downloadOutcomes = await importAllZipsParallel(
+        links,
+        client,
+        {
+          downloadDir: env.IMPORT_DOWNLOAD_DIR,
+          cacheEnabled: env.IMPORT_ZIP_CACHE_ENABLED,
+        },
+        log,
+      );
+
+      for (const outcome of downloadOutcomes) {
+        for (const reject of outcome.imported.rejects) {
+          allRejects.push(reject);
+        }
+        for (const file of outcome.imported.files) {
+          manifest.push({ filename: file.path, rowCount: file.rowCount });
+        }
+        totalCity += outcome.imported.cityRows;
+        totalCountry += outcome.imported.countryRows;
+        totalAsn += outcome.imported.asnRows;
+
+        await recordStep(importRunId, `download_${outcome.type}`, 'succeeded', {
+          durationMs: outcome.durationMs,
+          rows: outcome.imported.files.length,
+          message: `source=${outcome.source} city=${outcome.imported.cityRows} country=${outcome.imported.countryRows} asn=${outcome.imported.asnRows}`,
+        });
+      }
+
+      const cacheHits = downloadOutcomes.filter((o) => o.source === 'cache').length;
+      log.info(
+        {
+          downloadWallMs: Date.now() - stepStart,
+          types: downloadOutcomes.map((o) => o.type),
+          cacheHits,
+          cacheEnabled: env.IMPORT_ZIP_CACHE_ENABLED,
+        },
+        'Parallel ZIP downloads complete',
+      );
+
+      if (allRejects.length > 0) {
+        throw new Error(`Import rejected ${allRejects.length} rows`);
+      }
+
+      // Validate
+      await updateImportRun(importRunId, { status: 'validating' });
+      await recordStep(importRunId, 'validate', 'running');
+      stepStart = Date.now();
+      const validation = await validateStagingData();
+      if (!validation.valid) {
+        throw new Error(`Validation failed: ${validation.errors.join('; ')}`);
+      }
+      await recordStep(importRunId, 'validate', 'succeeded', {
+        durationMs: Date.now() - stepStart,
+        message: JSON.stringify(validation.counts),
+      });
+      validationCounts = validation.counts;
+
+      if (env.IMPORT_STAGING_SNAPSHOT_ENABLED) {
+        await recordStep(importRunId, 'create_staging_snapshot', 'running');
+        stepStart = Date.now();
+        const snapshot = await createStagingSnapshot(
+          env.IMPORT_DOWNLOAD_DIR,
+          datasetDateRaw,
+          fingerprint,
+          directDatabaseUrl,
+          validation.counts,
+        );
+        await recordStep(importRunId, 'create_staging_snapshot', 'succeeded', {
+          durationMs: Date.now() - stepStart,
+          message: `sizeBytes=${snapshot.sizeBytes}`,
+        });
+        log.info(
+          { datasetDateRaw, fingerprint, sizeBytes: snapshot.sizeBytes },
+          'Created staging snapshot',
+        );
+      }
+    } else {
+      for (const type of ['city', 'country', 'asn'] as const) {
+        await recordStep(importRunId, `download_${type}`, 'running');
+        await recordStep(importRunId, `download_${type}`, 'succeeded', {
+          durationMs: 0,
+          message: 'skipped=snapshot_restore',
+        });
+      }
+      await updateImportRun(importRunId, { status: 'validating' });
+      await recordStep(importRunId, 'validate', 'running');
+      await recordStep(importRunId, 'validate', 'succeeded', {
+        durationMs: 0,
+        message: 'skipped=snapshot_restore',
       });
     }
-
-    const cacheHits = downloadOutcomes.filter((o) => o.source === 'cache').length;
-    log.info(
-      {
-        downloadWallMs: Date.now() - stepStart,
-        types: downloadOutcomes.map((o) => o.type),
-        cacheHits,
-        cacheEnabled: env.IMPORT_ZIP_CACHE_ENABLED,
-      },
-      'Parallel ZIP downloads complete',
-    );
-
-    if (allRejects.length > 0) {
-      throw new Error(`Import rejected ${allRejects.length} rows`);
-    }
-
-    // Validate
-    await updateImportRun(importRunId, { status: 'validating' });
-    await recordStep(importRunId, 'validate', 'running');
-    stepStart = Date.now();
-    const validation = await validateStagingData();
-    if (!validation.valid) {
-      throw new Error(`Validation failed: ${validation.errors.join('; ')}`);
-    }
-    await recordStep(importRunId, 'validate', 'succeeded', {
-      durationMs: Date.now() - stepStart,
-      message: JSON.stringify(validation.counts),
-    });
 
     // Swap
     await updateImportRun(importRunId, {
@@ -328,6 +407,10 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
     });
 
     const now = new Date();
+    const ruCityBlocks = filterCountCache.city.country_iso_code?.RU ?? 0;
+    const addressSpace = await query<{ ipv4_addresses: string; ipv6_addresses: string }>(
+      ADDRESS_SPACE_COUNT_SQL,
+    );
     await db
       .update(datasetState)
       .set({
@@ -338,6 +421,13 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
         mvRefreshedAt: now,
         cityRowCount: mvCounts.city,
         countryRowCount: mvCounts.country,
+        datasetFingerprint: fingerprint,
+        asnBlocksCount: totalAsn,
+        cityLocationsCount: validationCounts.stg_geo_city_locations ?? 0,
+        countryLocationsCount: validationCounts.stg_geo_country_locations ?? 0,
+        ruCityBlocksCount: ruCityBlocks,
+        ipv4AddressCount: addressSpace.rows[0]?.ipv4_addresses ?? '0',
+        ipv6AddressCount: addressSpace.rows[0]?.ipv6_addresses ?? '0',
         filterCountCache,
         facetCountCache,
         cacheVersion: DATASET_CACHE_VERSION,
@@ -345,6 +435,8 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
       .where(eq(datasetState.id, 1));
 
     invalidateDatasetStateCache();
+    invalidateFilterMetadataCache();
+    invalidateReadyCache();
 
     await updateImportRun(importRunId, {
       status: 'succeeded',
@@ -359,6 +451,7 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
     await failImport(importRunId, 'IMPORT_FAILED', message, allRejects, manifest);
   } finally {
     await releaseLock();
+    await pruneImportHistory(log);
   }
 }
 
@@ -370,6 +463,17 @@ async function failImport(
   manifest?: FileManifestEntry[],
 ): Promise<void> {
   const db = getDb();
+  await db
+    .update(importRunSteps)
+    .set({
+      status: 'failed',
+      finishedAt: new Date(),
+      message,
+    })
+    .where(
+      and(eq(importRunSteps.importRunId, id), eq(importRunSteps.status, 'running')),
+    );
+
   await db
     .update(importRuns)
     .set({

@@ -4,10 +4,11 @@ import { logger } from './config/logger.js';
 import { migrate } from './db/migrate.js';
 import { closeDb } from './db/client.js';
 import { buildApp } from './app.js';
-import { ensureProductionIndexes } from './sql/swap.js';
+import { ensureProductionIndexes, recreateMaterializedViewsInBackground } from './sql/swap.js';
 import { recoverStaleImportRuns } from './jobs/import-orphan-recovery.js';
 import { ensureAsnMappingsInBackground } from './sql/asn-backfill.js';
 import { ensureDatasetCachesInBackground } from './sql/filter-count-cache-ensure.js';
+import { ensureDatasetVolumesInBackground } from './sql/dataset-volumes-backfill.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -15,11 +16,13 @@ async function main(): Promise<void> {
 
   await migrate();
   await recoverStaleImportRuns();
-  await ensureProductionIndexes();
+  await ensureProductionIndexes({ deferMvRecreate: true });
 
   const app = await buildApp();
   ensureAsnMappingsInBackground(logger);
   ensureDatasetCachesInBackground();
+  ensureDatasetVolumesInBackground();
+  recreateMaterializedViewsInBackground();
 
   const shutdown = async () => {
     logger.info('Shutting down');

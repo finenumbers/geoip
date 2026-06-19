@@ -31,6 +31,36 @@ describe('resolveCachedFacetValues', () => {
     ]);
   });
 
+  it('returns cached facet values for country_iso_code in [RU]', () => {
+    const items = resolveCachedFacetValues(
+      'city',
+      'city_name',
+      [{ field: 'country_iso_code', op: 'in', value: ['RU'] }],
+      '',
+      10,
+      sampleCache,
+    );
+    expect(items).toEqual([
+      { value: 'Москва', count: 1000 },
+      { value: 'Санкт-Петербург', count: 500 },
+    ]);
+  });
+
+  it('matches lowercase country_iso_code context via uppercase cache key', () => {
+    const items = resolveCachedFacetValues(
+      'city',
+      'city_name',
+      [{ field: 'country_iso_code', op: 'eq', value: 'ru' }],
+      '',
+      10,
+      sampleCache,
+    );
+    expect(items).toEqual([
+      { value: 'Москва', count: 1000 },
+      { value: 'Санкт-Петербург', count: 500 },
+    ]);
+  });
+
   it('applies search filter in memory', () => {
     const items = resolveCachedFacetValues(
       'city',
@@ -41,6 +71,30 @@ describe('resolveCachedFacetValues', () => {
       sampleCache,
     );
     expect(items).toEqual([{ value: 'Москва', count: 1000 }]);
+  });
+
+  it('prefers prefix matches for asn_org cache search', () => {
+    const cache = {
+      city: {
+        RU: {
+          asn_org: {
+            Rostelecom: 1000,
+            'Seven Network Inc.': 5,
+            'Master Telecom': 50,
+          },
+        },
+      },
+      country: {},
+    };
+    const items = resolveCachedFacetValues(
+      'city',
+      'asn_org',
+      [{ field: 'country_iso_code', op: 'eq', value: 'RU' }],
+      'Se',
+      10,
+      cache,
+    );
+    expect(items[0]?.value).toBe('Seven Network Inc.');
   });
 
   it('returns null for unsupported context', () => {

@@ -6,9 +6,13 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "db:migrate": "pnpm --filter @geoip/api db:migrate"
+    "db:migrate": "pnpm --filter @geoip/api db:migrate",
+    "e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1"
   }
 }

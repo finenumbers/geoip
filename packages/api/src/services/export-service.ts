@@ -4,11 +4,15 @@ import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { ExportRequest, FilterClause, SortClause } from '@geoip/shared';
+import { validateTableQueryProfile, normalizeFiltersForQuery } from '@geoip/shared';
 import { getDb, query } from '../db/client.js';
 import { exportJobs } from '../db/schema.js';
 import { buildTableQuery, hasAsnBlocksFilter, supportsKeysetPagination } from '../sql/table-query.js';
+import { usesRankSortField, rankColumn } from '../sql/sort-rank.js';
 import { estimateFilteredCount } from '../sql/count-estimate.js';
 import { isAsnMappingReady } from '../sql/asn-mapping-status.js';
+import { enrichBlockRowsWithAsn } from '../sql/asn-enrichment.js';
+import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
 import { loadEnv } from '../config/env.js';
 import { createChildLogger } from '../config/logger.js';
 
@@ -25,6 +29,8 @@ const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
     'city_name',
     'subdivision_1_name',
     'timezone',
+    'asn',
+    'asn_org',
   ],
   country: [
     'id',
@@ -33,6 +39,8 @@ const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
     'country_iso_code',
     'country_name',
     'subdivision_1_name',
+    'asn',
+    'asn_org',
   ],
 };
 
@@ -51,12 +59,40 @@ function formatCsvRow(row: Record<string, unknown>, columns: string[]): string {
 
 function getExportSortCursor(row: Record<string, unknown>, sort: SortClause[]): string | undefined {
   const primary = sort[0];
-  if (!primary || primary.field === 'network') return row.network != null ? String(row.network) : undefined;
+  if (!primary || primary.field === 'network') {
+    return row.network != null ? String(row.network) : undefined;
+  }
+  if (primary.field === 'prefix_len') {
+    return row.prefix_len != null ? String(row.prefix_len) : undefined;
+  }
+  if (usesRankSortField(primary.field)) {
+    const rankKey = rankColumn(primary.field, 'v').split('.')[1]!;
+    const rank = row[rankKey];
+    return rank != null ? String(rank) : undefined;
+  }
   const value = row[primary.field];
   return value != null ? String(value) : '';
 }
 
-async function streamTableExportToFile(
+/** Page arg for buildTableQuery during keyset export (page>1 required to activate cursor). */
+export function exportKeysetQueryPage(afterId: number | undefined, offsetPage: number, useKeyset: boolean): number {
+  if (!useKeyset) return offsetPage;
+  return afterId != null ? 2 : 1;
+}
+
+/** Whether export batches can use keyset pagination for the given query. */
+export function resolveExportUseKeyset(
+  sort: SortClause[],
+  filters: FilterClause[],
+  usePrecomputedAsnFilter: boolean,
+): boolean {
+  return (
+    supportsKeysetPagination(sort) &&
+    (!hasAsnBlocksFilter(filters) || usePrecomputedAsnFilter)
+  );
+}
+
+export async function streamTableExportToFile(
   tableType: 'city' | 'country',
   filters: FilterClause[],
   sort: SortClause[],
@@ -72,11 +108,11 @@ async function streamTableExportToFile(
   let afterNetwork: string | undefined;
   let afterSortValue: string | undefined;
   const usePrecomputedAsnFilter = await isAsnMappingReady();
-  const useKeyset = supportsKeysetPagination(sort) && !hasAsnBlocksFilter(filters);
+  const useKeyset = resolveExportUseKeyset(sort, filters, usePrecomputedAsnFilter);
 
   while (true) {
     const { sql, params } = buildTableQuery(tableType, {
-      page: useKeyset ? 1 : page,
+      page: exportKeysetQueryPage(afterId, page, useKeyset),
       pageSize: EXPORT_BATCH_SIZE,
       sort,
       filters,
@@ -88,14 +124,15 @@ async function streamTableExportToFile(
     const result = await query<Record<string, unknown>>(sql, params);
     if (result.rows.length === 0) break;
 
-    for (const row of result.rows) {
+    const enrichedRows = await enrichBlockRowsWithAsn(tableType, result.rows);
+    for (const row of enrichedRows) {
       stream.write(`${formatCsvRow(row, columns)}\n`);
       rowCount++;
     }
 
     if (result.rows.length < EXPORT_BATCH_SIZE) break;
 
-    const last = result.rows[result.rows.length - 1];
+    const last = enrichedRows[enrichedRows.length - 1];
     if (useKeyset && last?.id != null) {
       afterId = Number(last.id);
       afterNetwork = last.network != null ? String(last.network) : undefined;
@@ -116,12 +153,14 @@ export async function estimateExportRows(
   tableType: 'city' | 'country',
   filters: FilterClause[],
   sort: SortClause[],
-): Promise<number> {
+): Promise<number | null> {
+  const usePrecomputedAsnFilter = await isAsnMappingReady();
   const { countSql, countParams, useCachedCount } = buildTableQuery(tableType, {
     page: 1,
     pageSize: 1,
     sort,
     filters,
+    usePrecomputedAsnFilter,
   });
   if (useCachedCount) {
     const state = await import('../repositories/dataset-repository.js').then((m) =>
@@ -129,7 +168,9 @@ export async function estimateExportRows(
     );
     return tableType === 'city' ? state.cityRowCount : state.countryRowCount;
   }
-  if (!countSql) return 0;
+  if (!countSql) {
+    return hasAsnBlocksFilter(filters) ? null : 0;
+  }
   return estimateFilteredCount(countSql, countParams);
 }
 
@@ -166,17 +207,45 @@ export async function processExportJob(
   if (!job) return;
 
   if (!options?.claimed) {
-    const [claimed] = await db
-      .update(exportJobs)
-      .set({ status: 'running' })
-      .where(eq(exportJobs.id, jobId))
-      .returning({ id: exportJobs.id });
-    if (!claimed) return;
+    const claimed = await query<{ id: string }>(
+      `UPDATE export_jobs
+       SET status = 'running'
+       WHERE id = $1 AND status = 'queued'
+       RETURNING id`,
+      [jobId],
+    );
+    if (!claimed.rows[0]) return;
   }
 
   try {
-    const filters = (job.filters ?? []) as FilterClause[];
+    const rawFilters = (job.filters ?? []) as FilterClause[];
     const sort = (job.sort ?? []) as SortClause[];
+
+    const profileCheck = validateTableQueryProfile(job.tableType, sort, rawFilters);
+    if (!profileCheck.ok) {
+      const message = profileCheck.issues.map((issue) => issue.message).join('; ');
+      await db
+        .update(exportJobs)
+        .set({ status: 'failed', finishedAt: new Date(), errorMessage: message })
+        .where(eq(exportJobs.id, jobId));
+      log.warn({ message }, 'Export rejected — invalid query profile');
+      return;
+    }
+
+    const filters = normalizeFiltersForQuery(rawFilters);
+
+    if (!(await isMaterializedViewsReadyForQueries())) {
+      await db
+        .update(exportJobs)
+        .set({
+          status: 'queued',
+          finishedAt: null,
+          errorMessage: null,
+        })
+        .where(eq(exportJobs.id, jobId));
+      log.info('Export deferred — materialized views not ready');
+      return;
+    }
 
     const exportDir = join(env.IMPORT_DOWNLOAD_DIR, 'exports');
     mkdirSync(exportDir, { recursive: true });

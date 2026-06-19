@@ -1,4 +1,5 @@
 import type { FilterClause } from '@geoip/shared';
+import { normalizeCountryIsoCode } from '@geoip/shared';
 import { query } from '../db/client.js';
 import { logger } from '../config/logger.js';
 
@@ -84,14 +85,14 @@ export function resolveCachedFilterCount(
   const field = filter.field as CacheableField;
 
   if (filter.op === 'eq' && filter.value != null && filter.value !== '') {
-    return readCachedValue(cache, tableType, field, String(filter.value));
+    return readCachedValue(cache, tableType, field, normalizeCountryIsoCode(filter.value));
   }
 
   if (filter.op === 'in' && Array.isArray(filter.value) && filter.value.length > 0) {
     let total = 0;
     let matched = 0;
     for (const raw of filter.value) {
-      const value = String(raw);
+      const value = normalizeCountryIsoCode(raw);
       const count = readCachedValue(cache, tableType, field, value);
       if (count == null) return null;
       total += count;

@@ -1,6 +1,8 @@
 import type { FilterClause } from '@geoip/shared';
+import { normalizeCountryIsoCode } from '@geoip/shared';
 import { query } from '../db/client.js';
 import { logger } from '../config/logger.js';
+import { sortFacetItemsBySearch } from './facet-search-utils.js';
 
 export type FacetField =
   | 'city_name'
@@ -173,7 +175,11 @@ function resolveCountryIsoContext(contextFilters: FilterClause[]): string | null
   const filter = contextFilters[0];
   if (!filter || filter.field !== 'country_iso_code') return null;
   if (filter.op === 'eq' && filter.value != null && filter.value !== '') {
-    return String(filter.value);
+    return normalizeCountryIsoCode(filter.value);
+  }
+  if (filter.op === 'in' && Array.isArray(filter.value) && filter.value.length === 1) {
+    const value = filter.value[0];
+    if (value != null && value !== '') return normalizeCountryIsoCode(value);
   }
   return null;
 }
@@ -199,11 +205,13 @@ export function resolveCachedFacetValues(
   if (!values) return null;
 
   const needle = search.trim().toLowerCase();
-  const items = Object.entries(values)
-    .filter(([value]) => (needle ? value.toLowerCase().includes(needle) : true))
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'ru'))
-    .slice(0, limit);
+  const items = sortFacetItemsBySearch(
+    Object.entries(values)
+      .filter(([value]) => (needle ? value.toLowerCase().includes(needle) : true))
+      .map(([value, count]) => ({ value, count })),
+    search,
+    limit,
+  );
 
   return items;
 }

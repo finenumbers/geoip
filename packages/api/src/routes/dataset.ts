@@ -1,54 +1,51 @@
 import type { FastifyInstance } from 'fastify';
-import { importTriggerSchema } from '@geoip/shared';
+import { z } from 'zod';
 import { getDatasetState, listImportRuns, getImportRunById } from '../repositories/dataset-repository.js';
-import { createImportRun } from '../services/import-service.js';
+import { IMPORT_HISTORY_LIMIT } from '../constants/import-history-limit.js';
+import { loadEnv } from '../config/env.js';
+import { query } from '../db/client.js';
+import { getNextDailyCronRun } from '../utils/next-cron-run.js';
 
 export async function registerDatasetRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/v1/dataset/active', async () => {
+  app.get('/api/v1/dataset/active', { preHandler: [app.verifyApiKeyIfEnabled] }, async () => {
     const state = await getDatasetState();
+    const env = loadEnv();
+
+    const sizeResult = await query<{ size: string }>(
+      'SELECT pg_database_size(current_database()) AS size',
+    );
+    const databaseSizeBytes = Number(sizeResult.rows[0]?.size ?? 0) || null;
+    const cronExpression = env.IMPORT_CRON_CRON.trim() || '0 20 * * *';
+    const nextImportAt = getNextDailyCronRun(cronExpression)?.toISOString() ?? null;
+
     return {
       datasetDate: state.datasetDate,
       activatedAt: state.activatedAt,
       activeImportRunId: state.activeImportRunId,
       mvStatus: state.mvStatus,
+      datasetFingerprint: state.datasetFingerprint,
+      volumes: state.volumes,
+      databaseSizeBytes,
+      nextImportAt,
     };
   });
 
-  app.get('/api/v1/imports', async (request) => {
-    const limit = Number((request.query as { limit?: string }).limit ?? 50);
-    const offset = Number((request.query as { offset?: string }).offset ?? 0);
-    return listImportRuns(limit, offset);
+  app.get('/api/v1/imports', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request) => {
+    const requested = Number((request.query as { limit?: string }).limit ?? IMPORT_HISTORY_LIMIT);
+    return listImportRuns(requested);
   });
 
-  app.get('/api/v1/imports/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const run = await getImportRunById(id);
-    if (!run) {
-      return reply.status(404).send({ error: 'Not found', message: 'Import run not found' });
+  app.get('/api/v1/imports/:id', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {
+    const parsed = z.string().uuid().safeParse((request.params as { id: string }).id);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
     }
+
+    const run = await getImportRunById(parsed.data);
+    if (!run) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+
     return run;
   });
-
-  app.post(
-    '/api/v1/imports',
-    { preHandler: [app.verifyApiKey] },
-    async (request, reply) => {
-      const body = (request.body ?? {}) as { triggeredBy?: string };
-      const triggeredBy = importTriggerSchema.safeParse(body.triggeredBy ?? 'api');
-      if (!triggeredBy.success) {
-        return reply.status(422).send({ error: 'Validation error', details: triggeredBy.error.flatten() });
-      }
-
-      const result = await createImportRun(triggeredBy.data);
-      if (result.conflict) {
-        return reply.status(409).send({
-          error: 'Conflict',
-          message: 'An import is already in progress',
-          importRunId: result.importRunId,
-        });
-      }
-
-      return reply.status(202).send({ importRunId: result.importRunId, status: 'queued' });
-    },
-  );
 }

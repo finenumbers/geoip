@@ -1,8 +1,5 @@
 import type { FilterClause, SortClause } from '@geoip/shared';
-import {
-  CITY_TABLE_SORT_FIELDS,
-  COUNTRY_TABLE_SORT_FIELDS,
-} from '@geoip/shared';
+import { getTableProfile, supportsKeysetPagination } from '@geoip/shared';
 import { resolveBrowseView } from './mv-view-resolver.js';
 import {
   buildRankKeysetClause,
@@ -25,34 +22,7 @@ export interface TableQueryOptions {
   usePrecomputedAsnFilter?: boolean;
 }
 
-const CITY_FILTER_FIELDS = new Set([
-  'network',
-  'ip_family',
-  'prefix_len',
-  'country_iso_code',
-  'country_name',
-  'city_name',
-  'subdivision_1_name',
-  'subdivision_2_name',
-  'asn',
-  'asn_org',
-  'postal_code',
-  'timezone',
-]);
-
-const COUNTRY_FILTER_FIELDS = new Set([
-  'network',
-  'ip_family',
-  'prefix_len',
-  'country_iso_code',
-  'country_name',
-  'subdivision_1_name',
-  'subdivision_2_name',
-  'asn',
-]);
-
-const CITY_SORT_SET = new Set<string>(CITY_TABLE_SORT_FIELDS);
-const COUNTRY_SORT_SET = new Set<string>(COUNTRY_TABLE_SORT_FIELDS);
+export { supportsKeysetPagination } from '@geoip/shared';
 
 const CITY_ASN_TABLE = 'geo_city_block_asn';
 const COUNTRY_ASN_TABLE = 'geo_country_block_asn';
@@ -84,9 +54,9 @@ function getViewName(tableType: TableType): string {
 function resolveViewAndFilters(
   tableType: TableType,
   filters: FilterClause[],
-): { view: string; filters: FilterClause[] } {
+): { view: string; filters: FilterClause[]; ruPartial: boolean } {
   const resolved = resolveBrowseView(tableType, filters);
-  return { view: resolved.view, filters: resolved.filters };
+  return { view: resolved.view, filters: resolved.filters, ruPartial: resolved.ruPartial };
 }
 
 function getAsnTable(tableType: TableType): string {
@@ -98,11 +68,11 @@ function getAsnJoinColumn(tableType: TableType): string {
 }
 
 function getAllowedFields(tableType: TableType): Set<string> {
-  return tableType === 'city' ? CITY_FILTER_FIELDS : COUNTRY_FILTER_FIELDS;
+  return new Set(getTableProfile(tableType).filterFields);
 }
 
 function getAllowedSortFields(tableType: TableType): Set<string> {
-  return tableType === 'city' ? CITY_SORT_SET : COUNTRY_SORT_SET;
+  return new Set(getTableProfile(tableType).sortFields);
 }
 
 function getInnerColumns(tableType: TableType): string {
@@ -363,20 +333,6 @@ function buildOrderBy(
   return clauses.join(', ');
 }
 
-const KEYSET_SORT_FIELDS = new Set([
-  'network',
-  'country_name',
-  'city_name',
-  'country_iso_code',
-  'subdivision_1_name',
-]);
-
-export function supportsKeysetPagination(sort: SortClause[]): boolean {
-  if (sort.length === 0) return true;
-  if (sort.length === 1 && KEYSET_SORT_FIELDS.has(sort[0]?.field ?? '')) return true;
-  return false;
-}
-
 export const SLOW_FULL_SCAN_SORT_FIELDS = new Set(['country_name', 'city_name']);
 
 /** Warn UI when sorting low-cardinality fields on the full city MV (~20M rows). */
@@ -453,6 +409,12 @@ function buildSortKeysetClause(
     );
   }
 
+  if (primary.field === 'prefix_len') {
+    params.push(Number(afterSortValue), afterId);
+    const comparator = primary.dir === 'desc' ? '<' : '>';
+    return `(${alias}.prefix_len, ${alias}.id) ${comparator} ($${params.length - 1}, $${params.length})`;
+  }
+
   const column = `${alias}.${primary.field}`;
   params.push(afterSortValue, afterId);
   const comparator = primary.dir === 'desc' ? '<' : '>';
@@ -500,15 +462,95 @@ export function facetNeedsAsnJoin(tableType: TableType, field: string, _contextF
   return field === 'asn' || field === 'asn_org';
 }
 
+export function resolveSortOverrideHint(
+  tableType: TableType,
+  sort: SortClause[],
+  filters: FilterClause[],
+): 'ru_partial_network' | null {
+  if (tableType !== 'city' || sort.length !== 1) return null;
+  if (sort[0]?.field !== 'country_name') return null;
+  const { ruPartial } = resolveBrowseView(tableType, filters);
+  return ruPartial ? 'ru_partial_network' : null;
+}
+
+export interface BrowseContextWhereOptions {
+  alias?: string;
+  /** Omit these filter fields from the WHERE clause (facet: current field). */
+  excludeFields?: string[];
+  /** When ASN filters present, use geo_*_block_asn join (default true). */
+  usePrecomputedAsnFilter?: boolean;
+}
+
+export interface BrowseContextWhereResult {
+  view: string;
+  ruPartial: boolean;
+  effectiveFilters: FilterClause[];
+  whereParts: string[];
+  joinSql: string;
+  whereSql: string;
+  useAsnBlocksJoin: boolean;
+  asnJoinPrecomputed: boolean;
+}
+
+/** Shared MV view + WHERE builder for table browse and facet context queries. */
+export function buildBrowseContextWhere(
+  tableType: TableType,
+  filters: FilterClause[],
+  params: unknown[],
+  options: BrowseContextWhereOptions = {},
+): BrowseContextWhereResult {
+  const alias = options.alias ?? 'v';
+  const { view, filters: effectiveFilters, ruPartial } = resolveViewAndFilters(
+    tableType,
+    filters,
+  );
+  const allowed = getAllowedFields(tableType);
+
+  const exclude = new Set(options.excludeFields ?? []);
+  const scopedFilters = exclude.size > 0
+    ? filters.filter((f) => !exclude.has(f.field))
+    : filters;
+
+  const useAsnBlocksJoin = hasAsnBlocksFilter(scopedFilters);
+  let joinSql = '';
+  const whereParts: string[] = [];
+  let mvFilters: FilterClause[];
+
+  if (useAsnBlocksJoin) {
+    const preferPrecomputed = options.usePrecomputedAsnFilter === true;
+    const asnJoin = preferPrecomputed
+      ? buildPrecomputedAsnJoin(scopedFilters, params, tableType, alias)
+      : buildAsnBlocksJoin(scopedFilters, params, tableType, alias);
+    joinSql = asnJoin.joinSql;
+    whereParts.push(...asnJoin.asnWhereParts);
+    mvFilters = asnJoin.remainingFilters;
+  } else {
+    mvFilters = exclude.size > 0
+      ? effectiveFilters.filter((f) => !exclude.has(f.field))
+      : effectiveFilters;
+  }
+
+  whereParts.push(...buildWhereClauses(mvFilters, params, allowed, alias, tableType));
+
+  return {
+    view,
+    ruPartial,
+    effectiveFilters,
+    whereParts,
+    joinSql,
+    whereSql: whereParts.join(' AND '),
+    useAsnBlocksJoin,
+    asnJoinPrecomputed: useAsnBlocksJoin && options.usePrecomputedAsnFilter === true,
+  };
+}
+
 export function buildFacetContextWhere(
   tableType: TableType,
   contextFilters: FilterClause[],
   params: unknown[],
   alias = 'v',
 ): string {
-  const allowed = getAllowedFields(tableType);
-  const parts = buildWhereClauses(contextFilters, params, allowed, alias, tableType);
-  return parts.length > 0 ? parts.join(' AND ') : '';
+  return buildBrowseContextWhere(tableType, contextFilters, params, { alias }).whereSql;
 }
 
 export function canUseCachedCount(filters: FilterClause[]): boolean {
@@ -528,11 +570,9 @@ export function buildTableQuery(
 } {
   const { page, pageSize, sort, filters, afterId, afterNetwork, afterSortValue, usePrecomputedAsnFilter } =
     options;
-  const { view, filters: effectiveFilters } = resolveViewAndFilters(tableType, filters);
   const { sort: effectiveSort, ruPartial } = normalizeSortForView(tableType, sort, filters);
   const asnTable = getAsnTable(tableType);
   const asnJoinColumn = getAsnJoinColumn(tableType);
-  const allowed = getAllowedFields(tableType);
   const alias = 'v';
   const useCachedCount = canUseCachedCount(filters);
   const hasKeysetCursor =
@@ -545,14 +585,12 @@ export function buildTableQuery(
   const useAsnBlocksJoin = hasAsnBlocksFilter(filters);
 
   const dataParams: unknown[] = [];
-  const asnJoin = useAsnBlocksJoin
-    ? usePrecomputedAsnFilter
-      ? buildPrecomputedAsnJoin(filters, dataParams, tableType, alias)
-      : buildAsnBlocksJoin(filters, dataParams, tableType, alias)
-    : null;
-  const dataFilters = asnJoin?.remainingFilters ?? effectiveFilters;
-  const whereParts = buildWhereClauses(dataFilters, dataParams, allowed, alias, tableType);
-  if (asnJoin) whereParts.push(...asnJoin.asnWhereParts);
+  const dataCtx = buildBrowseContextWhere(tableType, filters, dataParams, {
+    alias,
+    usePrecomputedAsnFilter,
+  });
+  const view = dataCtx.view;
+  const whereParts = [...dataCtx.whereParts];
 
   if (useKeyset && afterId != null) {
     if (usesNetworkKeysetSort(effectiveSort) && afterNetwork != null) {
@@ -575,22 +613,18 @@ export function buildTableQuery(
 
   const where = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
   const orderBy =
-    asnJoin && !asnJoin.precomputed
+    useAsnBlocksJoin && !dataCtx.asnJoinPrecomputed
       ? buildAsnBlocksOrderBy(effectiveSort, tableType, alias, ruPartial)
       : buildOrderBy(effectiveSort, tableType, alias, ruPartial);
   const offset = useKeyset ? 0 : (page - 1) * pageSize;
 
   const countParams: unknown[] = [];
-  const countAsnJoin = useAsnBlocksJoin
-    ? usePrecomputedAsnFilter
-      ? buildPrecomputedAsnJoin(filters, countParams, tableType, alias)
-      : buildAsnBlocksJoin(filters, countParams, tableType, alias)
-    : null;
-  const countFilters = countAsnJoin?.remainingFilters ?? effectiveFilters;
   const countWhereParts = useCachedCount
     ? []
-    : buildWhereClauses(countFilters, countParams, allowed, alias, tableType);
-  if (!useCachedCount && countAsnJoin) countWhereParts.push(...countAsnJoin.asnWhereParts);
+    : buildBrowseContextWhere(tableType, filters, countParams, {
+        alias,
+        usePrecomputedAsnFilter,
+      }).whereParts;
   const countWhere =
     countWhereParts.length > 0 ? `WHERE ${countWhereParts.join(' AND ')}` : '';
 
@@ -636,8 +670,8 @@ export function buildTableQuery(
       ORDER BY ${orderBy}
       ${paginationSql}
     `;
-  } else if (asnJoin) {
-    if (asnJoin.precomputed) {
+  } else if (useAsnBlocksJoin && dataCtx.joinSql) {
+    if (dataCtx.asnJoinPrecomputed) {
       sql = `
       SELECT
         ${alias}.id,
@@ -649,7 +683,7 @@ export function buildTableQuery(
         ba.asn,
         ba.asn_org
       FROM ${view} ${alias}
-      ${asnJoin.joinSql}
+      ${dataCtx.joinSql}
       ${where}
       ORDER BY ${orderBy}
       ${paginationSql}

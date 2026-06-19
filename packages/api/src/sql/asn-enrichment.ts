@@ -1,4 +1,5 @@
 import { query } from '../db/client.js';
+import { isAsnMappingReady } from './asn-mapping-status.js';
 
 const BATCH_LOOKUP_SIZE = 500;
 
@@ -66,12 +67,42 @@ export async function loadPrecomputedAsn(
     [ids],
   );
 
-  for (const row of rows.rows) {
-    result.set(Number(row.block_id), {
-      asn: row.asn != null ? Number(row.asn) : null,
-      asnOrg: row.asn_org,
-    });
+  return result;
+}
+
+export async function enrichBlockRowsWithAsn(
+  tableType: 'city' | 'country',
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (rows.length === 0) return rows;
+
+  const pending = rows.filter((row) => row.asn == null && row.asn_org == null);
+  if (pending.length === 0) return rows;
+
+  let precomputed = new Map<number, { asn: number | null; asnOrg: string | null }>();
+  if (await isAsnMappingReady()) {
+    precomputed = await loadPrecomputedAsn(
+      tableType,
+      pending.map((row) => Number(row.id)),
+    );
   }
 
-  return result;
+  const missingNetworks = pending
+    .filter((row) => !precomputed.has(Number(row.id)))
+    .map((row) => String(row.network));
+  const lookedUp = await batchLookupAsn(missingNetworks);
+
+  return rows.map((row) => {
+    if (row.asn != null || row.asn_org != null) return row;
+    const cached = precomputed.get(Number(row.id));
+    if (cached) {
+      return { ...row, asn: cached.asn, asn_org: cached.asnOrg };
+    }
+    const live = lookedUp.get(String(row.network));
+    return {
+      ...row,
+      asn: live?.asn ?? null,
+      asn_org: live?.asnOrg ?? null,
+    };
+  });
 }

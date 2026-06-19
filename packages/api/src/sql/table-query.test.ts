@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildTableQuery, canUseCachedCount, resolvePaginationMode, resolveTableSortHint } from './table-query.js';
+import {
+  buildBrowseContextWhere,
+  buildTableQuery,
+  canUseCachedCount,
+  resolvePaginationMode,
+  resolveSortOverrideHint,
+  resolveTableSortHint,
+} from './table-query.js';
 
 describe('buildTableQuery', () => {
   it('builds city table query with pagination and ASN mapping join', () => {
@@ -154,5 +161,63 @@ describe('buildTableQuery', () => {
     expect(resolvePaginationMode([{ field: 'network', dir: 'asc' }], 2, 1, '1.0.0.0/8')).toBe('keyset');
     expect(resolvePaginationMode([{ field: 'network', dir: 'asc' }], 2)).toBe('offset');
     expect(resolvePaginationMode([{ field: 'asn', dir: 'asc' }], 5, 1, '1.0.0.0/8')).toBe('offset');
+  });
+
+  it('buildBrowseContextWhere uses RU partial view for city RU filter', () => {
+    const params: unknown[] = [];
+    const ctx = buildBrowseContextWhere('city', [
+      { field: 'country_iso_code', op: 'eq', value: 'RU' },
+      { field: 'city_name', op: 'contains', value: 'Mos' },
+    ], params);
+    expect(ctx.view).toBe('mv_city_blocks_ru');
+    expect(ctx.ruPartial).toBe(true);
+    expect(ctx.whereSql).toContain('city_name');
+    expect(ctx.whereSql).not.toContain('country_iso_code');
+    expect(params).toEqual(['%Mos%']);
+  });
+
+  it('buildBrowseContextWhere uses RU partial view for country_iso_code in [RU]', () => {
+    const params: unknown[] = [];
+    const ctx = buildBrowseContextWhere('city', [
+      { field: 'country_iso_code', op: 'in', value: ['RU'] },
+      { field: 'city_name', op: 'contains', value: 'Mos' },
+    ], params);
+    expect(ctx.view).toBe('mv_city_blocks_ru');
+    expect(ctx.ruPartial).toBe(true);
+    expect(ctx.whereSql).toContain('city_name');
+    expect(ctx.whereSql).not.toContain('country_iso_code');
+    expect(params).toEqual(['%Mos%']);
+  });
+
+  it('table and facet context share the same view for RU city filter', () => {
+    const filters = [{ field: 'country_iso_code', op: 'eq', value: 'RU' }];
+    const tableParams: unknown[] = [];
+    const facetParams: unknown[] = [];
+    const tableCtx = buildBrowseContextWhere('city', filters, tableParams);
+    const facetCtx = buildBrowseContextWhere('city', filters, facetParams);
+    expect(tableCtx.view).toBe(facetCtx.view);
+    expect(tableCtx.view).toBe('mv_city_blocks_ru');
+  });
+
+  it('detects RU partial country_name sort override hint', () => {
+    const filters = [{ field: 'country_iso_code', op: 'eq', value: 'RU' }];
+    const sort = [{ field: 'country_name', dir: 'desc' }];
+    expect(resolveSortOverrideHint('city', sort, filters)).toBe('ru_partial_network');
+    expect(resolveSortOverrideHint('city', sort, [])).toBeNull();
+  });
+
+  it('uses keyset pagination for prefix_len on page 2', () => {
+    const { sql, params } = buildTableQuery('city', {
+      page: 2,
+      pageSize: 50,
+      sort: [{ field: 'prefix_len', dir: 'desc' }],
+      filters: [],
+      afterId: 100,
+      afterSortValue: '24',
+    });
+    expect(sql).toContain('prefix_len');
+    expect(sql).not.toContain('OFFSET');
+    expect(sql).toContain('(v.prefix_len, v.id)');
+    expect(params[0]).toBe(24);
   });
 });

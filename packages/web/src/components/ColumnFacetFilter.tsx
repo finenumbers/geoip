@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
+import type { FilterClause } from '@geoip/shared';
 import { cn } from '@/lib/utils';
+import { ui } from '@/lib/ui-strings';
 import { api } from '@/lib/api';
 
 interface FacetItem {
@@ -16,8 +18,10 @@ interface ColumnFacetFilterProps {
   selectedValues: string[];
   onChange: (values: string[]) => void;
   onClear: () => void;
-  contextFilters?: Array<{ field: string; op: string; value?: string | number | boolean | Array<string | number> }>;
+  contextFilters?: FilterClause[];
   searchRequired?: boolean;
+  /** Max facet values returned by API (default 100). */
+  resultLimit?: number;
   compact?: boolean;
   className?: string;
 }
@@ -56,6 +60,7 @@ export function ColumnFacetFilter({
   onClear,
   contextFilters = [],
   searchRequired = false,
+  resultLimit = 100,
   compact = false,
   className,
 }: ColumnFacetFilterProps) {
@@ -66,22 +71,25 @@ export function ColumnFacetFilter({
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError } = useQuery({
     queryKey: ['facet', tableType, field, debouncedSearch, contextFilters],
     queryFn: async ({ signal }) => {
       const result = await api.facetValues(
         tableType,
         field,
         debouncedSearch,
-        100,
+        resultLimit,
         contextFilters,
         signal,
       );
-      return result.items;
+      return result;
     },
     enabled: open && (!searchRequired || debouncedSearch.trim().length >= 2),
     staleTime: 60_000,
   });
+
+  const items = data?.items ?? [];
+  const facetMeta = data?.meta;
 
   const updatePosition = () => {
     const rect = rootRef.current?.getBoundingClientRect();
@@ -124,7 +132,6 @@ export function ColumnFacetFilter({
     };
   }, [open]);
 
-  const items = data ?? [];
   const selectedSet = new Set(selectedValues);
   const hasSelection = selectedValues.length > 0;
 
@@ -164,6 +171,8 @@ export function ColumnFacetFilter({
           <div className="max-h-72 overflow-y-auto py-1">
             {searchRequired && debouncedSearch.trim().length < 2 ? (
               <div className="px-3 py-2 text-sm text-muted">Введите минимум 2 символа для поиска</div>
+            ) : isError ? (
+              <div className="px-3 py-2 text-sm text-red-600">Не удалось загрузить значения</div>
             ) : isLoading || isFetching ? (
               <div className="px-3 py-2 text-sm text-muted">Загрузка...</div>
             ) : items.length === 0 ? (
@@ -199,9 +208,15 @@ export function ColumnFacetFilter({
             )}
           </div>
 
-          {!debouncedSearch && items.length >= 100 && (
+          {!debouncedSearch && items.length >= resultLimit && (
             <div className="border-t border-border px-3 py-2 text-xs text-muted">
-              Показаны топ-100. Уточните поиск, чтобы найти остальные.
+              Показаны топ-{resultLimit}. Уточните поиск, чтобы найти остальные.
+            </div>
+          )}
+
+          {facetMeta?.timedOut && (
+            <div className="border-t border-border px-3 py-2 text-xs text-amber-800">
+              {ui.browse.facetSampleTimedOut}
             </div>
           )}
 
@@ -243,7 +258,12 @@ export function ColumnFacetFilter({
             toggleOpen();
           }}
         >
-          <span className={cn('truncate', hasSelection ? 'text-foreground' : 'text-muted')}>
+          <span
+            className={cn(
+              'truncate',
+              hasSelection ? 'text-foreground' : 'font-bold text-muted',
+            )}
+          >
             {hasSelection ? selectionLabel(selectedValues.length) : label}
           </span>
           <span className="shrink-0 text-muted text-xs">↕</span>

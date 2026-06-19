@@ -3,14 +3,74 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      API_AUTH_ENABLED: "true"
+      TZ: Europe/Moscow
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
 
   import-worker:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      TZ: Europe/Moscow
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  export-worker:
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   web:
     restart: unless-stopped
+    environment:
+      API_KEY: ${IMPORT_API_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   postgres:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  pgbouncer:
     restart: unless-stopped

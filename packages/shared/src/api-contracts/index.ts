@@ -41,7 +41,17 @@ export const importRunSchema = z.object({
 
 export const importRunListSchema = z.object({
   items: z.array(importRunSchema),
-  total: z.number(),
+});
+
+export const datasetVolumesSchema = z.object({
+  cityBlocks: z.number(),
+  countryBlocks: z.number(),
+  asnBlocks: z.number(),
+  cityLocations: z.number(),
+  countryLocations: z.number(),
+  ruCityBlocks: z.number(),
+  ipv4Addresses: z.string(),
+  ipv6Addresses: z.string(),
 });
 
 export const datasetStateSchema = z.object({
@@ -49,6 +59,10 @@ export const datasetStateSchema = z.object({
   activatedAt: z.string().datetime().nullable(),
   activeImportRunId: z.string().uuid().nullable(),
   mvStatus: z.enum(['ready', 'refreshing', 'unavailable']),
+  datasetFingerprint: z.string().nullable(),
+  volumes: datasetVolumesSchema,
+  databaseSizeBytes: z.number().nullable(),
+  nextImportAt: z.string().datetime().nullable(),
 });
 
 export const lookupSectionSchema = z.enum(['city', 'country', 'asn']);
@@ -127,6 +141,30 @@ export const tableQuerySchema = z.object({
   afterSortValue: z.string().optional(),
 });
 
+export const tableCursorSchema = z
+  .object({
+    afterId: z.number().int().positive(),
+    afterNetwork: z.string(),
+    afterSortValue: z.string().optional(),
+  })
+  .nullable();
+
+export const tableSeekRequestSchema = z.object({
+  targetPage: z.number().int().min(1).max(5000),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  sort: z.array(sortClauseSchema).default([]),
+  filters: z.array(filterClauseSchema).default([]),
+  cursorStack: z.array(tableCursorSchema).optional(),
+});
+
+export const tableSeekResponseSchema = z.object({
+  cursor: tableCursorSchema,
+  cursorStack: z.array(tableCursorSchema),
+  seekMs: z.number(),
+  pagesWalked: z.number(),
+  startPage: z.number(),
+});
+
 export const paginationSchema = z.object({
   page: z.number(),
   pageSize: z.number(),
@@ -170,8 +208,20 @@ export const countryTableRowSchema = z.object({
   asnOrg: z.string().nullable(),
 });
 
+export const tableBrowseRowSchema = z.object({
+  id: z.number(),
+  network: z.string(),
+  prefixLen: z.number(),
+  countryIsoCode: z.string().nullable(),
+  countryName: z.string().nullable(),
+  cityName: z.string().nullable().optional(),
+  subdivision1Name: z.string().nullable(),
+  asn: z.number().nullable(),
+  asnOrg: z.string().nullable(),
+});
+
 export const tableResponseSchema = z.object({
-  rows: z.array(z.record(z.unknown())),
+  rows: z.array(tableBrowseRowSchema),
   pagination: paginationSchema,
   meta: z.object({
     datasetDate: z.string().nullable(),
@@ -179,6 +229,9 @@ export const tableResponseSchema = z.object({
     queryMs: z.number(),
     countSource: z.enum(['cached', 'exact', 'estimated']).optional(),
     sortHint: z.enum(['slow_full_scan']).nullable().optional(),
+    sortOverrideHint: z.enum(['ru_partial_network']).nullable().optional(),
+    paginationWarning: z.enum(['offset_only']).nullable().optional(),
+    browseView: z.string().optional(),
     paginationMode: z.enum(['keyset', 'offset']).optional(),
     nextCursor: z
       .object({
@@ -235,6 +288,52 @@ export const readyResponseSchema = z.object({
   timestamp: z.string().datetime(),
 });
 
+export const metricsResponseSchema = z.object({
+  activeDatasetDate: z.string().nullable(),
+  mvStatus: z.enum(['ready', 'refreshing', 'unavailable']),
+  import: z.object({
+    latestBenchmark: z
+      .object({
+        importRunId: z.string().uuid(),
+        datasetDate: z.string().nullable(),
+        wallMs: z.number(),
+        steps: z.array(importRunStepSchema),
+      })
+      .nullable(),
+  }),
+  latency: z.object({
+    lookupP95Ms: z.number(),
+    tableQueryP95Ms: z.number(),
+    sampleCount: z.object({
+      lookup: z.number(),
+      tableQuery: z.number(),
+    }),
+    tableQueryByMode: z
+      .array(
+        z.object({
+          mode: z.enum(['keyset', 'offset']),
+          filters: z.enum(['none', 'active']),
+          p95Ms: z.number(),
+          sampleCount: z.number(),
+          requestCount: z.number(),
+        }),
+      )
+      .optional(),
+  }),
+  pgStatStatements: z
+    .array(
+      z.object({
+        query: z.string(),
+        calls: z.number(),
+        totalExecTimeMs: z.number(),
+        meanExecTimeMs: z.number(),
+      }),
+    )
+    .nullable()
+    .optional(),
+  timestamp: z.string().datetime(),
+});
+
 export type ImportRun = z.infer<typeof importRunSchema>;
 export type DatasetState = z.infer<typeof datasetStateSchema>;
 export type LookupRequest = z.infer<typeof lookupRequestSchema>;
@@ -246,3 +345,29 @@ export type CityTableRow = z.infer<typeof cityTableRowSchema>;
 export type CountryTableRow = z.infer<typeof countryTableRowSchema>;
 export type ExportJob = z.infer<typeof exportJobSchema>;
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
+export type TableSeekRequest = z.infer<typeof tableSeekRequestSchema>;
+export type TableSeekResponse = z.infer<typeof tableSeekResponseSchema>;
+export type MetricsResponse = z.infer<typeof metricsResponseSchema>;
+export type ReadyResponse = z.infer<typeof readyResponseSchema>;
+export type HealthResponse = z.infer<typeof healthResponseSchema>;
+export type ImportRunListResponse = z.infer<typeof importRunListSchema>;
+export type TableResponse = z.infer<typeof tableResponseSchema>;
+export type TableBrowseRow = z.infer<typeof tableBrowseRowSchema>;
+
+export const facetValuesResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      value: z.string(),
+      count: z.number(),
+    }),
+  ),
+  meta: z
+    .object({
+      timedOut: z.boolean().optional(),
+      sampledRows: z.number().int().nonnegative().optional(),
+      source: z.enum(['cache', 'index', 'sample']).optional(),
+    })
+    .optional(),
+});
+
+export type FacetValuesResponse = z.infer<typeof facetValuesResponseSchema>;

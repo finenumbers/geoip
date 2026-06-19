@@ -11,6 +11,7 @@ RUN pnpm --filter @geoip/shared build && pnpm --filter @geoip/api build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
+RUN apk add --no-cache postgresql16-client
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY packages/shared/package.json ./packages/shared/

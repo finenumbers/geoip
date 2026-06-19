@@ -1,11 +1,11 @@
-import { query } from '../db/client.js';
+import type pg from 'pg';
+import { query, withPoolClient } from '../db/client.js';
 import { logger } from '../config/logger.js';
 import { cleanupLegacyBtreeIndexes } from './legacy-indexes.js';
 import { ensureAsnMappingForeignKeys } from './asn-mapping.js';
 import { fixSwappedPrimaryKeyNames, hasMisnamedPrimaryKeys } from './index-rename.js';
 import { getStagingBlockIndexBytes, stripStagingBlockIndexes } from './staging-indexes.js';
-import { refreshOrRecreateMaterializedViews, recreateMaterializedViewsFromProduction, ensureMaterializedViewsOnProduction } from './recreate-materialized-views.js';
-import { materializedViewsHaveSortRanks } from './mv-rank-columns.js';
+import { refreshOrRecreateMaterializedViews, recreateMaterializedViewsFromProduction, ensureMaterializedViewsOnProduction, recreateMaterializedViewsInBackground, materializedViewsNeedRecreate } from './recreate-materialized-views.js';
 
 const BLOCK_TABLES = ['geo_city_blocks', 'geo_country_blocks', 'geo_asn_blocks'] as const;
 
@@ -79,7 +79,34 @@ async function productionIndexesOk(): Promise<boolean> {
   return true;
 }
 
-async function ensureSpgistIndex(table: string): Promise<void> {
+/** Rebuild SP-GiST/UNIQUE indexes on production block tables after staging swap. */
+export async function rebuildProductionIndexes(): Promise<void> {
+  await withPoolClient(
+    async (client) => {
+      await client.query('SELECT pg_advisory_lock($1)', [INDEX_REBUILD_LOCK]);
+      try {
+        if (await productionIndexesOk()) {
+          logger.info('Production block indexes already valid');
+          return;
+        }
+
+        for (const table of BLOCK_TABLES) {
+          await ensureSpgistIndexOnClient(client, table);
+          await ensureUniqueNetworkIndexOnClient(client, table);
+        }
+
+        await client.query('ANALYZE geo_city_blocks, geo_country_blocks, geo_asn_blocks');
+        await cleanupLegacyBtreeIndexes();
+        logger.info('Production block indexes rebuilt');
+      } finally {
+        await client.query('SELECT pg_advisory_unlock($1)', [INDEX_REBUILD_LOCK]);
+      }
+    },
+    { unlimitedStatementTimeout: true },
+  );
+}
+
+async function ensureSpgistIndexOnClient(client: pg.PoolClient, table: string): Promise<void> {
   const spgistName = `${table}_network_spgist`;
   const attachedTo = await indexOnTable(spgistName);
   if (attachedTo === table) {
@@ -89,14 +116,14 @@ async function ensureSpgistIndex(table: string): Promise<void> {
 
   if (attachedTo != null) {
     logger.info({ spgistName, attachedTo, table }, 'Dropping misplaced SP-GiST index');
-    await query(`DROP INDEX IF EXISTS ${spgistName}`);
+    await client.query(`DROP INDEX IF EXISTS ${spgistName}`);
   }
 
   logger.info({ table, spgistName }, 'Creating SP-GiST index on production table');
-  await query(`CREATE INDEX ${spgistName} ON ${table} USING spgist (network)`);
+  await client.query(`CREATE INDEX ${spgistName} ON ${table} USING spgist (network)`);
 }
 
-async function ensureUniqueNetworkIndex(table: string): Promise<void> {
+async function ensureUniqueNetworkIndexOnClient(client: pg.PoolClient, table: string): Promise<void> {
   const uniqueName = `${table}_network_key`;
   const attachedTo = await indexOnTable(uniqueName);
   if (attachedTo === table) {
@@ -106,40 +133,16 @@ async function ensureUniqueNetworkIndex(table: string): Promise<void> {
 
   if (attachedTo != null) {
     logger.info({ uniqueName, attachedTo, table }, 'Dropping misplaced UNIQUE network index');
-    await query(`ALTER TABLE ${attachedTo} DROP CONSTRAINT IF EXISTS ${uniqueName}`);
-    await query(`DROP INDEX IF EXISTS ${uniqueName}`);
+    await client.query(`ALTER TABLE ${attachedTo} DROP CONSTRAINT IF EXISTS ${uniqueName}`);
+    await client.query(`DROP INDEX IF EXISTS ${uniqueName}`);
   }
 
   logger.info({ table, uniqueName }, 'Creating UNIQUE network index on production table');
-  await query(`CREATE UNIQUE INDEX ${uniqueName} ON ${table} (network)`);
-}
-
-/** Rebuild SP-GiST/UNIQUE indexes on production block tables after staging swap. */
-export async function rebuildProductionIndexes(): Promise<void> {
-  await query('SELECT pg_advisory_lock($1)', [INDEX_REBUILD_LOCK]);
-  try {
-    await query('SET statement_timeout = 0');
-
-    if (await productionIndexesOk()) {
-      logger.info('Production block indexes already valid');
-      return;
-    }
-
-    for (const table of BLOCK_TABLES) {
-      await ensureSpgistIndex(table);
-      await ensureUniqueNetworkIndex(table);
-    }
-
-    await query('ANALYZE geo_city_blocks, geo_country_blocks, geo_asn_blocks');
-    await cleanupLegacyBtreeIndexes();
-    logger.info('Production block indexes rebuilt');
-  } finally {
-    await query('SELECT pg_advisory_unlock($1)', [INDEX_REBUILD_LOCK]);
-  }
+  await client.query(`CREATE UNIQUE INDEX ${uniqueName} ON ${table} (network)`);
 }
 
 /** One-time / startup guard: fix indexes after swap if they landed on staging. */
-export async function ensureProductionIndexes(): Promise<void> {
+export async function ensureProductionIndexes(options?: { deferMvRecreate?: boolean }): Promise<void> {
   await ensureAsnMappingForeignKeys();
 
   if (await hasMisnamedPrimaryKeys()) {
@@ -160,14 +163,21 @@ export async function ensureProductionIndexes(): Promise<void> {
     await rebuildProductionIndexes();
   }
 
-  if (!(await ensureMaterializedViewsOnProduction())) {
-    logger.warn('Materialized views reference staging tables — recreating from production');
-    await recreateMaterializedViewsFromProduction();
-  } else if (!(await materializedViewsHaveSortRanks())) {
-    logger.warn('Materialized views missing sort rank columns — recreating from production');
+  if (await materializedViewsNeedRecreate()) {
+    if (options?.deferMvRecreate) {
+      logger.warn('Materialized views need recreate — deferred to background');
+      return;
+    }
+    if (!(await ensureMaterializedViewsOnProduction())) {
+      logger.warn('Materialized views reference staging tables — recreating from production');
+    } else {
+      logger.warn('Materialized views missing sort rank columns — recreating from production');
+    }
     await recreateMaterializedViewsFromProduction();
   }
 }
+
+export { recreateMaterializedViewsInBackground };
 
 export { productionIndexesOk };
 

@@ -1,70 +1,37 @@
-import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
-import { useSearch, useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useCallback, useState, useEffect, useRef, type ReactNode } from 'react';
+import { Link, useSearch, useNavigate } from '@tanstack/react-router';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef, type SortingState } from '@tanstack/react-table';
+import type { FilterClause, TableBrowseRow, TableResponse } from '@geoip/shared';
+import { isUiSortField, validateTextFilterValue, supportsKeysetPagination, usesOffsetOnlySort } from '@geoip/shared';
 import { api } from '@/lib/api';
-import {
-  cursorStackStorageKey,
-  loadCursorStack,
-  saveCursorStack,
-  seekBrowsePage,
-  type TableCityResponse,
-} from '@/lib/browse-pagination';
-import {
-  needsDeepPageBootstrap,
-  shouldWarnOffsetPageJump,
-} from '@/lib/browse-sort-hints';
+import { ui } from '@/lib/ui-strings';
+import { useNormalizeBrowseSearch, parseSortJson, DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
 import { DataTable } from '@/components/DataTable';
 import { ColumnFacetFilter } from '@/components/ColumnFacetFilter';
 import { ColumnTextFilter } from '@/components/ColumnTextFilter';
 import { ActiveFiltersBar } from '@/components/ActiveFiltersBar';
+import { QueryErrorNotice } from '@/components/QueryErrorNotice';
+import { cn } from '@/lib/utils';
+
+const INFINITE_PAGE_SIZE = 100;
+const MAX_LOADED_ROWS = 5000;
+/** Cap OFFSET pages when sort does not support keyset (asn, multi-sort). */
+const MAX_OFFSET_SCROLL_PAGES = 10;
 
 interface BrowseSearch {
-  page: number;
-  pageSize: number;
   sort: string;
   filters: string;
-  afterId: number | undefined;
-  afterNetwork: string | undefined;
-  afterSortValue: string | undefined;
 }
 
-const KEYSET_SORT_FIELDS = new Set([
-  'network',
-  'country_name',
-  'city_name',
-  'country_iso_code',
-  'subdivision_1_name',
-]);
+type TableFilter = FilterClause;
 
-function supportsBrowseKeyset(sortJson: string): boolean {
-  try {
-    const parsed = JSON.parse(sortJson) as Array<{ field: string }>;
-    if (parsed.length === 0) return true;
-    if (parsed.length === 1) return KEYSET_SORT_FIELDS.has(parsed[0]?.field ?? '');
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-interface TableFilter {
-  field: string;
-  op: string;
-  value?: string | number | boolean | Array<string | number>;
-}
-
-interface TableRow {
-  id: number;
-  network: string;
-  countryIsoCode: string | null;
-  countryName: string | null;
-  cityName: string | null;
-  subdivision1Name: string | null;
-  asn: number | null;
-  asnOrg: string | null;
-  prefixLen: number;
-}
+type TablePageParam = {
+  page: number;
+  afterId?: number;
+  afterNetwork?: string;
+  afterSortValue?: string;
+};
 
 const COLUMN_API_FIELDS: Record<string, string> = {
   network: 'network',
@@ -80,17 +47,6 @@ const COLUMN_API_FIELDS: Record<string, string> = {
 const API_TO_COLUMN: Record<string, string> = Object.fromEntries(
   Object.entries(COLUMN_API_FIELDS).map(([columnId, apiField]) => [apiField, columnId]),
 );
-
-const FILTER_LABELS: Record<string, string> = {
-  network: 'Network',
-  prefix_len: 'Prefix',
-  country_iso_code: 'Country ISO',
-  country_name: 'Country',
-  city_name: 'Населенный пункт',
-  subdivision_1_name: 'Region',
-  asn: 'ASN',
-  asn_org: 'ASN Org',
-};
 
 function parseFilters(filtersJson: string): TableFilter[] {
   try {
@@ -144,12 +100,10 @@ function setTextFilter(filters: TableFilter[], field: string, value: string): Ta
 
   if (field === 'prefix_len') {
     const num = Number(trimmed);
-    if (Number.isNaN(num)) return filters;
     return [...rest, { field, op: 'eq', value: num }];
   }
 
   if (field === 'asn') {
-    if (!/^\d+$/.test(trimmed)) return filters;
     return [...rest, { field, op: 'startsWith', value: trimmed }];
   }
 
@@ -171,42 +125,103 @@ function formatFilterDisplayValue(filter: TableFilter): string {
   return String(filter.value ?? '');
 }
 
-export function BrowsePage() {
+async function fetchTableChunk(
+  tableType: 'city' | 'country',
+  pageParam: TablePageParam | undefined,
+  sortJson: string,
+  filtersJson: string,
+): Promise<TableResponse> {
+  const params = new URLSearchParams();
+  params.set('pageSize', String(INFINITE_PAGE_SIZE));
+  params.set('sort', sortJson);
+  params.set('filters', filtersJson);
+  params.set('page', String(pageParam?.page ?? 1));
+  if (pageParam?.afterId != null) params.set('afterId', String(pageParam.afterId));
+  if (pageParam?.afterNetwork != null) params.set('afterNetwork', pageParam.afterNetwork);
+  if (pageParam?.afterSortValue != null) params.set('afterSortValue', pageParam.afterSortValue);
+  return api.table(tableType, params);
+}
+
+interface BrowsePageProps {
+  tableType: 'city' | 'country';
+}
+
+export function BrowsePage({ tableType }: BrowsePageProps) {
   const search = useSearch({ strict: false }) as BrowseSearch;
   const navigate = useNavigate();
-  const cursorStack = useRef<Array<{ afterId: number; afterNetwork: string; afterSortValue?: string } | null>>([null]);
-  const [seeking, setSeeking] = useState(false);
-  const [pageInput, setPageInput] = useState('');
+  const queryClient = useQueryClient();
+  const browsePath = tableType === 'city' ? '/browse/city' : '/browse/country';
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  /** Bumps on full reset so header filters drop local draft/validation state. */
+  const [browseUiKey, setBrowseUiKey] = useState(0);
+  /** Gates table fetch until tab-switch reset has applied default URL. */
+  const [browseSessionReady, setBrowseSessionReady] = useState(false);
+  const awaitingTabResetRef = useRef(true);
+  const datasetFingerprintRef = useRef<string | null | undefined>(undefined);
 
-  const page = search.page ?? 1;
-  const pageSize = search.pageSize ?? 50;
-  const sortJson = search.sort ?? '[]';
-  const filtersJson = search.filters ?? '[]';
-  const [bootstrapping, setBootstrapping] = useState(() =>
-    needsDeepPageBootstrap(page, sortJson, search.afterId, supportsBrowseKeyset),
-  );
-  const deepBootstrapStarted = useRef(false);
+  const sortJson = search.sort ?? DEFAULT_BROWSE_SEARCH.sort;
+  const filtersJson = search.filters ?? DEFAULT_BROWSE_SEARCH.filters;
 
-  const stackKey = useMemo(
-    () => cursorStackStorageKey(sortJson, filtersJson, pageSize),
-    [sortJson, filtersJson, pageSize],
-  );
+  /** Fresh default view on tab switch and full page reload (always default). */
+  useEffect(() => {
+    awaitingTabResetRef.current = true;
+    setBrowseSessionReady(false);
+    setFieldErrors({});
+    setBrowseUiKey((k) => k + 1);
+    queryClient.removeQueries({ queryKey: ['table'] });
+    void navigate({
+      to: browsePath,
+      search: DEFAULT_BROWSE_SEARCH,
+      replace: true,
+    });
+  }, [tableType, browsePath, navigate, queryClient]);
 
   useEffect(() => {
-    cursorStack.current = loadCursorStack(stackKey);
-  }, [stackKey]);
+    if (awaitingTabResetRef.current) {
+      const isDefault =
+        sortJson === DEFAULT_BROWSE_SEARCH.sort && filtersJson === DEFAULT_BROWSE_SEARCH.filters;
+      if (isDefault) {
+        awaitingTabResetRef.current = false;
+        setBrowseSessionReady(true);
+      }
+    } else {
+      setBrowseSessionReady(true);
+    }
+  }, [sortJson, filtersJson]);
+
+  const { data: dataset } = useQuery({
+    queryKey: ['dataset'],
+    queryFn: api.dataset,
+    refetchInterval: 30_000,
+  });
 
   useEffect(() => {
-    setPageInput(String(page));
-  }, [page]);
+    const fingerprint = dataset?.datasetFingerprint ?? null;
+    if (datasetFingerprintRef.current === undefined) {
+      datasetFingerprintRef.current = fingerprint;
+      return;
+    }
+    if (fingerprint != null && datasetFingerprintRef.current !== fingerprint) {
+      queryClient.invalidateQueries({ queryKey: ['table'] });
+      queryClient.invalidateQueries({ queryKey: ['facet'] });
+    }
+    datasetFingerprintRef.current = fingerprint;
+  }, [dataset?.datasetFingerprint, queryClient]);
+
+  useNormalizeBrowseSearch(tableType, browsePath, sortJson, filtersJson, (opts) => {
+    void navigate(opts);
+  });
 
   const activeFilters = useMemo(() => parseFilters(filtersJson), [filtersJson]);
+  const activeSort = useMemo(() => parseSortJson(sortJson), [sortJson]);
+  const keysetCapableSort = useMemo(() => supportsKeysetPagination(activeSort), [activeSort]);
+  const offsetOnlySort = useMemo(() => usesOffsetOnlySort(activeSort), [activeSort]);
 
   const activeFilterChips = useMemo(
     () =>
       activeFilters.map((filter) => ({
         field: filter.field,
-        label: FILTER_LABELS[filter.field] ?? filter.field,
+        label: ui.filters[filter.field as keyof typeof ui.filters] ?? filter.field,
         displayValue: formatFilterDisplayValue(filter),
       })),
     [activeFilters],
@@ -224,72 +239,123 @@ export function BrowsePage() {
     }
   }, [sortJson]);
 
-  const queryParams = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set('page', String(page));
-    params.set('pageSize', String(pageSize));
-    params.set('sort', sortJson);
-    params.set('filters', filtersJson);
-    if (search.afterId != null) params.set('afterId', String(search.afterId));
-    if (search.afterNetwork != null) params.set('afterNetwork', search.afterNetwork);
-    if (search.afterSortValue != null) params.set('afterSortValue', search.afterSortValue);
-    return params;
-  }, [page, pageSize, sortJson, filtersJson, search.afterId, search.afterNetwork, search.afterSortValue]);
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    isError,
+    error,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['table', tableType, 'infinite', sortJson, filtersJson],
+    queryFn: ({ pageParam }) => fetchTableChunk(tableType, pageParam, sortJson, filtersJson),
+    initialPageParam: undefined as TablePageParam | undefined,
+    enabled: browseSessionReady,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.rows.length, 0);
+      if (loaded >= MAX_LOADED_ROWS) return undefined;
+      if (loaded >= lastPage.pagination.totalRows) return undefined;
+      if (lastPage.rows.length < INFINITE_PAGE_SIZE) return undefined;
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['table', 'city', page, pageSize, sortJson, filtersJson, search.afterId, search.afterNetwork, search.afterSortValue],
-    queryFn: () => api.tableCity(queryParams),
-    placeholderData: (prev) => prev,
+      const nextPage = lastPage.pagination.page + 1;
+      const cursor = lastPage.meta.nextCursor;
+
+      if (cursor) {
+        return {
+          page: nextPage,
+          afterId: cursor.afterId,
+          afterNetwork: cursor.afterNetwork,
+          afterSortValue: cursor.afterSortValue,
+        };
+      }
+
+      if (keysetCapableSort) {
+        return undefined;
+      }
+
+      if (offsetOnlySort && lastPage.pagination.page >= MAX_OFFSET_SCROLL_PAGES) {
+        return undefined;
+      }
+
+      return { page: nextPage };
+    },
     staleTime: 30_000,
-    enabled: !bootstrapping,
   });
 
-  const response = data as {
-    rows: TableRow[];
-    pagination: { totalRows: number; totalPages: number; page: number };
-    meta: {
-      queryMs: number;
-      countSource?: 'cached' | 'exact' | 'estimated';
-      sortHint?: 'slow_full_scan' | null;
-      paginationMode?: 'keyset' | 'offset';
-      nextCursor?: { afterId: number; afterNetwork?: string; afterSortValue?: string } | null;
-    };
-  } | undefined;
+  const rows = useMemo(() => data?.pages.flatMap((page) => page.rows) ?? [], [data]);
+  const rowCapReached = rows.length >= MAX_LOADED_ROWS;
+  const effectiveHasMore = Boolean(hasNextPage) && !rowCapReached;
+  const totalRows = data?.pages[0]?.pagination.totalRows ?? 0;
+  const countSource =
+    data?.pages && data.pages.length > 0
+      ? (data.pages[data.pages.length - 1]?.meta.countSource ?? 'exact')
+      : 'exact';
+  const lastPageMeta = data?.pages[data.pages.length - 1]?.meta;
 
   const updateSearch = useCallback(
     (updates: Partial<BrowseSearch>) => {
       void navigate({
-        to: '/browse/city',
-        search: (prev) => {
-          const next: BrowseSearch = {
-            page: prev.page ?? 1,
-            pageSize: prev.pageSize ?? 50,
-            sort: prev.sort ?? '[]',
-            filters: prev.filters ?? '[]',
-            afterId: undefined,
-            afterNetwork: undefined,
-            afterSortValue: undefined,
-            ...updates,
-          };
-          if ('page' in updates || 'filters' in updates || 'sort' in updates || 'pageSize' in updates) {
-            if (!('afterId' in updates)) next.afterId = undefined;
-            if (!('afterNetwork' in updates)) next.afterNetwork = undefined;
-            if (!('afterSortValue' in updates)) next.afterSortValue = undefined;
-          }
-          return next;
-        },
+        to: browsePath,
+        search: (prev) => ({
+          sort: prev.sort ?? '[]',
+          filters: prev.filters ?? '[]',
+          ...updates,
+        }),
       });
     },
-    [navigate],
+    [browsePath, navigate],
   );
 
   const applyFilters = useCallback(
     (nextFilters: TableFilter[]) => {
-      cursorStack.current = [null];
-      saveCursorStack(stackKey, cursorStack.current);
-      updateSearch({ filters: JSON.stringify(nextFilters), page: 1 });
+      updateSearch({ filters: JSON.stringify(nextFilters) });
     },
-    [updateSearch, stackKey],
+    [updateSearch],
+  );
+
+  const setFieldError = useCallback((field: string, message: string | undefined) => {
+    setFieldErrors((prev) => {
+      if (!message) {
+        if (!(field in prev)) return prev;
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return { ...prev, [field]: message };
+    });
+  }, []);
+
+  const applyTextFilter = useCallback(
+    (field: string, value: string) => {
+      const err = validateTextFilterValue(field, value);
+      if (err) {
+        setFieldError(field, err);
+        return;
+      }
+      setFieldError(field, undefined);
+      applyFilters(setTextFilter(activeFilters, field, value));
+    },
+    [activeFilters, applyFilters, setFieldError],
+  );
+
+  const clearTextFilter = useCallback(
+    (field: string) => {
+      setFieldError(field, undefined);
+      applyFilters(setTextFilter(activeFilters, field, ''));
+    },
+    [activeFilters, applyFilters, setFieldError],
+  );
+
+  const columnMeta = useCallback(
+    (apiField: string, filter: ReactNode | (() => ReactNode)) => ({
+      sortable: isUiSortField(tableType, apiField),
+      ...(typeof filter === 'function'
+        ? { renderHeaderFilter: filter }
+        : { headerFilter: filter }),
+    }),
+    [tableType],
   );
 
   const removeFilter = useCallback(
@@ -304,374 +370,291 @@ export function BrowsePage() {
       field: COLUMN_API_FIELDS[s.id] ?? s.id,
       dir: s.desc ? 'desc' : 'asc',
     }));
-    cursorStack.current = [null];
-    saveCursorStack(stackKey, cursorStack.current);
-    updateSearch({ sort: JSON.stringify(sort), page: 1 });
+    updateSearch({ sort: JSON.stringify(sort) });
   };
 
   const resetAll = useCallback(() => {
-    cursorStack.current = [null];
-    saveCursorStack(stackKey, cursorStack.current);
-    updateSearch({ filters: '[]', sort: '[]', page: 1, afterId: undefined, afterNetwork: undefined, afterSortValue: undefined });
-  }, [updateSearch, stackKey]);
+    setFieldErrors({});
+    setBrowseUiKey((k) => k + 1);
+    queryClient.removeQueries({ queryKey: ['table'] });
+    void navigate({
+      to: browsePath,
+      search: DEFAULT_BROWSE_SEARCH,
+      replace: true,
+    });
+  }, [browsePath, navigate, queryClient]);
 
-  const goToPage = useCallback(
-    async (targetPage: number) => {
-      const totalPages = response?.pagination.totalPages ?? 1;
-      const clamped = Math.max(1, Math.min(targetPage, totalPages));
-      if (clamped === page) return;
-
-      if (clamped === 1) {
-        cursorStack.current = [null];
-        saveCursorStack(stackKey, cursorStack.current);
-        updateSearch({
-          page: 1,
-          afterId: undefined,
-          afterNetwork: undefined,
-          afterSortValue: undefined,
-        });
-        return;
-      }
-
-      if (!supportsBrowseKeyset(sortJson)) {
-        if (shouldWarnOffsetPageJump(clamped, sortJson, supportsBrowseKeyset)) {
-          const proceed = window.confirm(
-            'Переход на глубокую страницу без keyset-пагинации может занять несколько секунд. Продолжить?',
-          );
-          if (!proceed) return;
-        }
-        updateSearch({ page: clamped });
-        return;
-      }
-
-      setSeeking(true);
-      try {
-        const { stack, cursor } = await seekBrowsePage(
-          clamped,
-          pageSize,
-          sortJson,
-          filtersJson,
-          cursorStack.current,
-          (params) => api.tableCity(params) as Promise<TableCityResponse>,
-        );
-        cursorStack.current = stack;
-        saveCursorStack(stackKey, stack);
-        updateSearch({
-          page: clamped,
-          afterId: cursor?.afterId,
-          afterNetwork: cursor?.afterNetwork,
-          afterSortValue: cursor?.afterSortValue,
-        });
-      } finally {
-        setSeeking(false);
-      }
-    },
-    [page, pageSize, sortJson, filtersJson, stackKey, updateSearch, response?.pagination.totalPages],
-  );
-
-  useEffect(() => {
-    if (!bootstrapping || deepBootstrapStarted.current) return;
-    deepBootstrapStarted.current = true;
-    void (async () => {
-      setSeeking(true);
-      try {
-        const { stack, cursor } = await seekBrowsePage(
-          page,
-          pageSize,
-          sortJson,
-          filtersJson,
-          cursorStack.current,
-          (params) => api.tableCity(params) as Promise<TableCityResponse>,
-        );
-        cursorStack.current = stack;
-        saveCursorStack(stackKey, stack);
-        updateSearch({
-          page,
-          afterId: cursor?.afterId,
-          afterNetwork: cursor?.afterNetwork,
-          afterSortValue: cursor?.afterSortValue,
-        });
-      } finally {
-        setSeeking(false);
-        setBootstrapping(false);
-      }
-    })();
-  }, [bootstrapping, page, pageSize, sortJson, filtersJson, stackKey, updateSearch]);
+  const loadMore = useCallback(() => {
+    if (rowCapReached) return;
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, rowCapReached]);
 
   const showSlowSortBanner =
-    response?.meta?.sortHint === 'slow_full_scan' ||
-    (response?.meta?.queryMs != null &&
-      response.meta.queryMs > 500 &&
-      sorting.some((s) => s.id === 'countryName' || s.id === 'cityName'));
+    lastPageMeta?.sortHint === 'slow_full_scan' ||
+    (lastPageMeta?.queryMs != null &&
+      lastPageMeta.queryMs > 500 &&
+      sorting.some(
+        (s) =>
+          s.id === 'countryName' || (tableType === 'city' && s.id === 'cityName'),
+      ));
+
+  const showRuPartialSortBanner =
+    tableType === 'city' && lastPageMeta?.sortOverrideHint === 'ru_partial_network';
+
+  const showOffsetOnlyBanner = offsetOnlySort && lastPageMeta?.paginationWarning === 'offset_only';
 
   const facetContext = useCallback(
     (excludeField: string) => activeFilters.filter((f) => f.field !== excludeField),
     [activeFilters],
   );
 
-  const columns = useMemo<ColumnDef<TableRow>[]>(
-    () => [
+  const columns = useMemo<ColumnDef<TableBrowseRow>[]>(() => {
+    const base: ColumnDef<TableBrowseRow>[] = [
       {
         accessorKey: 'network',
-        header: 'Network',
-        meta: {
-          headerFilter: (
-            <ColumnTextFilter
-              placeholder="Network"
-              value={getTextFilterValue(activeFilters, 'network')}
-              onApply={(value) => applyFilters(setTextFilter(activeFilters, 'network', value))}
-              onClear={() => applyFilters(setTextFilter(activeFilters, 'network', ''))}
-            />
-          ),
-        },
+        header: ui.filters.network,
+        meta: columnMeta(
+          'network',
+          <ColumnTextFilter
+            placeholder={ui.filters.network}
+            value={getTextFilterValue(activeFilters, 'network')}
+            onApply={(value) => applyTextFilter('network', value)}
+            onClear={() => clearTextFilter('network')}
+          />,
+        ),
       },
       {
         accessorKey: 'prefixLen',
-        header: 'Prefix',
-        meta: {
-          headerFilter: (
-            <ColumnTextFilter
-              placeholder="Prefix"
-              value={getTextFilterValue(activeFilters, 'prefix_len')}
-              onApply={(value) => applyFilters(setTextFilter(activeFilters, 'prefix_len', value))}
-              onClear={() => applyFilters(setTextFilter(activeFilters, 'prefix_len', ''))}
-            />
-          ),
-        },
+        header: ui.filters.prefix_len,
+        meta: columnMeta('prefix_len', () => (
+          <ColumnTextFilter
+            placeholder={ui.filters.prefix_len}
+            value={getTextFilterValue(activeFilters, 'prefix_len')}
+            error={fieldErrors.prefix_len}
+            validate={(v) => validateTextFilterValue('prefix_len', v)}
+            onValidationError={(msg) => setFieldError('prefix_len', msg)}
+            onApply={(value) => applyTextFilter('prefix_len', value)}
+            onClear={() => clearTextFilter('prefix_len')}
+          />
+        )),
       },
       {
         accessorKey: 'countryIsoCode',
-        header: 'Country ISO',
-        meta: {
-          headerFilter: (
-            <ColumnTextFilter
-              placeholder="ISO"
-              value={getTextFilterValue(activeFilters, 'country_iso_code')}
-              onApply={(value) => applyFilters(setTextFilter(activeFilters, 'country_iso_code', value))}
-              onClear={() => applyFilters(setTextFilter(activeFilters, 'country_iso_code', ''))}
-            />
-          ),
-        },
+        header: ui.filters.country_iso_code,
+        meta: columnMeta(
+          'country_iso_code',
+          <ColumnTextFilter
+            placeholder="ISO"
+            value={getTextFilterValue(activeFilters, 'country_iso_code')}
+            onApply={(value) => applyTextFilter('country_iso_code', value)}
+            onClear={() => clearTextFilter('country_iso_code')}
+          />,
+        ),
       },
       {
         accessorKey: 'countryName',
-        header: 'Country',
-        meta: {
-          headerFilter: (
-            <ColumnFacetFilter
-              label="Country"
-              field="country_name"
-              selectedValues={getMultiFilterValues(activeFilters, 'country_name')}
-              contextFilters={facetContext('country_name')}
-              compact
-              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'country_name', values))}
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'country_name', []))}
-            />
-          ),
-        },
+        header: ui.filters.country_name,
+        meta: columnMeta(
+          'country_name',
+          <ColumnFacetFilter
+            label={ui.filters.country_name}
+            field="country_name"
+            tableType={tableType}
+            selectedValues={getMultiFilterValues(activeFilters, 'country_name')}
+            contextFilters={facetContext('country_name')}
+            compact
+            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'country_name', values))}
+            onClear={() => applyFilters(setMultiFilter(activeFilters, 'country_name', []))}
+          />,
+        ),
       },
-      {
+    ];
+
+    if (tableType === 'city') {
+      base.push({
         accessorKey: 'cityName',
-        header: 'Населенный пункт',
-        meta: {
-          headerFilter: (
-            <ColumnFacetFilter
-              label="Населенный пункт"
-              field="city_name"
-              selectedValues={getMultiFilterValues(activeFilters, 'city_name')}
-              contextFilters={facetContext('city_name')}
-              compact
-              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'city_name', values))}
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'city_name', []))}
-            />
-          ),
-        },
-      },
+        header: ui.filters.city_name,
+        meta: columnMeta(
+          'city_name',
+          <ColumnFacetFilter
+            label={ui.filters.city_name}
+            field="city_name"
+            tableType={tableType}
+            selectedValues={getMultiFilterValues(activeFilters, 'city_name')}
+            contextFilters={facetContext('city_name')}
+            compact
+            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'city_name', values))}
+            onClear={() => applyFilters(setMultiFilter(activeFilters, 'city_name', []))}
+          />,
+        ),
+      });
+    }
+
+    base.push(
       {
         accessorKey: 'subdivision1Name',
-        header: 'Region',
-        meta: {
-          headerFilter: (
-            <ColumnFacetFilter
-              label="Region"
-              field="subdivision_1_name"
-              selectedValues={getMultiFilterValues(activeFilters, 'subdivision_1_name')}
-              contextFilters={facetContext('subdivision_1_name')}
-              compact
-              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', values))}
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', []))}
-            />
-          ),
-        },
+        header: ui.filters.subdivision_1_name,
+        meta: columnMeta(
+          'subdivision_1_name',
+          <ColumnFacetFilter
+            label={ui.filters.subdivision_1_name}
+            field="subdivision_1_name"
+            tableType={tableType}
+            selectedValues={getMultiFilterValues(activeFilters, 'subdivision_1_name')}
+            contextFilters={facetContext('subdivision_1_name')}
+            compact
+            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', values))}
+            onClear={() => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', []))}
+          />,
+        ),
       },
       {
         accessorKey: 'asn',
-        header: 'ASN',
-        meta: {
-          headerFilter: (
-            <ColumnTextFilter
-              placeholder="ASN"
-              inputMode="numeric"
-              value={getTextFilterValue(activeFilters, 'asn')}
-              onApply={(value) => applyFilters(setTextFilter(activeFilters, 'asn', value))}
-              onClear={() => applyFilters(setTextFilter(activeFilters, 'asn', ''))}
-            />
-          ),
-        },
+        header: ui.filters.asn,
+        meta: columnMeta('asn', () => (
+          <ColumnTextFilter
+            placeholder={ui.filters.asn}
+            inputMode="numeric"
+            value={getTextFilterValue(activeFilters, 'asn')}
+            error={fieldErrors.asn}
+            validate={(v) => validateTextFilterValue('asn', v)}
+            onValidationError={(msg) => setFieldError('asn', msg)}
+            onApply={(value) => applyTextFilter('asn', value)}
+            onClear={() => clearTextFilter('asn')}
+          />
+        )),
       },
       {
         accessorKey: 'asnOrg',
-        header: 'ASN Org',
-        meta: {
-          headerFilter: (
-            <ColumnFacetFilter
-              label="ASN Org"
-              field="asn_org"
-              selectedValues={getMultiFilterValues(activeFilters, 'asn_org')}
-              contextFilters={facetContext('asn_org')}
-              compact
-              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'asn_org', values))}
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'asn_org', []))}
-            />
-          ),
-        },
+        header: ui.filters.asn_org,
+        meta: columnMeta(
+          'asn_org',
+          <ColumnFacetFilter
+            label={ui.filters.asn_org}
+            field="asn_org"
+            tableType={tableType}
+            selectedValues={getMultiFilterValues(activeFilters, 'asn_org')}
+            contextFilters={facetContext('asn_org')}
+            compact
+            resultLimit={200}
+            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'asn_org', values))}
+            onClear={() => applyFilters(setMultiFilter(activeFilters, 'asn_org', []))}
+          />,
+        ),
       },
-    ],
-    [activeFilters, applyFilters, facetContext],
-  );
+    );
+
+    return base;
+  }, [
+    activeFilters,
+    applyFilters,
+    applyTextFilter,
+    clearTextFilter,
+    columnMeta,
+    facetContext,
+    fieldErrors,
+    setFieldError,
+    tableType,
+  ]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">City Blocks</h2>
-        {response?.meta && (
-          <span className="text-sm text-muted">
-            Query: {response.meta.queryMs}ms
-            {response.meta.countSource === 'cached' ? ' · count cached' : ''}
-            {response.meta.paginationMode === 'keyset' ? ' · keyset' : ''}
-          </span>
-        )}
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-lg border border-border p-1 text-sm">
+          <Link
+            to="/browse/city"
+            data-testid="browse-city-tab"
+            search={DEFAULT_BROWSE_SEARCH}
+            className={cn(
+              'rounded px-3 py-1 transition-colors',
+              tableType === 'city' ? 'bg-accent font-medium' : 'text-muted hover:text-foreground',
+            )}
+          >
+            {ui.browse.cityTab}
+          </Link>
+          <Link
+            to="/browse/country"
+            data-testid="browse-country-tab"
+            search={DEFAULT_BROWSE_SEARCH}
+            className={cn(
+              'rounded px-3 py-1 transition-colors',
+              tableType === 'country' ? 'bg-accent font-medium' : 'text-muted hover:text-foreground',
+            )}
+          >
+            {ui.browse.countryTab}
+          </Link>
+        </div>
+        <button
+          onClick={resetAll}
+          className="rounded border border-border px-3 py-1 text-sm hover:bg-accent"
+        >
+          {ui.browse.resetFilters}
+        </button>
       </div>
 
-      {showSlowSortBanner && (
-        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-          Сортировка по стране или городу на полной таблице (~20M строк) может занимать несколько секунд.
-          Добавьте фильтр <strong>Country ISO = RU</strong> для ускорения до миллисекунд.
+      {isError && (
+        <div className="shrink-0">
+          <QueryErrorNotice error={error} />
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <ActiveFiltersBar filters={activeFilterChips} onRemove={removeFilter} />
-        <button
-          onClick={resetAll}
-          className="px-3 py-1 text-sm border border-border rounded hover:bg-accent"
-        >
-          Сбросить фильтры
-        </button>
-      </div>
+      {showSlowSortBanner && (
+        <div className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+          {tableType === 'city' ? ui.browse.slowSortBanner : ui.browse.slowSortBannerCountry}
+        </div>
+      )}
 
-      <DataTable
-        columns={columns}
-        data={response?.rows ?? []}
-        sorting={sorting}
-        onSortingChange={handleSortingChange}
-        isLoading={isLoading || isFetching || seeking || bootstrapping}
-        totalRows={response?.pagination.totalRows}
-      />
+      {showRuPartialSortBanner && (
+        <div className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-900">
+          {ui.browse.ruPartialSortOverrideBanner}
+        </div>
+      )}
 
-      <div className="flex items-center gap-3">
-        <button
-          disabled={page <= 1}
-          onClick={() => {
-            const prevPage = page - 1;
-            const prevCursor = cursorStack.current[prevPage - 1] ?? undefined;
-            cursorStack.current = cursorStack.current.slice(0, prevPage);
-            saveCursorStack(stackKey, cursorStack.current);
-            if (prevCursor) {
-              updateSearch({
-                page: prevPage,
-                afterId: prevCursor.afterId,
-                afterNetwork: prevCursor.afterNetwork,
-                afterSortValue: prevCursor.afterSortValue,
-              });
-            } else {
-              updateSearch({ page: prevPage });
-            }
-          }}
-          className="px-3 py-1 border border-border rounded disabled:opacity-50"
-        >
-          Назад
-        </button>
-        <span className="text-sm">
-          Стр. {page} / {response?.pagination.totalPages ?? 1}
-        </span>
-        <form
-          className="flex items-center gap-1 text-sm"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const target = Number(pageInput);
-            if (!Number.isFinite(target)) return;
-            void goToPage(target);
-          }}
-        >
-          <input
-            type="number"
-            min={1}
-            max={response?.pagination.totalPages ?? 1}
-            value={pageInput}
-            onChange={(e) => setPageInput(e.target.value)}
-            placeholder="#"
-            className="w-16 px-2 py-1 bg-card border border-border rounded"
-            disabled={seeking}
-          />
-          <button
-            type="submit"
-            disabled={seeking}
-            className="px-2 py-1 border border-border rounded disabled:opacity-50"
-          >
-            Перейти
-          </button>
-        </form>
-        <button
-          disabled={page >= (response?.pagination.totalPages ?? 1)}
-          onClick={() => {
-            const nextCursor = response?.meta?.nextCursor;
-            if (nextCursor && supportsBrowseKeyset(sortJson)) {
-              cursorStack.current[page] = {
-                afterId: nextCursor.afterId,
-                afterNetwork: nextCursor.afterNetwork ?? '',
-                afterSortValue: nextCursor.afterSortValue,
-              };
-              saveCursorStack(stackKey, cursorStack.current);
-              updateSearch({
-                page: page + 1,
-                afterId: nextCursor.afterId,
-                afterNetwork: nextCursor.afterNetwork,
-                afterSortValue: nextCursor.afterSortValue,
-              });
-            } else {
-              updateSearch({ page: page + 1 });
-            }
-          }}
-          className="px-3 py-1 border border-border rounded disabled:opacity-50"
-        >
-          Вперёд
-        </button>
-        <select
-          value={pageSize}
-          onChange={(e) => {
-            cursorStack.current = [null];
-            saveCursorStack(stackKey, cursorStack.current);
-            updateSearch({ pageSize: Number(e.target.value), page: 1 });
-          }}
-          className="px-2 py-1 bg-card border border-border rounded text-sm"
-        >
-          {[25, 50, 100, 200].map((n) => (
-            <option key={n} value={n}>
-              {n} / стр.
-            </option>
+      {showOffsetOnlyBanner && (
+        <div className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+          {ui.browse.offsetOnlySortBanner}
+        </div>
+      )}
+
+      {Object.keys(fieldErrors).length > 0 && (
+        <div className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-800">
+          {Object.entries(fieldErrors).map(([field, message]) => (
+            <p key={field}>
+              {ui.filters[field as keyof typeof ui.filters] ?? field}: {message}
+            </p>
           ))}
-        </select>
+        </div>
+      )}
+
+      {activeFilterChips.length > 0 && (
+        <div className="shrink-0">
+          <ActiveFiltersBar filters={activeFilterChips} onRemove={removeFilter} />
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="browse-data-table">
+        <DataTable
+          key={browseUiKey}
+          columns={columns}
+          data={rows}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
+          isLoading={!browseSessionReady || isLoading || (isFetching && rows.length === 0)}
+          emptyMessage={isError ? undefined : ui.browse.noResultsFound}
+          fillHeight
+          loadedCount={rows.length}
+          totalRows={totalRows}
+          countSource={countSource}
+          maxLoadedRows={MAX_LOADED_ROWS}
+          rowCapReached={rowCapReached}
+          hasMore={effectiveHasMore}
+          isLoadingMore={isFetchingNextPage}
+          onLoadMore={loadMore}
+          onNearEnd={loadMore}
+          scrollResetKey={`${sortJson}|${filtersJson}`}
+        />
       </div>
     </div>
   );

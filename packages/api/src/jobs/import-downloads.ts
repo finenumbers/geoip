@@ -3,7 +3,7 @@ import { Readable, PassThrough } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Logger } from 'pino';
 import type pg from 'pg';
-import { getPool } from '../db/client.js';
+import { getPool, resetPoolClientSession } from '../db/client.js';
 import type { GrchcClient, DownloadLink, DownloadType } from './grchc-client.js';
 import { importGeoIpZipStream, type ZipImportResult } from './zip-import.js';
 import {
@@ -131,6 +131,7 @@ async function importSingleZip(
     }
     throw err;
   } finally {
+    await resetPoolClientSession(pgClient);
     pgClient.release();
   }
 }
@@ -162,6 +163,7 @@ export async function importZipFile(
     const imported = await importGeoIpZipStream(stream, pgClient, logger.child({ downloadType: type }));
     return { type, imported, durationMs: Date.now() - started, source: 'cache' };
   } finally {
+    await resetPoolClientSession(pgClient);
     pgClient.release();
   }
 }

@@ -1,18 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/client.js';
 import { getDatasetState, getRunningImport } from '../repositories/dataset-repository.js';
+import { isAsnMappingReady } from '../sql/asn-mapping-status.js';
 import { productionIndexesOk } from '../sql/swap.js';
-
-async function isAsnMappingComplete(): Promise<boolean> {
-  const result = await query<{ city_blocks: number; asn_rows: number }>(
-    `SELECT
-       (SELECT COUNT(*)::bigint FROM geo_city_blocks) AS city_blocks,
-       (SELECT COUNT(*)::bigint FROM geo_city_block_asn) AS asn_rows`,
-  );
-  const row = result.rows[0];
-  if (!row || row.city_blocks === 0) return true;
-  return row.asn_rows >= row.city_blocks;
-}
+import { materializedViewsExist } from '../sql/recreate-materialized-views.js';
+import {
+  getCachedReadyResponse,
+  setCachedReadyResponse,
+  type ReadyResponse,
+} from '../services/ready-cache.js';
 
 export async function registerHealthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/health', async () => {
@@ -23,6 +19,9 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
   });
 
   app.get('/api/v1/ready', async () => {
+    const cached = getCachedReadyResponse();
+    if (cached) return cached;
+
     let database = false;
     let dataset = false;
     let materializedViews = false;
@@ -40,9 +39,10 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
     if (database) {
       const state = await getDatasetState();
       dataset = state.datasetDate !== null;
-      materializedViews = state.mvStatus === 'ready';
+      const mvPresent = await materializedViewsExist();
+      materializedViews = state.mvStatus === 'ready' && mvPresent;
       productionIndexes = await productionIndexesOk();
-      asnMapping = await isAsnMappingComplete();
+      asnMapping = await isAsnMappingReady();
       importRunning = (await getRunningImport()) !== null;
     }
 
@@ -58,7 +58,7 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       status = 'not_ready';
     }
 
-    return {
+    const payload: ReadyResponse = {
       status,
       checks: {
         database,
@@ -70,5 +70,7 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       },
       timestamp: new Date().toISOString(),
     };
+    setCachedReadyResponse(payload);
+    return payload;
   });
 }

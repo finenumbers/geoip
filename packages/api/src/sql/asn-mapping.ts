@@ -10,13 +10,13 @@ type MappingTable = 'geo_city_block_asn' | 'geo_country_block_asn';
 type IdColumn = 'city_block_id' | 'country_block_id';
 
 function resolveBatchSize(): number {
-  const envBatch = Number(process.env.ASN_MAP_BATCH_SIZE ?? DEFAULT_BATCH_SIZE);
+  const envBatch = loadEnv().ASN_MAP_BATCH_SIZE;
   if (!Number.isFinite(envBatch) || envBatch < 1_000) return DEFAULT_BATCH_SIZE;
   return Math.min(Math.floor(envBatch), 100_000);
 }
 
 function resolveWorkerCount(): number {
-  const envWorkers = Number(process.env.ASN_MAP_WORKERS ?? DEFAULT_WORKERS);
+  const envWorkers = loadEnv().ASN_MAP_WORKERS;
   if (!Number.isFinite(envWorkers) || envWorkers < 1) return DEFAULT_WORKERS;
   return Math.min(Math.floor(envWorkers), 8);
 }

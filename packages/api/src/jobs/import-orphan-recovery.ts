@@ -1,21 +1,14 @@
+import { loadEnv } from '../config/env.js';
 import { query } from '../db/client.js';
 import { invalidateDatasetStateCache } from '../repositories/dataset-repository.js';
 import { logger } from '../config/logger.js';
-
-const DEFAULT_STALE_MINUTES = 20;
-
-function resolveStaleMinutes(): number {
-  const envMinutes = Number(process.env.IMPORT_STALE_MINUTES ?? DEFAULT_STALE_MINUTES);
-  if (!Number.isFinite(envMinutes) || envMinutes < 5) return DEFAULT_STALE_MINUTES;
-  return Math.min(Math.floor(envMinutes), 120);
-}
 
 /**
  * Fail imports left in active states after worker crash/restart.
  * Prevents perpetual importRunning lock when advisory lock is already released.
  */
 export async function recoverStaleImportRuns(): Promise<string[]> {
-  const staleMinutes = resolveStaleMinutes();
+  const staleMinutes = loadEnv().IMPORT_STALE_MINUTES;
 
   const recovered = await query<{ id: string }>(
     `UPDATE import_runs
@@ -45,7 +38,7 @@ export async function recoverStaleImportRuns(): Promise<string[]> {
 
   await query(
     `UPDATE dataset_state
-     SET mv_status = 'ready'
+     SET mv_status = 'unavailable'
      WHERE id = 1
        AND mv_status = 'refreshing'`,
   );

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { LookupMapCard } from '@/components/LookupMapCard';
 
 type LookupSection = 'city' | 'country' | 'asn';
 
@@ -45,9 +46,7 @@ export function LookupPage() {
   } | undefined;
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h2 className="text-2xl font-semibold">IP Lookup</h2>
-
+    <div className="min-h-0 flex-1 max-w-4xl space-y-6 overflow-auto">
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex gap-3">
           <input
@@ -79,7 +78,7 @@ export function LookupPage() {
       </form>
 
       {(isLoading || isFetching) && <p>Загрузка...</p>}
-      {error && <p className="text-red-400">Ошибка: {(error as Error).message}</p>}
+      {error && <p className="text-red-600">Ошибка: {(error as Error).message}</p>}
 
       {result && (
         <div className="space-y-4">
@@ -90,6 +89,12 @@ export function LookupPage() {
           {include.includes('city') && <ResultCard title="City" data={result.city} />}
           {include.includes('country') && <ResultCard title="Country" data={result.country} />}
           {include.includes('asn') && <ResultCard title="ASN" data={result.asn} />}
+          <LookupMapCard
+            latitude={result.city?.latitude as number | null | undefined}
+            longitude={result.city?.longitude as number | null | undefined}
+            accuracyRadius={result.city?.accuracyRadius as number | null | undefined}
+            cityName={result.city?.cityName as string | null | undefined}
+          />
         </div>
       )}
     </div>

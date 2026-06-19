@@ -1,12 +1,37 @@
+import type {
+  DatasetState,
+  FacetValuesResponse,
+  FilterClause,
+  HealthResponse,
+  ImportRun,
+  ImportRunListResponse,
+  LookupResponse,
+  MetricsResponse,
+  ReadyResponse,
+  TableResponse,
+  TableSeekRequest,
+  TableSeekResponse,
+} from '@geoip/shared';
+
 const API_BASE = '/api/v1';
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public details?: unknown,
   ) {
     super(message);
   }
+}
+
+function formatErrorBody(body: unknown, fallback: string): { message: string; details?: unknown } {
+  if (body == null || typeof body !== 'object') {
+    return { message: fallback };
+  }
+  const record = body as { message?: string; error?: string; details?: unknown };
+  const message = record.message ?? record.error ?? fallback;
+  return { message, details: record.details };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -20,50 +45,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, (body as { message?: string }).message ?? res.statusText);
+    const { message, details } = formatErrorBody(body, res.statusText);
+    throw new ApiError(res.status, message, details);
   }
 
   return res.json() as Promise<T>;
 }
 
 export const api = {
-  health: () => request<{ status: string }>('/health'),
-  ready: () => request<{ status: string; checks: Record<string, boolean> }>('/ready'),
-  dataset: () =>
-    request<{
-      datasetDate: string | null;
-      activatedAt: string | null;
-      mvStatus: string;
-    }>('/dataset/active'),
-  imports: (limit = 50) => request<{ items: unknown[]; total: number }>(`/imports?limit=${limit}`),
-  importDetail: (id: string) => request<unknown>(`/imports/${id}`),
-  triggerImport: (apiKey: string) =>
-    request<{ importRunId: string }>('/imports', {
-      method: 'POST',
-      headers: { 'X-API-Key': apiKey },
-      body: JSON.stringify({ triggeredBy: 'manual' }),
-    }),
+  health: () => request<HealthResponse>('/health'),
+  ready: () => request<ReadyResponse>('/ready'),
+  dataset: () => request<DatasetState>('/dataset/active'),
+  imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
+  importById: (id: string) => request<ImportRun>(`/imports/${id}`),
   lookup: (
     ip: string,
     options?: { include?: Array<'city' | 'country' | 'asn'>; signal?: AbortSignal },
   ) =>
-    request<unknown>('/lookup', {
+    request<LookupResponse>('/lookup', {
       method: 'POST',
       body: JSON.stringify({ ip, include: options?.include }),
       signal: options?.signal,
     }),
-  tableCity: (params: URLSearchParams) =>
-    request<unknown>(`/table/city?${params.toString()}`),
-  tableCountry: (params: URLSearchParams) =>
-    request<unknown>(`/table/country?${params.toString()}`),
-  filterMetadata: (tableType: string) =>
+  table: (tableType: 'city' | 'country', params: URLSearchParams) =>
+    request<TableResponse>(`/table/${tableType}?${params.toString()}`),
+  filterMetadata: (tableType: 'city' | 'country') =>
     request<unknown>(`/table/metadata/filters?tableType=${tableType}`),
   facetValues: (
-    tableType: string,
+    tableType: 'city' | 'country',
     field: string,
     search = '',
     limit = 50,
-    contextFilters: Array<{ field: string; op: string; value?: unknown }> = [],
+    contextFilters: FilterClause[] = [],
     signal?: AbortSignal,
   ) => {
     const params = new URLSearchParams({
@@ -75,17 +88,12 @@ export const api = {
     if (contextFilters.length > 0) {
       params.set('contextFilters', JSON.stringify(contextFilters));
     }
-    return request<{ items: Array<{ value: string; count: number }> }>(
-      `/table/metadata/facet?${params.toString()}`,
-      { signal },
-    );
+    return request<FacetValuesResponse>(`/table/metadata/facet?${params.toString()}`, { signal });
   },
-  metrics: () => request<unknown>('/metrics'),
-  createExport: (apiKey: string, body: unknown) =>
-    request<{ id: string }>('/exports/table', {
+  tableSeek: (tableType: 'city' | 'country', body: TableSeekRequest) =>
+    request<TableSeekResponse>(`/table/${tableType}/seek`, {
       method: 'POST',
-      headers: { 'X-API-Key': apiKey },
       body: JSON.stringify(body),
     }),
-  exportStatus: (id: string) => request<unknown>(`/exports/${id}`),
+  metrics: () => request<MetricsResponse>('/metrics'),
 };

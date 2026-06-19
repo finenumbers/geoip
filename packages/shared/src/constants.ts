@@ -43,6 +43,7 @@ export const COUNTRY_TABLE_SORT_FIELDS = [
   'country_name',
   'subdivision_1_name',
   'asn',
+  'asn_org',
 ] as const;
 
 export const FILTER_OPERATORS = [

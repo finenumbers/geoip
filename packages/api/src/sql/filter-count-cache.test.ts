@@ -17,6 +17,12 @@ describe('resolveCachedFilterCount', () => {
     ).toBe(10_556_198);
   });
 
+  it('matches lowercase country_iso_code via uppercase cache key', () => {
+    expect(
+      resolveCachedFilterCount('city', [{ field: 'country_iso_code', op: 'eq', value: 'ru' }], sampleCache),
+    ).toBe(10_556_198);
+  });
+
   it('sums cached counts for in filter', () => {
     expect(
       resolveCachedFilterCount(

@@ -55,6 +55,7 @@ services:
     command: node dist/server.js
     env_file: .env
     environment:
+      TZ: Europe/Moscow
       DATABASE_URL: postgresql://geoip:geoip@pgbouncer:6432/geoip
       DATABASE_DIRECT_URL: postgresql://geoip:geoip@postgres:5432/geoip
       DATABASE_POOL_MAX: 8
@@ -78,12 +79,14 @@ services:
     command: node dist/jobs/import-worker.js
     env_file: .env
     environment:
+      TZ: Europe/Moscow
       DATABASE_URL: postgresql://geoip:geoip@pgbouncer:6432/geoip
       DATABASE_DIRECT_URL: postgresql://geoip:geoip@postgres:5432/geoip
       DATABASE_POOL_MAX: 4
       ASN_MAP_BATCH_SIZE: 50000
       ASN_MAP_WORKERS: 6
       IMPORT_ZIP_CACHE_ENABLED: "true"
+      IMPORT_STAGING_SNAPSHOT_ENABLED: "true"
       IMPORT_SKIP_UNCHANGED_DATASET: "true"
       NODE_OPTIONS: --max-old-space-size=4096
     depends_on:
@@ -93,6 +96,16 @@ services:
         condition: service_started
     volumes:
       - import_tmp:/tmp/geoip-import
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const fs=require('fs');try{const t=+fs.readFileSync('/tmp/geoip-worker-heartbeat','utf8');process.exit(Date.now()-t<120000?0:1)}catch{process.exit(1)}\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   export-worker:
     build:
@@ -112,12 +125,26 @@ services:
         condition: service_started
     volumes:
       - import_tmp:/tmp/geoip-import
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const fs=require('fs');try{const t=+fs.readFileSync('/tmp/geoip-worker-heartbeat','utf8');process.exit(Date.now()-t<120000?0:1)}catch{process.exit(1)}\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   web:
     build:
       context: .
       dockerfile: packages/web/Dockerfile
+      args:
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
     container_name: geoip_web
+    environment:
+      API_KEY: ${IMPORT_API_KEY:-}
     ports:
       - "8080:80"
     depends_on:
