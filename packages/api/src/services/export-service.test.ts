@@ -36,6 +36,24 @@ describe('exportKeysetQueryPage', () => {
   });
 });
 
+describe('resolveExportFilePath', () => {
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    const { resetEnvCache } = await import('../config/env.js');
+    resetEnvCache();
+  });
+
+  it('writes under EXPORT_DIR', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://geoip:geoip@localhost:5432/geoip');
+    vi.stubEnv('IMPORT_API_KEY', 'test-api-key-12345');
+    vi.stubEnv('EXPORT_DIR', '/tmp/test-exports-phase-c');
+    vi.resetModules();
+    const { resolveExportFilePath } = await import('./export-service.js');
+    expect(resolveExportFilePath('abc-123')).toBe('/tmp/test-exports-phase-c/abc-123.csv');
+  });
+});
+
 describe('resolveExportUseKeyset', () => {
   it('allows keyset when ASN filter uses precomputed mapping', () => {
     expect(

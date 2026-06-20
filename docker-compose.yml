@@ -43,6 +43,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+    volumes:
+      - export_data:/tmp/geoip-exports
     ports:
       - "3000:3000"
     depends_on:

@@ -13,6 +13,7 @@ import { ensureDatasetVolumesInBackground } from './sql/dataset-volumes-backfill
 async function main(): Promise<void> {
   const env = loadEnv();
   mkdirSync(env.IMPORT_DOWNLOAD_DIR, { recursive: true });
+  mkdirSync(env.EXPORT_DIR, { recursive: true });
 
   await migrate();
   await recoverStaleImportRuns();

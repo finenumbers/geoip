@@ -25,6 +25,7 @@ const envSchema = z.object({
     .transform((value) => value.trim() || '0 20 * * *'),
   IMPORT_CRON_TZ: z.string().default('Europe/Moscow'),
   IMPORT_DOWNLOAD_DIR: z.string().default('/tmp/geoip-import'),
+  EXPORT_DIR: z.string().default('/tmp/geoip-exports'),
   IMPORT_ZIP_CACHE_ENABLED: z
     .enum(['true', 'false', '1', '0'])
     .default('true')

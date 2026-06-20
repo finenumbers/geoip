@@ -49,6 +49,7 @@ Production behavior:
 - `API_AUTH_ENABLED=true` by default — table, lookup, exports, and dashboard ops require `X-API-Key`. Nginx injects the key for proxied `/api/` requests so the SPA works without exposing the key in the browser bundle.
 - **Perimeter auth:** use Access List in NGINX Proxy Manager (no built-in web login).
 - Update `infra/pgbouncer/userlist.txt` when changing `POSTGRES_PASSWORD`.
+- Export CSV files live in `EXPORT_DIR` (`/tmp/geoip-exports` in Docker); **api** and **export** services share the `export_data` volume.
 - API `/api/v1/ready` returns **503** until status is `ready` (degraded/not_ready during import or MV refresh).
 - `postgres-backup` sidecar runs `scripts/backup-postgres.sh` on `BACKUP_INTERVAL_SECONDS` (default daily).
 - **HTTPS:** terminate TLS in NGINX Proxy Manager; proxy to `http://<host>:8080` (scheme `http`, port `8080` only).

@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { loadEnv } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { migrate } from '../db/migrate.js';
@@ -8,6 +9,7 @@ import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized
 
 async function main(): Promise<void> {
   const env = loadEnv();
+  mkdirSync(env.EXPORT_DIR, { recursive: true });
   logger.info('Export worker starting');
 
   await migrate();

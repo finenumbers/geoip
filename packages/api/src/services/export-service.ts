@@ -195,12 +195,17 @@ export async function getExportJob(id: string) {
   return job ?? null;
 }
 
+export function resolveExportFilePath(jobId: string): string {
+  const env = loadEnv();
+  mkdirSync(env.EXPORT_DIR, { recursive: true });
+  return join(env.EXPORT_DIR, `${jobId}.csv`);
+}
+
 export async function processExportJob(
   jobId: string,
   options?: { claimed?: boolean },
 ): Promise<void> {
   const log = createChildLogger({ exportJobId: jobId });
-  const env = loadEnv();
   const db = getDb();
 
   const job = await getExportJob(jobId);
@@ -247,9 +252,7 @@ export async function processExportJob(
       return;
     }
 
-    const exportDir = join(env.IMPORT_DOWNLOAD_DIR, 'exports');
-    mkdirSync(exportDir, { recursive: true });
-    const filePath = join(exportDir, `${jobId}.csv`);
+    const filePath = resolveExportFilePath(jobId);
 
     const rowCount = await streamTableExportToFile(job.tableType, filters, sort, filePath);
 

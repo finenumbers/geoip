@@ -19,7 +19,7 @@ describe('pruneExportHistory', () => {
   it('removes export files for deleted jobs', async () => {
     vi.mocked(query)
       .mockResolvedValueOnce({
-        rows: [{ id: 'job-1', download_path: '/tmp/geoip-import/exports/missing.csv' }],
+        rows: [{ id: 'job-1', download_path: '/tmp/geoip-exports/missing.csv' }],
         rowCount: 1,
         command: 'DELETE',
         oid: 0,
