@@ -8,3 +8,6 @@ coverage/
 .turbo/
 import_tmp/
 /tmp/
+.pnpm-store/
+test-results/
+*.tsbuildinfo
