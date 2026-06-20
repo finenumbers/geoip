@@ -28,6 +28,15 @@ configs:
   pgbouncer_userlist:
     content: "\"${POSTGRES_USER:-geoip}\" \"${POSTGRES_PASSWORD:-geoip}\"\n"
 
+x-api-database-env: &api-database-env
+  POSTGRES_USER: ${POSTGRES_USER:-geoip}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geoip}
+  POSTGRES_DB: ${POSTGRES_DB:-geoip}
+  DATABASE_HOST: pgbouncer
+  DATABASE_PORT: "6432"
+  DATABASE_DIRECT_HOST: postgres
+  DATABASE_DIRECT_PORT: "5432"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -66,8 +75,7 @@ services:
     image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
     container_name: geoip_api
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
-      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY:-}
       NODE_ENV: production
@@ -96,8 +104,7 @@ services:
     container_name: geoip_import
     command: ["node", "dist/jobs/import-worker.js"]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
-      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY:-}
       NODE_ENV: production
@@ -122,8 +129,7 @@ services:
     container_name: geoip_export
     command: ["node", "dist/jobs/export-worker.js"]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
-      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
       CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY:-}
       NODE_ENV: production
@@ -169,7 +175,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      POSTGRES_USER: ${POSTGRES_USER:-geoip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geoip}
+      POSTGRES_DB: ${POSTGRES_DB:-geoip}
+      PGHOST: postgres
+      PGPORT: "5432"
       BACKUP_DIR: /backups
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
@@ -182,7 +192,7 @@ services:
         while true; do
           ts=$$(date +%Y%m%d_%H%M%S)
           echo "[backup] writing geoip_$${ts}.sql.gz"
-          pg_dump "$$DATABASE_URL" --no-owner --no-acl | gzip > "$$BACKUP_DIR/geoip_$${ts}.sql.gz"
+          PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h "$$PGHOST" -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" --no-owner --no-acl | gzip > "$$BACKUP_DIR/geoip_$${ts}.sql.gz"
           find "$$BACKUP_DIR" -name 'geoip_*.sql.gz' -mtime +"$${BACKUP_RETENTION_DAYS}" -delete 2>/dev/null || true
           sleep "$${BACKUP_INTERVAL_SECONDS}"
         done

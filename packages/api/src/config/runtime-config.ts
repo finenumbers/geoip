@@ -123,7 +123,15 @@ function loadFromDisk(): RuntimeConfig {
 
   if (configStoreExists(paths)) {
     settings = readSettings(paths) ?? applyEnvironmentProfile(DEFAULT_RUNTIME_SETTINGS, bootstrap.NODE_ENV);
-    secrets = readSecrets(paths, masterKey) ?? createFreshSecrets();
+    try {
+      secrets = readSecrets(paths, masterKey) ?? createFreshSecrets();
+    } catch (err) {
+      throw new Error(
+        'Failed to decrypt config secrets.enc — CONFIG_MASTER_KEY does not match this volume. ' +
+          'Use the original key or remove the config_data volume for a fresh start.',
+        { cause: err },
+      );
+    }
   } else {
     settings = applyEnvironmentProfile(DEFAULT_RUNTIME_SETTINGS, bootstrap.NODE_ENV);
     secrets = createFreshSecrets();

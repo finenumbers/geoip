@@ -563,11 +563,35 @@ resolve : lstat /data/compose/58/packages: no such file or directory
 В актуальной версии репозитория **`env_file: .env` удалён** из compose.  
 Обновите stack до последнего `main` и задайте переменные в Portainer → **Environment variables**.
 
-### geoip_api unhealthy / restarting
+### geoip_api exited (1) / unhealthy / restarting
 
-1. **Logs → geoip_api** — ошибки migrations или БД
-2. Проверьте `POSTGRES_PASSWORD` и [`userlist.txt`](../infra/pgbouncer/userlist.txt)
-3. Первый старт — подождите до **2 минут**
+Самая частая причина — **пароль Postgres со спецсимволами** (`#`, `@`, `:`, `/` и т.д.) в старом образе API.
+
+**Симптом в Logs → geoip_api:**
+
+```
+Invalid bootstrap environment: { DATABASE_URL: [ 'Invalid url' ] }
+```
+
+Compose подставлял пароль в `DATABASE_URL` без URL-encoding; Zod отклонял такую строку и контейнер завершался с кодом **1** до migrations.
+
+**Исправление (с коммита после `bootstrap-env` + `docker-compose.portainer.yml` на main):**
+
+1. Обновите stack до последнего `main` (compose передаёт `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`, не сырой `DATABASE_URL`).
+2. Дождитесь **Actions → Publish Docker images** (зелёный) — нужен новый `ghcr.io/finenumbers/geoip-api:latest`.
+3. **Pull and redeploy** stack в Portainer.
+
+**Другие причины exit (1):**
+
+| Симптом в логах | Причина | Решение |
+|-----------------|---------|---------|
+| `password authentication failed` | `POSTGRES_PASSWORD` не совпадает с уже существующим volume `pg_data` | Удалите volume `pg_data` (потеря данных!) или верните старый пароль |
+| `Failed to decrypt config secrets.enc` | `CONFIG_MASTER_KEY` не совпадает с volume `config_data` | Верните исходный ключ или удалите `config_data` для чистого старта |
+| `Migration failed` | БД недоступна / pgbouncer не healthy | Проверьте `geoip_postgres`, `geoip_pgbouncer` |
+
+1. **Logs → geoip_api** — первая строка ошибки решает, какая строка таблицы выше
+2. Пароль в **`POSTGRES_PASSWORD`** должен совпадать с тем, что в pgbouncer userlist (Portainer compose генерирует его автоматически из env)
+3. Первый старт — подождите до **2 минут** (migrations + `start_period: 120s`)
 
 ### PgBouncer auth failed
 
