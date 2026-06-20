@@ -34,7 +34,6 @@ import {
   mergeFacetCountCaches,
 } from '../sql/facet-count-cache.js';
 import { invalidateDatasetStateCache } from '../repositories/dataset-repository.js';
-import { invalidateFilterMetadataCache } from '../services/filter-metadata-cache.js';
 import { invalidateReadyCache } from '../services/ready-cache.js';
 import { logImportBenchmarkSummary } from './import-benchmark.js';
 import { pruneImportHistory } from './import-history-retention.js';
@@ -435,7 +434,6 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
       .where(eq(datasetState.id, 1));
 
     invalidateDatasetStateCache();
-    invalidateFilterMetadataCache();
     invalidateReadyCache();
 
     await updateImportRun(importRunId, {

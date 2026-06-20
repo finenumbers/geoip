@@ -149,22 +149,6 @@ export const tableCursorSchema = z
   })
   .nullable();
 
-export const tableSeekRequestSchema = z.object({
-  targetPage: z.number().int().min(1).max(5000),
-  pageSize: z.coerce.number().int().min(1).max(200).default(50),
-  sort: z.array(sortClauseSchema).default([]),
-  filters: z.array(filterClauseSchema).default([]),
-  cursorStack: z.array(tableCursorSchema).optional(),
-});
-
-export const tableSeekResponseSchema = z.object({
-  cursor: tableCursorSchema,
-  cursorStack: z.array(tableCursorSchema),
-  seekMs: z.number(),
-  pagesWalked: z.number(),
-  startPage: z.number(),
-});
-
 export const paginationSchema = z.object({
   page: z.number(),
   pageSize: z.number(),
@@ -298,8 +282,6 @@ export type SortClause = z.infer<typeof sortClauseSchema>;
 export type TableQuery = z.infer<typeof tableQuerySchema>;
 export type ExportJob = z.infer<typeof exportJobSchema>;
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
-export type TableSeekRequest = z.infer<typeof tableSeekRequestSchema>;
-export type TableSeekResponse = z.infer<typeof tableSeekResponseSchema>;
 export type MetricsResponse = z.infer<typeof metricsResponseSchema>;
 export type ReadyResponse = z.infer<typeof readyResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;

@@ -1,6 +1,5 @@
 import {
   tableQuerySchema,
-  tableSeekRequestSchema,
   validateTableQueryProfile,
   profileValidationToFieldErrors,
   normalizeFiltersForQuery,
@@ -11,17 +10,10 @@ import { query } from '../db/client.js';
 import { batchLookupAsn, loadPrecomputedAsn } from '../sql/asn-enrichment.js';
 import { isAsnMappingReady } from '../sql/asn-mapping-status.js';
 import { rankCursorField, usesRankSortField } from '../sql/sort-rank.js';
-import { buildTableQuery, getFilterMetadataFields, getFilterMetadataSource, resolvePaginationMode, resolveTableSortHint, resolveSortOverrideHint } from '../sql/table-query.js';
+import { buildTableQuery, resolvePaginationMode, resolveTableSortHint, resolveSortOverrideHint } from '../sql/table-query.js';
 import { resolveBrowseView } from '../sql/mv-view-resolver.js';
 import { resolveCachedFilterCount } from '../sql/filter-count-cache.js';
 import { getDatasetState } from '../repositories/dataset-repository.js';
-import {
-  buildFilterMetadataCacheKey,
-  buildStringFieldMetadata,
-  FILTER_METADATA_VALUE_LIMIT,
-  getCachedFilterMetadata,
-  setCachedFilterMetadata,
-} from './filter-metadata-cache.js';
 import { validateTableQueryLimits } from './query-limits.js';
 import type { SortClause } from '@geoip/shared';
 
@@ -234,177 +226,5 @@ export async function queryTable(
             }
           : null,
     },
-  };
-}
-
-async function fetchDistinctFieldValues(
-  tableType: 'city' | 'country',
-  field: string,
-): Promise<(string | number)[]> {
-  const view = tableType === 'city' ? 'mv_city_blocks_analytics' : 'mv_country_blocks_analytics';
-  const source = getFilterMetadataSource(tableType, field);
-  const result = await query<{ value: string | number | null }>(
-    `SELECT DISTINCT ${source} AS value
-     FROM ${view} v
-     ${field === 'asn' ? `LEFT JOIN ${tableType === 'city' ? 'geo_city_block_asn' : 'geo_country_block_asn'} ba ON ba.${tableType === 'city' ? 'city_block_id' : 'country_block_id'} = v.id` : ''}
-     WHERE ${source} IS NOT NULL
-     ORDER BY ${source}
-     LIMIT ${FILTER_METADATA_VALUE_LIMIT}`,
-  );
-  return result.rows
-    .map((r) => r.value)
-    .filter((v): v is string | number => v !== null);
-}
-
-export async function getFilterMetadata(tableType: 'city' | 'country') {
-  const state = await getDatasetState();
-  const cacheKey = buildFilterMetadataCacheKey(
-    tableType,
-    state.datasetDate,
-    state.datasetFingerprint,
-    state.mvRefreshedAt,
-  );
-  const cached = getCachedFilterMetadata(cacheKey);
-  if (cached) return cached;
-
-  const fields: Record<string, { type: 'string' | 'number'; distinctValues?: (string | number)[] }> = {};
-  const fieldNames = getFilterMetadataFields(tableType);
-
-  for (const field of fieldNames) {
-    const type = field === 'asn' ? 'number' : 'string';
-    if (type === 'string') {
-      const fromCache = buildStringFieldMetadata(
-        field,
-        tableType,
-        state.facetCountCache,
-        state.filterCountCache,
-      );
-      if (fromCache) {
-        fields[field] = fromCache;
-        continue;
-      }
-    }
-
-    fields[field] = {
-      type,
-      distinctValues: await fetchDistinctFieldValues(tableType, field),
-    };
-  }
-
-  const payload = { fields };
-  setCachedFilterMetadata(cacheKey, payload);
-  return payload;
-}
-
-type TableCursor = {
-  afterId: number;
-  afterNetwork: string;
-  afterSortValue?: string;
-} | null;
-
-function findBestCursorStart(
-  stack: TableCursor[],
-  targetPage: number,
-): { startPage: number; cursor: TableCursor } {
-  if (targetPage <= 1) {
-    return { startPage: 1, cursor: null };
-  }
-  for (let p = targetPage - 1; p >= 1; p--) {
-    const cursor = stack[p - 1] ?? null;
-    if (cursor != null) {
-      return { startPage: p, cursor };
-    }
-  }
-  return { startPage: 1, cursor: null };
-}
-
-export async function seekTablePage(
-  tableType: 'city' | 'country',
-  rawBody: Record<string, unknown>,
-) {
-  const parsed = tableSeekRequestSchema.safeParse(rawBody);
-  if (!parsed.success) {
-    return { error: parsed.error.flatten() };
-  }
-
-  const profileCheck = validateTableQueryProfile(
-    tableType,
-    parsed.data.sort,
-    parsed.data.filters,
-  );
-  if (!profileCheck.ok) {
-    return { error: profileValidationToFieldErrors(profileCheck.issues) };
-  }
-
-  const { targetPage, pageSize, sort, cursorStack: clientStack } = parsed.data;
-  const filters = normalizeFiltersForQuery(parsed.data.filters);
-
-  if (targetPage <= 1) {
-    return {
-      cursor: null as TableCursor,
-      cursorStack: [null] as TableCursor[],
-      seekMs: 0,
-      pagesWalked: 0,
-      startPage: 1,
-    };
-  }
-
-  if (!supportsKeysetPagination(sort)) {
-    return {
-      error: {
-        formErrors: [],
-        fieldErrors: {
-          sort: ['Keyset seek requires a single supported sort column'],
-        },
-      },
-    };
-  }
-
-  const start = Date.now();
-  const inputStack = clientStack?.length ? [...clientStack] : [null];
-  const { startPage, cursor: startCursor } = findBestCursorStart(inputStack, targetPage);
-  const nextStack = [...inputStack];
-  while (nextStack.length < targetPage) nextStack.push(null);
-
-  let walkPage = startPage;
-  let walkCursor: TableCursor = startPage === 1 ? null : startCursor;
-  let pagesWalked = 0;
-
-  while (walkPage < targetPage) {
-    const pageResult = await queryTable(tableType, {
-      page: walkPage,
-      pageSize,
-      sort,
-      filters,
-      afterId: walkCursor?.afterId,
-      afterNetwork: walkCursor?.afterNetwork,
-      afterSortValue: walkCursor?.afterSortValue,
-    });
-    if ('error' in pageResult) {
-      return pageResult;
-    }
-
-    const next = pageResult.meta?.nextCursor;
-    if (!next) break;
-
-    const cursor: TableCursor = {
-      afterId: next.afterId,
-      afterNetwork: next.afterNetwork ?? '',
-      afterSortValue: next.afterSortValue,
-    };
-    nextStack[walkPage] = cursor;
-    walkCursor = cursor;
-    walkPage++;
-    pagesWalked++;
-  }
-
-  const landingCursor = targetPage === 1 ? null : nextStack[targetPage - 1] ?? null;
-
-  return {
-    cursor: landingCursor,
-    cursorStack: nextStack,
-    seekMs: Date.now() - start,
-    pagesWalked,
-    startPage,
   };
 }

@@ -63,6 +63,8 @@ Production behavior:
 5. **PgBouncer:** after password change, update `infra/pgbouncer/userlist.txt` and restart the stack.
 6. **Do not publish** API (`3000`) or Postgres on the host — prod overlay exposes web `:8080` only.
 
+See [`infra/portainer/README.md`](infra/portainer/README.md) for a Portainer stack template.
+
 ### PostgreSQL backup
 
 Manual backup (dev):

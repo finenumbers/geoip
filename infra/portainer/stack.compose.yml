@@ -1,0 +1,11 @@
+# Portainer Stack — production-like GeoIP Analytics
+#
+# In Portainer: Stacks → Add stack → Web editor → paste this file
+# Set environment variables from stack.env.example (Stack → Environment variables)
+#
+# Repository layout must include docker-compose.yml and docker-compose.prod.yml
+# at the repo root (paths below are relative to this file).
+
+include:
+  - path: ../../docker-compose.yml
+  - path: ../../docker-compose.prod.yml

@@ -747,17 +747,3 @@ export function buildTableQuery(
 
   return { sql, countSql, params, countParams, useCachedCount, skipExactCount: useAsnBlocksJoin };
 }
-
-export function getFilterMetadataFields(tableType: TableType): string[] {
-  if (tableType === 'city') {
-    return ['country_iso_code', 'country_name', 'city_name', 'subdivision_1_name', 'asn'];
-  }
-  return ['country_iso_code', 'country_name', 'subdivision_1_name', 'asn'];
-}
-
-export function getFilterMetadataSource(tableType: TableType, field: string): string {
-  if (field === 'asn') {
-    return `${getAsnTable(tableType)}.asn`;
-  }
-  return `${getViewName(tableType)}.${field}`;
-}

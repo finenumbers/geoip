@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { FilterClause } from '@geoip/shared';
 import { validateTableQueryProfile, profileValidationToFieldErrors, isAllowedFacetField, normalizeFiltersForQuery } from '@geoip/shared';
-import { queryTable, getFilterMetadata, seekTablePage } from '../services/table-service.js';
+import { queryTable } from '../services/table-service.js';
 import { getFacetValues } from '../services/facet-service.js';
 import { recordTableQueryMetric } from '../routes/metrics.js';
 import {
@@ -60,12 +60,6 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
     return result;
   });
 
-  app.get('/api/v1/table/metadata/filters', guards, async (request) => {
-    const tableType = (request.query as { tableType?: string }).tableType ?? 'city';
-    const type = tableType === 'country' ? 'country' : 'city';
-    return getFilterMetadata(type);
-  });
-
   app.get('/api/v1/table/metadata/facet', guards, async (request, reply) => {
     const q = request.query as {
       tableType?: string;
@@ -116,17 +110,4 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
 
     return getFacetValues(tableType, field, search, limit, contextFilters);
   });
-
-  app.post<{ Params: { tableType: string } }>(
-    '/api/v1/table/:tableType/seek',
-    guards,
-    async (request, reply) => {
-      const tableType = request.params.tableType === 'country' ? 'country' : 'city';
-      const result = await seekTablePage(tableType, request.body as Record<string, unknown>);
-      if ('error' in result) {
-        return reply.status(422).send({ error: 'Validation error', details: result.error });
-      }
-      return result;
-    },
-  );
 }

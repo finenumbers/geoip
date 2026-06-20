@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { queryTable, seekTablePage } from './table-service.js';
+import { queryTable } from './table-service.js';
 
 vi.mock('../db/client.js', () => ({
   query: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('../repositories/dataset-repository.js', () => ({
 }));
 
 vi.mock('../sql/table-query.js', () => ({
-  buildTableQuery: vi.fn((tableType, opts) => ({
+  buildTableQuery: vi.fn(() => ({
     sql: 'SELECT 1',
     countSql: null,
     params: [],
@@ -37,11 +37,7 @@ vi.mock('../sql/table-query.js', () => ({
   resolvePaginationMode: vi.fn(() => 'keyset'),
   resolveTableSortHint: vi.fn(() => null),
   resolveSortOverrideHint: vi.fn(() => null),
-  getFilterMetadataFields: vi.fn(() => []),
-  getFilterMetadataSource: vi.fn(() => 'field'),
 }));
-
-const { query } = await import('../db/client.js');
 
 describe('queryTable profile validation', () => {
   it('returns error for unknown filter field', async () => {
@@ -62,63 +58,5 @@ describe('queryTable profile validation', () => {
       filters: [],
     });
     expect(result).toHaveProperty('error');
-  });
-});
-
-describe('seekTablePage', () => {
-  it('returns page 1 cursor without walking', async () => {
-    const result = await seekTablePage('city', { targetPage: 1, pageSize: 50 });
-    expect(result).toEqual({
-      cursor: null,
-      cursorStack: [null],
-      seekMs: 0,
-      pagesWalked: 0,
-      startPage: 1,
-    });
-  });
-
-  it('rejects unsupported multi-sort seek', async () => {
-    const result = await seekTablePage('city', {
-      targetPage: 3,
-      pageSize: 50,
-      sort: [
-        { field: 'country_name', dir: 'asc' },
-        { field: 'city_name', dir: 'asc' },
-      ],
-    });
-    expect(result).toHaveProperty('error');
-  });
-
-  it('walks pages server-side to target cursor', async () => {
-    vi.mocked(query)
-      .mockResolvedValueOnce({
-        rows: [{ id: 100, network: '1.0.0.0/8', prefix_len: 8, country_name_rank: 1 }],
-        rowCount: 1,
-        command: 'SELECT',
-        oid: 0,
-        fields: [],
-      })
-      .mockResolvedValueOnce({
-        rows: [{ id: 200, network: '2.0.0.0/8', prefix_len: 8, country_name_rank: 2 }],
-        rowCount: 1,
-        command: 'SELECT',
-        oid: 0,
-        fields: [],
-      });
-
-    const result = await seekTablePage('city', {
-      targetPage: 3,
-      pageSize: 50,
-      sort: [{ field: 'country_name', dir: 'desc' }],
-    });
-
-    expect('error' in result).toBe(false);
-    if ('error' in result) return;
-    expect(result.pagesWalked).toBe(2);
-    expect(result.cursor).toEqual({
-      afterId: 200,
-      afterNetwork: '2.0.0.0/8',
-      afterSortValue: '2',
-    });
   });
 });

@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { datasetState } from '../db/schema.js';
 import { invalidateDatasetStateCache } from '../repositories/dataset-repository.js';
-import { invalidateFilterMetadataCache } from '../services/filter-metadata-cache.js';
 import { logger } from '../config/logger.js';
 import {
   buildFilterCountCache,
@@ -48,7 +47,6 @@ export async function ensureDatasetCaches(): Promise<void> {
     updates.cacheVersion = DATASET_CACHE_VERSION;
     await db.update(datasetState).set(updates).where(eq(datasetState.id, 1));
     invalidateDatasetStateCache();
-    invalidateFilterMetadataCache();
     logger.info('Dataset caches persisted');
   } finally {
     cacheBuildRunning = false;
