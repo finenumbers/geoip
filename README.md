@@ -15,6 +15,10 @@
 
 ## Production за 3 шага
 
+**Portainer (рекомендуется):** пошаговый гайд → **[docs/PORTAINER.md](docs/PORTAINER.md)**
+
+**Docker Compose (CLI):**
+
 ```bash
 git clone https://github.com/finenumbers/geoip.git
 cd geoip
@@ -31,7 +35,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 | Документ | Описание |
 |----------|----------|
-| [docs/УСТАНОВКА.md](docs/УСТАНОВКА.md) | Docker Compose, Portainer |
+| **[docs/PORTAINER.md](docs/PORTAINER.md)** | **Деплой в Portainer (Stacks) — подробная инструкция** |
+| [docs/УСТАНОВКА.md](docs/УСТАНОВКА.md) | Docker Compose (CLI), общая установка |
 | [docs/NGINX-PROXY-MANAGER.md](docs/NGINX-PROXY-MANAGER.md) | HTTPS и Access List через NPM |
 | [docs/ADMIN.md](docs/ADMIN.md) | Admin UI и config store |
 | [docs/АРХИТЕКТУРА.md](docs/АРХИТЕКТУРА.md) | Архитектура и data plane |
@@ -39,7 +44,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 | [docs/БЕЗОПАСНОСТЬ.md](docs/БЕЗОПАСНОСТЬ.md) | Секреты и perimeter |
 | [docs/РАЗРАБОТКА.md](docs/РАЗРАБОТКА.md) | Локальная разработка |
 
-Portainer: [infra/portainer/README.md](infra/portainer/README.md)
+Portainer: [docs/PORTAINER.md](docs/PORTAINER.md) · [infra/portainer/README.md](infra/portainer/README.md)
 
 ## Публикация на GitHub
 

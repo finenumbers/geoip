@@ -8,7 +8,7 @@
 
 ## Предварительные условия
 
-1. GeoIP stack запущен (`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`)
+1. GeoIP stack запущен (Portainer или `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`)
 2. Контейнер `geoip_web` слушает порт **8080** на хосте Docker
 3. NPM установлен (отдельный контейнер или хост) и имеет сетевой доступ к хосту с Docker
 4. DNS A/AAAA запись домена указывает на сервер с NPM
