@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end Portainer deploy simulation — writes evidence to debug log
+# Portainer deploy simulation — mimics Portainer using ONLY the compose path file.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,9 +20,8 @@ log_event() {
   curl -sS -X POST "$ENDPOINT" -H 'Content-Type: application/json' -H "X-Debug-Session-Id: $SESSION_ID" -d "$line" >/dev/null 2>&1 || true
 }
 
-mkdir -p "$SIM/infra/portainer" "$SIM/infra/pgbouncer" "$SIM/scripts"
-cp "$ROOT/docker-compose.yml" "$ROOT/docker-compose.prod.yml" "$SIM/"
-cp "$ROOT/infra/portainer/docker-compose.images.yml" "$ROOT/infra/portainer/stack.compose.yml" "$SIM/infra/portainer/"
+mkdir -p "$SIM/infra/pgbouncer" "$SIM/scripts"
+cp "$ROOT/docker-compose.portainer.yml" "$ROOT/docker-compose.yml" "$SIM/"
 cp "$ROOT/infra/pgbouncer/"* "$SIM/infra/pgbouncer/"
 cp "$ROOT/scripts/backup-postgres.sh" "$SIM/scripts/"
 
@@ -31,43 +30,41 @@ has_packages=false
 log_event "A" "portainer-self-test:setup" "simulated Portainer stack dir" \
   "{\"simDir\":\"$SIM\",\"hasPackages\":$has_packages}"
 
-# Old path: build fails
-old_out=$(cd "$SIM/infra/portainer" && docker compose -f stack.compose.yml build 2>&1 || true)
-old_fail=false
-echo "$old_out" | grep -q 'packages: no such file' && old_fail=true
-log_event "B" "portainer-self-test:old-path" "stack.compose.yml build result" \
-  "{\"failedAsExpected\":$old_fail,\"snippet\":\"$(echo "$old_out" | tail -1 | sed 's/"/\\"/g')\"}"
+# Wrong Portainer path (docker-compose.yml) — build fails without packages/
+wrong_out=$(cd "$SIM" && docker compose -f docker-compose.yml build 2>&1 || true)
+wrong_fail=false
+echo "$wrong_out" | grep -q 'packages: no such file' && wrong_fail=true
+log_event "B" "portainer-self-test:wrong-path" "docker-compose.yml build (Portainer default mistake)" \
+  "{\"failedAsExpected\":$wrong_fail,\"snippet\":\"$(echo "$wrong_out" | tail -1 | sed 's/"/\\"/g')\"}"
 
-# New path: no build, GHCR images only
-export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:infra/portainer/docker-compose.images.yml
-new_cfg=$(cd "$SIM" && docker compose config 2>/dev/null || true)
-build_count=$(printf '%s\n' "$new_cfg" | grep -c '^    build:' || true)
-ghcr_count=$(printf '%s\n' "$new_cfg" | grep -c '^    image: ghcr.io/finenumbers/' || true)
-build_out=$(cd "$SIM" && docker compose build 2>&1 || true)
+# Correct Portainer path — single file, no build
+port_cfg=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml config 2>/dev/null || true)
+build_count=$(printf '%s\n' "$port_cfg" | grep -c '^    build:' || true)
+ghcr_count=$(printf '%s\n' "$port_cfg" | grep -c '^    image: ghcr.io/finenumbers/' || true)
+build_out=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml build 2>&1 || true)
 no_build=false
 echo "$build_out" | grep -q 'No services to build' && no_build=true
-log_event "D" "portainer-self-test:new-path" "COMPOSE_FILE config and build" \
+log_event "F" "portainer-self-test:portainer-yml" "docker-compose.portainer.yml build" \
   "{\"buildStanzaCount\":$build_count,\"ghcrImageCount\":$ghcr_count,\"noServicesToBuild\":$no_build}"
 
-# GHCR pull
-pull_out=$(cd "$SIM" && docker compose pull api web 2>&1 || true)
+# GHCR pull via portainer compose file
+pull_out=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml pull api web 2>&1 || true)
 api_pulled=false
 web_pulled=false
 echo "$pull_out" | grep -q 'geoip-api.*Pulled\|geoip-api.*up to date' && api_pulled=true
 echo "$pull_out" | grep -q 'geoip-web.*Pulled\|geoip-web.*up to date' && web_pulled=true
-log_event "D" "portainer-self-test:ghcr-pull" "GHCR image pull" \
+log_event "F" "portainer-self-test:ghcr-pull" "GHCR pull via portainer compose" \
   "{\"apiPulled\":$api_pulled,\"webPulled\":$web_pulled}"
 
-# Health check on pulled api image (one-off container, no stack up)
 health_out=$(docker run --rm --entrypoint node ghcr.io/finenumbers/geoip-api:latest -e "console.log('image-ok')" 2>&1 || true)
 image_runs=false
 echo "$health_out" | grep -q 'image-ok' && image_runs=true
-log_event "D" "portainer-self-test:api-image" "api image runs" "{\"nodeExecOk\":$image_runs}"
+log_event "F" "portainer-self-test:api-image" "api image runs" "{\"nodeExecOk\":$image_runs}"
 
 rm -rf "$SIM"
 
 passed=0
-$old_fail && ((passed++)) || true
+$wrong_fail && ((passed++)) || true
 $no_build && ((passed++)) || true
 [[ "$build_count" -eq 0 ]] && ((passed++)) || true
 $api_pulled && ((passed++)) || true

@@ -65,17 +65,19 @@
 
 ## 3. Как устроен stack (кратко)
 
-Portainer клонирует репозиторий и поднимает stack через **несколько compose-файлов** (переменная `COMPOSE_FILE`):
+Portainer использует **один** compose-файл из поля **Compose path** и запускает `docker compose build` именно по нему. Переменная `COMPOSE_FILE` **не работает** в Portainer.
 
 ```
-docker-compose.yml                              ← базовые сервисы
-docker-compose.prod.yml                         ← production: только :8080, backup, limits
-infra/portainer/docker-compose.images.yml       ← готовые образы GHCR (без локальной сборки)
+docker-compose.portainer.yml   ← единственный compose path для Portainer
+    ├── ghcr.io/finenumbers/geoip-api     (api, import, export)
+    ├── ghcr.io/finenumbers/geoip-web     (web)
+    ├── postgres + pgbouncer + backup
+    └── bind-mount: infra/pgbouncer/, scripts/backup-postgres.sh
 ```
 
-**Compose path в Portainer:** `docker-compose.yml` (корень репозитория).
+**Compose path в Portainer:** `docker-compose.portainer.yml`
 
-Образы `api` / `web` / workers публикуются в **GitHub Container Registry** при каждом push в `main`. Portainer **скачивает** их — не собирает из `packages/` на сервере.
+Файл **не содержит** секций `build:` — образы скачиваются из GHCR.
 
 ```mermaid
 flowchart LR
@@ -109,7 +111,7 @@ flowchart LR
 | `export_data` | Готовые CSV-экспорты |
 | `pg_backups` | Автобэкапы Postgres |
 
-> **Важно:** не вставляйте только `stack.compose.yml` в Web editor без полного репозитория — директива `include` не найдёт родительские compose-файлы. Используйте **метод Git Repository** (раздел 5) или клон на сервер (раздел 6).
+> **Важно:** Compose path = **`docker-compose.portainer.yml`**. Не используйте `docker-compose.yml` — Portainer запустит `compose build` и упадёт с `lstat .../packages`.
 
 ---
 
@@ -163,7 +165,6 @@ BACKUP_INTERVAL_SECONDS=86400
 | `POSTGRES_DB` | нет | default `geoip` |
 | `CONFIG_MASTER_KEY` | **да (prod)** | 64 hex, шифрование secrets |
 | `BACKUP_INTERVAL_SECONDS` | нет | Интервал автобэкапа (86400 = 24 ч) |
-| `COMPOSE_FILE` | **да (Portainer)** | `docker-compose.yml:docker-compose.prod.yml:infra/portainer/docker-compose.images.yml` |
 | `GEOIP_IMAGE_TAG` | нет | Тег GHCR-образов (default `latest`) |
 
 Секреты ГРЧЦ, API keys, Google Maps, cron — **не** сюда. Они задаются позже в **Admin UI** (`/admin`).
@@ -198,7 +199,7 @@ Portainer клонирует репозиторий, **скачивает гот
 |------|----------|
 | **Repository URL** | `https://github.com/finenumbers/geoip` |
 | **Repository reference** | `refs/heads/main` или `main` |
-| **Compose path** | `docker-compose.yml` |
+| **Compose path** | `docker-compose.portainer.yml` |
 | **Authentication** | выключено (публичный репозиторий) |
 
 Для **приватного форка** включите Authentication и укажите Personal Access Token GitHub (read repo).
@@ -220,12 +221,11 @@ Portainer клонирует репозиторий, **скачивает гот
 | `POSTGRES_DB` | `geoip` |
 | `CONFIG_MASTER_KEY` | ваш hex из п. 4.2 |
 | `BACKUP_INTERVAL_SECONDS` | `86400` |
-| `COMPOSE_FILE` | `docker-compose.yml:docker-compose.prod.yml:infra/portainer/docker-compose.images.yml` |
 | `GEOIP_IMAGE_TAG` | `latest` |
 
-> **Не добавляйте** `env_file: .env` — проект настроен на переменные stack, отдельный `.env` на хосте **не требуется**.
+> **Не добавляйте** `env_file: .env` — переменные задаются в Portainer → **Environment variables**.
 
-> **Важно:** переменная `COMPOSE_FILE` отключает локальную сборку и использует образы `ghcr.io/finenumbers/geoip-api` и `ghcr.io/finenumbers/geoip-web`. Без неё Portainer попытается собрать образы из `packages/` и упадёт с ошибкой `lstat .../packages: no such file or directory`.
+> **Критично:** Compose path = **`docker-compose.portainer.yml`**. Если указать `docker-compose.yml`, Portainer запустит `compose build` и упадёт: `lstat .../packages: no such file or directory`. `COMPOSE_FILE` Portainer **не поддерживает**.
 
 ### Шаг 5.5. Deploy
 
@@ -296,7 +296,7 @@ cd /opt/geoip
 cd /opt/geoip
 export POSTGRES_PASSWORD='...'
 export CONFIG_MASTER_KEY='...'
-docker compose -f infra/portainer/stack.compose.yml up -d --build
+docker compose -f docker-compose.portainer.yml up -d
 ```
 
 Stack появится в Portainer как externally managed / через Docker Compose plugin — контейнеры будут видны в **Containers**.
@@ -473,31 +473,25 @@ docker exec geoip_postgres pg_dump -U geoip geoip | gzip > geoip_manual_$(date +
 
 ```
 Failed to deploy a stack: compose build operation failed:
-resolve : lstat /data/compose/56/packages: no such file or directory
+resolve : lstat /data/compose/58/packages: no such file or directory
 ```
 
-**Причина:** Portainer пытается **собрать** образы из исходников monorepo (`packages/api`, `packages/web`), но в каталоге stack (`/data/compose/<id>/`) нет папки `packages/`. Так бывает при compose path `infra/portainer/stack.compose.yml` **без** переменной `COMPOSE_FILE`.
+**Причина:** в Portainer указан **неверный Compose path** (`docker-compose.yml` или `infra/portainer/stack.compose.yml`). Эти файлы содержат `build: context: .` с `packages/`. Portainer **всегда** вызывает `compose build` по одному compose path и **игнорирует** переменную `COMPOSE_FILE`.
 
 **Решение:**
 
 1. **Stacks → geoip → Editor** (или пересоздайте stack)
-2. **Compose path:** `docker-compose.yml`
-3. **Environment variables** — добавьте:
-   ```
-   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:infra/portainer/docker-compose.images.yml
-   GEOIP_IMAGE_TAG=latest
-   ```
+2. **Compose path:** `docker-compose.portainer.yml` ← **именно этот файл**
+3. Удалите переменную `COMPOSE_FILE` если добавляли — она не работает
 4. **Update the stack**
 
-Portainer скачает готовые образы `ghcr.io/finenumbers/geoip-api` и `ghcr.io/finenumbers/geoip-web` вместо сборки.
-
-> Убедитесь, что workflow **Publish Docker images** в GitHub Actions успешно отработал хотя бы раз (после push в `main`).
+Файл `docker-compose.portainer.yml` не содержит `build:` — только `image: ghcr.io/finenumbers/...`.
 
 ### Stack не деплоится / «compose file not found»
 
 | Причина | Решение |
 |---------|---------|
-| Неверный Compose path | **`docker-compose.yml`** (корень репо) + `COMPOSE_FILE` из [`stack.env.example`](../infra/portainer/stack.env.example) |
+| Неверный Compose path | **`docker-compose.portainer.yml`** |
 | Web editor без repo | Перейдите на **Repository** method |
 | Старая версия Compose | Обновите Docker Engine / Portainer |
 

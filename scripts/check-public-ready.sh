@@ -53,6 +53,10 @@ if git log --all --oneline -- .env 2>/dev/null | head -1 | grep -q .; then
   warn ".env was committed in git history — review before public push"
 fi
 
+if grep -E '^[[:space:]]+build:' docker-compose.portainer.yml >/dev/null 2>&1; then
+  fail "docker-compose.portainer.yml must not contain build: stanzas (Portainer deploy)"
+fi
+
 # Untracked local config that must never be committed
 for local_config in data/config packages/api/data/config; do
   if [ -d "$local_config" ] && [ -n "$(ls -A "$local_config" 2>/dev/null || true)" ]; then

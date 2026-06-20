@@ -1,32 +1,24 @@
 # Portainer Stack — GeoIP Analytics
 
-Production-деплой через **Portainer → Stacks**.
+## Compose path (обязательно)
 
-## Главная инструкция
+```
+docker-compose.portainer.yml
+```
 
-**[docs/PORTAINER.md](../../docs/PORTAINER.md)** — пошаговый гайд.
+**Не используйте** `docker-compose.yml`, `infra/portainer/stack.compose.yml` или `COMPOSE_FILE` — Portainer **игнорирует** `COMPOSE_FILE` и всегда запускает `compose build` по одному compose path. Файлы с `build:` падают с ошибкой `lstat .../packages: no such file or directory`.
 
 ## Быстрый старт
-
-**Portainer → Stacks → Add stack → Repository**
 
 | Поле | Значение |
 |------|----------|
 | Repository URL | `https://github.com/finenumbers/geoip` |
 | Reference | `main` |
-| **Compose path** | **`docker-compose.yml`** |
-| Environment | см. [`stack.env.example`](stack.env.example) — **обязательно `COMPOSE_FILE`** |
+| **Compose path** | **`docker-compose.portainer.yml`** |
+| Environment | [`stack.env.example`](stack.env.example) |
 
-Deploy → `http://<host>:8080/admin/setup`
-
-## Файлы
-
-| Файл | Назначение |
-|------|------------|
-| [`stack.env.example`](stack.env.example) | Environment variables (включая `COMPOSE_FILE`) |
-| [`docker-compose.images.yml`](docker-compose.images.yml) | GHCR-образы вместо локальной сборки |
-| [`stack.compose.yml`](stack.compose.yml) | Legacy (сборка на хосте; не для Portainer CE) |
+Полная инструкция: **[docs/PORTAINER.md](../../docs/PORTAINER.md)**
 
 ---
 
-**Finenumbers** · [finenumbers.com](https://finenumbers.com) · apps@finenumbers.com
+**Finenumbers** · [finenumbers.com](https://finenumbers.com)
