@@ -122,12 +122,7 @@ export function DashboardPage() {
             {systemStatusLabel(systemStatus)}
           </SummaryHeadline>
           {ready?.checks && (
-            <StatusSummaryDetails
-              checks={ready.checks}
-              lookupP95Ms={metrics?.latency.lookupP95Ms}
-              tableQueryP95Ms={metrics?.latency.tableQueryP95Ms}
-              tableQueryByMode={metrics?.latency.tableQueryByMode}
-            />
+            <StatusSummaryDetails checks={ready.checks} />
           )}
         </Card>
 
@@ -335,78 +330,15 @@ function SummaryDetails({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StatusSummaryDetails({
-  checks,
-  lookupP95Ms,
-  tableQueryP95Ms,
-  tableQueryByMode,
-}: {
-  checks: Record<string, boolean>;
-  lookupP95Ms?: number;
-  tableQueryP95Ms?: number;
-  tableQueryByMode?: Array<{
-    mode: 'keyset' | 'offset';
-    filters: 'none' | 'active';
-    p95Ms: number;
-    sampleCount: number;
-    requestCount: number;
-  }>;
-}) {
-  const activeBuckets =
-    tableQueryByMode?.filter((row) => row.requestCount > 0 || row.sampleCount > 0) ?? [];
-
+function StatusSummaryDetails({ checks }: { checks: Record<string, boolean> }) {
   return (
-    <div className="mt-2 flex flex-wrap items-start gap-x-10 gap-y-1 text-sm">
-      <div className="grid grid-cols-[9.5rem_auto] items-baseline gap-x-4 gap-y-1">
-        <CheckItem label={ui.dashboard.checkDb} ok={Boolean(checks.database)} />
-        <CheckItem label={ui.dashboard.checkDataset} ok={Boolean(checks.dataset)} />
-        <CheckItem label={ui.dashboard.checkMv} ok={Boolean(checks.materializedViews)} />
-        <CheckItem label={ui.dashboard.checkIndexes} ok={Boolean(checks.productionIndexes)} />
-        <CheckItem label={ui.dashboard.checkAsn} ok={Boolean(checks.asnMapping)} />
-      </div>
-      <div className="grid grid-cols-[auto_auto] items-baseline gap-x-2 gap-y-1">
-        <DetailItem label={ui.dashboard.lookupLatency} value={formatMs(lookupP95Ms)} />
-        <DetailItem label={ui.dashboard.tableQueryLatency} value={formatMs(tableQueryP95Ms)} />
-      </div>
-      {activeBuckets.length > 0 && (
-        <div className="min-w-[16rem]">
-          <p className="mb-1 text-muted">{ui.dashboard.tableQueryByMode}</p>
-          <div className="grid grid-cols-[auto_auto_auto] items-baseline gap-x-3 gap-y-1">
-            {activeBuckets.map((row) => (
-              <TableQueryModeRow key={`${row.mode}-${row.filters}`} row={row} />
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="mt-2 grid grid-cols-[9.5rem_auto] items-baseline gap-x-4 gap-y-1 text-sm">
+      <CheckItem label={ui.dashboard.checkDb} ok={Boolean(checks.database)} />
+      <CheckItem label={ui.dashboard.checkDataset} ok={Boolean(checks.dataset)} />
+      <CheckItem label={ui.dashboard.checkMv} ok={Boolean(checks.materializedViews)} />
+      <CheckItem label={ui.dashboard.checkIndexes} ok={Boolean(checks.productionIndexes)} />
+      <CheckItem label={ui.dashboard.checkAsn} ok={Boolean(checks.asnMapping)} />
     </div>
-  );
-}
-
-function TableQueryModeRow({
-  row,
-}: {
-  row: {
-    mode: 'keyset' | 'offset';
-    filters: 'none' | 'active';
-    p95Ms: number;
-    requestCount: number;
-  };
-}) {
-  const modeLabel =
-    row.mode === 'keyset' ? ui.dashboard.tableQueryModeKeyset : ui.dashboard.tableQueryModeOffset;
-  const filtersLabel =
-    row.filters === 'active'
-      ? ui.dashboard.tableQueryFiltersActive
-      : ui.dashboard.tableQueryFiltersNone;
-
-  return (
-    <>
-      <span className="text-muted">
-        {modeLabel}, {filtersLabel}:
-      </span>
-      <span className="text-foreground">{formatMs(row.p95Ms)}</span>
-      <span className="text-muted">n={row.requestCount.toLocaleString('ru')}</span>
-    </>
   );
 }
 

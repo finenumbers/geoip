@@ -95,7 +95,7 @@ docker compose up --build web
 
 ## Импорт данных
 
-**Cron (автоматически):** по умолчанию `IMPORT_CRON_CRON=0 20 * * *` и `IMPORT_CRON_TZ=Europe/Moscow` (ежедневно в 20:00 МСК). Import worker ставит job в очередь по расписанию.
+**Cron (автоматически):** по умолчанию `IMPORT_CRON_CRON=0 10 * * *` и `IMPORT_CRON_TZ=Europe/Moscow` (ежедневно в 10:00 МСК). Import worker ставит job в очередь по расписанию.
 
 **Ручной запуск (ops / агент):**
 

@@ -15,7 +15,7 @@ export async function registerDatasetRoutes(app: FastifyInstance): Promise<void>
       'SELECT pg_database_size(current_database()) AS size',
     );
     const databaseSizeBytes = Number(sizeResult.rows[0]?.size ?? 0) || null;
-    const cronExpression = env.IMPORT_CRON_CRON.trim() || '0 20 * * *';
+    const cronExpression = env.IMPORT_CRON_CRON.trim() || '0 10 * * *';
     const nextImportAt = getNextDailyCronRun(cronExpression)?.toISOString() ?? null;
 
     return {

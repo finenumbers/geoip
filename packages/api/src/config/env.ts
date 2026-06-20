@@ -18,11 +18,11 @@ const envSchema = z.object({
     .enum(['true', 'false', '1', '0'])
     .default('false')
     .transform((v) => v === 'true' || v === '1'),
-  /** Daily import schedule (minute hour * * *), interpreted in IMPORT_CRON_TZ. Default: 20:00 Moscow. */
+  /** Daily import schedule (minute hour * * *), interpreted in IMPORT_CRON_TZ. Default: 10:00 Moscow. */
   IMPORT_CRON_CRON: z
     .string()
-    .default('0 20 * * *')
-    .transform((value) => value.trim() || '0 20 * * *'),
+    .default('0 10 * * *')
+    .transform((value) => value.trim() || '0 10 * * *'),
   IMPORT_CRON_TZ: z.string().default('Europe/Moscow'),
   IMPORT_DOWNLOAD_DIR: z.string().default('/tmp/geoip-import'),
   EXPORT_DIR: z.string().default('/tmp/geoip-exports'),
