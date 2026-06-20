@@ -14,7 +14,7 @@ docker-compose.portainer.yml
 |------|----------|
 | Repository URL | `https://github.com/finenumbers/geoip` |
 | Reference | `main` |
-| **Compose path** | **`docker-compose.portainer.yml`** |
+| **Compose path** | **`docker-compose.portainer.yml`** ← обязательно (не `docker-compose.yml`) |
 | Environment | [`stack.env.example`](stack.env.example) |
 
 Полная инструкция: **[docs/PORTAINER.md](../../docs/PORTAINER.md)**

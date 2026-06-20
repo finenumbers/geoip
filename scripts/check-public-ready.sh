@@ -57,6 +57,10 @@ if grep -E '^[[:space:]]+build:' docker-compose.yml docker-compose.portainer.yml
   fail "docker-compose.yml and docker-compose.portainer.yml must not contain build: (Portainer deploy)"
 fi
 
+if grep -E '^[[:space:]]+- \./(infra|scripts)/' docker-compose.portainer.yml >/dev/null 2>&1; then
+  fail "docker-compose.portainer.yml must not bind-mount ./infra or ./scripts (Portainer has no full git tree)"
+fi
+
 # Untracked local config that must never be committed
 for local_config in data/config packages/api/data/config; do
   if [ -d "$local_config" ] && [ -n "$(ls -A "$local_config" 2>/dev/null || true)" ]; then

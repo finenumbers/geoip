@@ -1,10 +1,32 @@
-# Portainer production stack — single file, NO `build:` (pulls GHCR images).
+# Portainer production stack — self-contained, no host bind mounts.
 #
 # Portainer → Stacks → Repository → Compose path:
 #   docker-compose.portainer.yml
 #
-# Do NOT use docker-compose.yml or infra/portainer/stack.compose.yml in Portainer —
-# they contain `build:` and Portainer ignores COMPOSE_FILE during build.
+# Uses Docker configs (inline content) instead of ./infra/ and ./scripts/ bind mounts,
+# because Portainer often deploys only the compose file without the full git tree.
+
+configs:
+  pgbouncer_ini:
+    content: |
+      [databases]
+      geoip = host=postgres port=5432 dbname=${POSTGRES_DB:-geoip}
+
+      [pgbouncer]
+      listen_addr = 0.0.0.0
+      listen_port = 6432
+      auth_type = plain
+      auth_file = /etc/pgbouncer/userlist.txt
+      pool_mode = transaction
+      max_client_conn = 100
+      default_pool_size = 15
+      min_pool_size = 2
+      reserve_pool_size = 5
+      server_reset_query = DISCARD ALL; SET statement_timeout = 30000
+      ignore_startup_parameters = extra_float_digits
+
+  pgbouncer_userlist:
+    content: "\"${POSTGRES_USER:-geoip}\" \"${POSTGRES_PASSWORD:-geoip}\"\n"
 
 services:
   postgres:
@@ -28,9 +50,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-      - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    configs:
+      - source: pgbouncer_ini
+        target: /etc/pgbouncer/pgbouncer.ini
+      - source: pgbouncer_userlist
+        target: /etc/pgbouncer/userlist.txt
     healthcheck:
       test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
       interval: 10s
@@ -148,16 +172,18 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
       BACKUP_DIR: /backups
       BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
     volumes:
       - pg_backups:/backups
-      - ./scripts/backup-postgres.sh:/usr/local/bin/backup-postgres.sh:ro
     command:
       - sh
       - -c
       - |
-        apk add --no-cache bash >/dev/null
         while true; do
-          bash /usr/local/bin/backup-postgres.sh
+          ts=$$(date +%Y%m%d_%H%M%S)
+          echo "[backup] writing geoip_$${ts}.sql.gz"
+          pg_dump "$$DATABASE_URL" --no-owner --no-acl | gzip > "$$BACKUP_DIR/geoip_$${ts}.sql.gz"
+          find "$$BACKUP_DIR" -name 'geoip_*.sql.gz' -mtime +"$${BACKUP_RETENTION_DAYS}" -delete 2>/dev/null || true
           sleep "$${BACKUP_INTERVAL_SECONDS}"
         done
 

@@ -199,7 +199,7 @@ Portainer клонирует репозиторий, **скачивает гот
 |------|----------|
 | **Repository URL** | `https://github.com/finenumbers/geoip` |
 | **Repository reference** | `refs/heads/main` или `main` |
-| **Compose path** | `docker-compose.portainer.yml` |
+| **Compose path** | **`docker-compose.portainer.yml`** (обязательно — без bind mounts на `./infra/`) |
 | **Authentication** | выключено (публичный репозиторий) |
 
 Для **приватного форка** включите Authentication и укажите Personal Access Token GitHub (read repo).
@@ -466,6 +466,20 @@ docker exec geoip_postgres pg_dump -U geoip geoip | gzip > geoip_manual_$(date +
 ---
 
 ## 13. Troubleshooting
+
+### `userlist.txt` mount error / `not a directory`
+
+```
+error mounting "/data/compose/.../infra/pgbouncer/userlist.txt" ... not a directory
+```
+
+**Причина:** Portainer не клонирует полное дерево git — только compose. Bind-mount `./infra/pgbouncer/userlist.txt` не находит файл; Docker создаёт **каталог** вместо файла.
+
+**Решение:**
+
+1. Compose path = **`docker-compose.portainer.yml`** (актуальный `main` — configs inline, без bind mounts)
+2. **Pull and redeploy**
+3. Не используйте `docker-compose.yml` в Portainer — в нём bind mounts на `./infra/` (для локального CLI с полным clone)
 
 ### `lstat .../packages: no such file or directory` (compose build failed)
 

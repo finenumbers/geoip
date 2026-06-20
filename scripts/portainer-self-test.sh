@@ -81,9 +81,19 @@ $api_pulled && ((passed++)) || true
 $web_pulled && ((passed++)) || true
 $image_runs && ((passed++)) || true
 
-log_event "SUMMARY" "portainer-self-test:done" "test results" \
-  "{\"checksPassed\":$passed,\"checksTotal\":6,\"allPassed\":$([ "$passed" -eq 6 ] && echo true || echo false)}"
+# Portainer mount test — compose only, no infra/ on disk
+mount_sim=/tmp/portainer-mount-check-$$
+mkdir "$mount_sim" && cp "$ROOT/docker-compose.portainer.yml" "$mount_sim/"
+bind_count=$(cd "$mount_sim" && docker compose -f docker-compose.portainer.yml config 2>/dev/null | grep -cE '\./infra|\./scripts' || true)
+config_ok=$(cd "$mount_sim" && docker compose -f docker-compose.portainer.yml config --quiet >/dev/null 2>&1 && echo true || echo false)
+log_event "H" "portainer-self-test:mounts" "no host bind mounts in portainer compose" \
+  "{\"bindMountCount\":$bind_count,\"configValid\":$config_ok}"
+rm -rf "$mount_sim"
+[[ "$bind_count" -eq 0 ]] && [[ "$config_ok" == true ]] && ((passed++)) || true
 
-echo "Portainer self-test: $passed/6 checks passed"
+log_event "SUMMARY" "portainer-self-test:done" "test results" \
+  "{\"checksPassed\":$passed,\"checksTotal\":7,\"allPassed\":$([ "$passed" -eq 7 ] && echo true || echo false)}"
+
+echo "Portainer self-test: $passed/7 checks passed"
 echo "Log: $LOG_PATH"
-[ "$passed" -eq 6 ]
+[ "$passed" -eq 7 ]
