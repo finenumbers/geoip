@@ -30,7 +30,7 @@ Production stack GeoIP Analytics на одном Docker-хосте. Исполь
 
 ### 2. Environment variables
 
-Скопируйте из [`stack.env.example`](stack.env.example):
+Скопируйте из [`stack.env.example`](stack.env.example) в **Stack → Environment variables** (файл `.env` на хосте не требуется):
 
 ```env
 POSTGRES_USER=geoip

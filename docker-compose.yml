@@ -39,7 +39,6 @@ services:
       context: .
       dockerfile: packages/api/Dockerfile
     container_name: geoip_api
-    env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
@@ -66,7 +65,6 @@ services:
       dockerfile: packages/api/Dockerfile
     container_name: geoip_import
     command: ["node", "dist/jobs/import-worker.js"]
-    env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
@@ -87,7 +85,6 @@ services:
       dockerfile: packages/api/Dockerfile
     container_name: geoip_export
     command: ["node", "dist/jobs/export-worker.js"]
-    env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
