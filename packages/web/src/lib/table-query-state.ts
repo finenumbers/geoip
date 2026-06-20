@@ -14,6 +14,13 @@ export const DEFAULT_BROWSE_SEARCH = {
   filters: '[]',
 } as const;
 
+/** TanStack Router may pass JSON search params as parsed objects — keep browse state as JSON strings. */
+export function coerceBrowseSearchJsonParam(value: unknown, fallback: string): string {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
+}
+
 export type BrowseSearchParams = {
   sort: string;
   filters: string;

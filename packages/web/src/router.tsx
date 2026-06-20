@@ -6,7 +6,7 @@ import { BrowsePage } from '@/pages/BrowsePage';
 import { AdminPage } from '@/pages/AdminPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
 import { AdminSetupPage } from '@/pages/AdminSetupPage';
-import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
+import { DEFAULT_BROWSE_SEARCH, coerceBrowseSearchJsonParam } from '@/lib/table-query-state';
 import { parseAdminSearch } from '@/lib/admin-sections';
 
 const rootRoute = createRootRoute({
@@ -26,8 +26,8 @@ const lookupRoute = createRoute({
 });
 
 const browseSearchSchema = (search: Record<string, unknown>) => ({
-  sort: String(search.sort ?? DEFAULT_BROWSE_SEARCH.sort),
-  filters: String(search.filters ?? DEFAULT_BROWSE_SEARCH.filters),
+  sort: coerceBrowseSearchJsonParam(search.sort, DEFAULT_BROWSE_SEARCH.sort),
+  filters: coerceBrowseSearchJsonParam(search.filters, DEFAULT_BROWSE_SEARCH.filters),
 });
 
 const browseCityRoute = createRoute({

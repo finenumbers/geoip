@@ -1,6 +1,23 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
+
+const apiBase = process.env.VITE_API_URL ?? 'http://127.0.0.1:3000';
+
+async function waitForApiReady(request: APIRequestContext): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`${apiBase}/api/v1/ready`);
+        return res.status();
+      },
+      { timeout: 120_000, intervals: [500, 1000, 2000] },
+    )
+    .toBe(200);
+}
 
 test.describe('Browse smoke (Phase D)', () => {
+  test.beforeAll(async ({ request }) => {
+    await waitForApiReady(request);
+  });
   test('loads city table and waits for API', async ({ page }) => {
     const tableResponse = page.waitForResponse(
       (resp) =>
