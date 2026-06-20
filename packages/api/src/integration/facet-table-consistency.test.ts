@@ -1,23 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
-import { migrate } from '../db/migrate.js';
-import { closeDb } from '../db/client.js';
+import { prepareIntegrationDb, runIntegration, teardownIntegrationDb } from './test-setup.js';
 
-const runIntegration = process.env.RUN_INTEGRATION === '1';
-
-describe.skipIf(!runIntegration)('facet vs table consistency', () => {
+describe.skipIf(!runIntegration)('facet vs table consistency @requiresDataset', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    await migrate();
+    await prepareIntegrationDb();
     app = await buildApp();
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    await closeDb();
+    await teardownIntegrationDb();
   });
 
   it('facet city_name counts sum does not exceed table total for RU context', async () => {

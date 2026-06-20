@@ -22,8 +22,13 @@ function recordTableQueryStats(
   });
 }
 
+const dataPlanePreHandlers = (app: FastifyInstance) =>
+  [app.verifyApiKeyIfEnabled, app.ensureMaterializedViewsReady] as const;
+
 export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/v1/table/city', async (request, reply) => {
+  const guards = { preHandler: [...dataPlanePreHandlers(app)] };
+
+  app.get('/api/v1/table/city', guards, async (request, reply) => {
     const parsed = parseTableQueryInput(request.query as Record<string, unknown>);
     if (!parsed.ok) {
       return reply.status(422).send({
@@ -39,7 +44,7 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
     return result;
   });
 
-  app.get('/api/v1/table/country', async (request, reply) => {
+  app.get('/api/v1/table/country', guards, async (request, reply) => {
     const parsed = parseTableQueryInput(request.query as Record<string, unknown>);
     if (!parsed.ok) {
       return reply.status(422).send({
@@ -55,13 +60,13 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
     return result;
   });
 
-  app.get('/api/v1/table/metadata/filters', async (request) => {
+  app.get('/api/v1/table/metadata/filters', guards, async (request) => {
     const tableType = (request.query as { tableType?: string }).tableType ?? 'city';
     const type = tableType === 'country' ? 'country' : 'city';
     return getFilterMetadata(type);
   });
 
-  app.get('/api/v1/table/metadata/facet', async (request, reply) => {
+  app.get('/api/v1/table/metadata/facet', guards, async (request, reply) => {
     const q = request.query as {
       tableType?: string;
       field?: string;
@@ -114,6 +119,7 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { tableType: string } }>(
     '/api/v1/table/:tableType/seek',
+    guards,
     async (request, reply) => {
       const tableType = request.params.tableType === 'country' ? 'country' : 'city';
       const result = await seekTablePage(tableType, request.body as Record<string, unknown>);

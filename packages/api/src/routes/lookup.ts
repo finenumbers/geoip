@@ -4,7 +4,12 @@ import { lookupIp } from '../sql/lookup.js';
 import { recordLookupLatency } from '../routes/metrics.js';
 
 export async function registerLookupRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v1/lookup', async (request, reply) => {
+  app.post(
+    '/api/v1/lookup',
+    {
+      preHandler: [app.verifyApiKeyIfEnabled, app.ensureMaterializedViewsReady],
+    },
+    async (request, reply) => {
     const parsed = lookupRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
@@ -18,5 +23,6 @@ export async function registerLookupRoutes(app: FastifyInstance): Promise<void> 
     }
 
     return result;
-  });
+    },
+  );
 }

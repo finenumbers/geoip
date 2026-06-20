@@ -22,6 +22,7 @@ import {
   getCachedFilterMetadata,
   setCachedFilterMetadata,
 } from './filter-metadata-cache.js';
+import { validateTableQueryLimits } from './query-limits.js';
 import type { SortClause } from '@geoip/shared';
 
 const SORT_FIELD_ROW_KEYS: Record<string, string> = {
@@ -133,6 +134,19 @@ export async function queryTable(
 
   const { page, pageSize, sort, afterId, afterNetwork, afterSortValue } = parsed.data;
   const filters = normalizeFiltersForQuery(parsed.data.filters);
+  const keysetEnabled = supportsKeysetPagination(sort);
+  const usesKeyset =
+    keysetEnabled && afterId != null && afterNetwork != null;
+  const limitCheck = validateTableQueryLimits(page, pageSize, usesKeyset);
+  if (!limitCheck.ok) {
+    return {
+      error: {
+        formErrors: [],
+        fieldErrors: { [limitCheck.path]: [limitCheck.message] },
+      },
+    };
+  }
+
   const start = Date.now();
   const usePrecomputedAsnFilter = await isAsnMappingReady();
   const { sql, countSql, params, countParams, useCachedCount, skipExactCount } = buildTableQuery(
@@ -185,7 +199,6 @@ export async function queryTable(
   }
 
   const lastRow = rows[rows.length - 1];
-  const keysetEnabled = supportsKeysetPagination(sort);
   const sortHint = resolveTableSortHint(tableType, sort, filters);
   const sortOverrideHint = resolveSortOverrideHint(tableType, sort, filters);
   const paginationWarning = usesOffsetOnlySort(sort) ? ('offset_only' as const) : null;

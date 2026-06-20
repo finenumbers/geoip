@@ -2,15 +2,12 @@ import type {
   DatasetState,
   FacetValuesResponse,
   FilterClause,
-  HealthResponse,
   ImportRun,
   ImportRunListResponse,
   LookupResponse,
   MetricsResponse,
   ReadyResponse,
   TableResponse,
-  TableSeekRequest,
-  TableSeekResponse,
 } from '@geoip/shared';
 
 const API_BASE = '/api/v1';
@@ -53,7 +50,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<HealthResponse>('/health'),
   ready: () => request<ReadyResponse>('/ready'),
   dataset: () => request<DatasetState>('/dataset/active'),
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
@@ -67,10 +63,8 @@ export const api = {
       body: JSON.stringify({ ip, include: options?.include }),
       signal: options?.signal,
     }),
-  table: (tableType: 'city' | 'country', params: URLSearchParams) =>
-    request<TableResponse>(`/table/${tableType}?${params.toString()}`),
-  filterMetadata: (tableType: 'city' | 'country') =>
-    request<unknown>(`/table/metadata/filters?tableType=${tableType}`),
+  table: (tableType: 'city' | 'country', params: URLSearchParams, signal?: AbortSignal) =>
+    request<TableResponse>(`/table/${tableType}?${params.toString()}`, { signal }),
   facetValues: (
     tableType: 'city' | 'country',
     field: string,
@@ -90,10 +84,5 @@ export const api = {
     }
     return request<FacetValuesResponse>(`/table/metadata/facet?${params.toString()}`, { signal });
   },
-  tableSeek: (tableType: 'city' | 'country', body: TableSeekRequest) =>
-    request<TableSeekResponse>(`/table/${tableType}/seek`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
   metrics: () => request<MetricsResponse>('/metrics'),
 };

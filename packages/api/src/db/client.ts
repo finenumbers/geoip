@@ -7,16 +7,34 @@ let pool: pg.Pool | null = null;
 let directPool: pg.Pool | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
+function usesPgbouncer(connectionString: string): boolean {
+  try {
+    return new URL(connectionString).port === '6432';
+  } catch {
+    return connectionString.includes(':6432');
+  }
+}
+
+function appendPgOptions(connectionString: string, option: string): string {
+  const url = new URL(connectionString);
+  const existing = url.searchParams.get('options');
+  url.searchParams.set('options', existing ? `${existing} ${option}` : option);
+  return url.toString();
+}
+
 export function getPool(): pg.Pool {
   if (!pool) {
     const env = loadEnv();
+    const viaPgbouncer = usesPgbouncer(env.DATABASE_URL);
     pool = new pg.Pool({
-      connectionString: env.DATABASE_URL,
+      connectionString: viaPgbouncer
+        ? env.DATABASE_URL
+        : appendPgOptions(
+            env.DATABASE_URL,
+            `-c statement_timeout=${env.STATEMENT_TIMEOUT_MS}`,
+          ),
       max: env.DATABASE_POOL_MAX,
       idleTimeoutMillis: 30_000,
-    });
-    pool.on('connect', (client) => {
-      void client.query(`SET statement_timeout = ${env.STATEMENT_TIMEOUT_MS}`);
     });
   }
   return pool;
@@ -27,12 +45,9 @@ export function getDirectPool(): pg.Pool {
   if (!directPool) {
     const env = loadEnv();
     directPool = new pg.Pool({
-      connectionString: env.DATABASE_DIRECT_URL ?? env.DATABASE_URL,
+      connectionString: appendPgOptions(env.DATABASE_DIRECT_URL ?? env.DATABASE_URL, '-c statement_timeout=0'),
       max: 2,
       idleTimeoutMillis: 30_000,
-    });
-    directPool.on('connect', (client) => {
-      void client.query('SET statement_timeout = 0');
     });
   }
   return directPool;

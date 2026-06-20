@@ -7,6 +7,7 @@ import {
   estimateExportRows,
 } from '../services/export-service.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
+import { validateExportRowLimit } from '../services/query-limits.js';
 
 export async function registerExportRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -35,6 +36,12 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       }
 
       const totalRows = await estimateExportRows(tableType, filters, sort);
+      if (totalRows != null) {
+        const exportLimit = validateExportRowLimit(totalRows);
+        if (!exportLimit.ok) {
+          return reply.status(422).send({ error: 'Validation error', message: exportLimit.message });
+        }
+      }
 
       const job = await createExportJob({ tableType, filters, sort });
       if (!job) {

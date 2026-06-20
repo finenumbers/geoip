@@ -184,6 +184,34 @@ function resolveCountryIsoContext(contextFilters: FilterClause[]): string | null
   return null;
 }
 
+function mergeGlobalFacetValues(
+  tableType: 'city' | 'country',
+  field: FacetField,
+  cache: FacetCountCache,
+  search: string,
+  limit: number,
+): Array<{ value: string; count: number }> {
+  const merged = new Map<string, number>();
+  for (const countryBuckets of Object.values(cache[tableType])) {
+    const fieldValues = countryBuckets[field];
+    if (!fieldValues) continue;
+    for (const [value, count] of Object.entries(fieldValues)) {
+      merged.set(value, (merged.get(value) ?? 0) + count);
+    }
+  }
+
+  if (merged.size === 0) return [];
+
+  const needle = search.trim().toLowerCase();
+  return sortFacetItemsBySearch(
+    [...merged.entries()]
+      .filter(([value]) => (needle ? value.toLowerCase().includes(needle) : true))
+      .map(([value, count]) => ({ value, count })),
+    search,
+    limit,
+  );
+}
+
 export function resolveCachedFacetValues(
   tableType: 'city' | 'country',
   field: string,
@@ -194,12 +222,17 @@ export function resolveCachedFacetValues(
 ): Array<{ value: string; count: number }> | null {
   if (!cache || isFacetCountCacheEmpty(cache)) return null;
 
-  const countryIso = resolveCountryIsoContext(contextFilters);
-  if (!countryIso) return null;
-
   const facetField = field as FacetField;
   const allowedFields = tableType === 'city' ? CITY_FACET_FIELDS : COUNTRY_FACET_FIELDS;
   if (!allowedFields.includes(facetField)) return null;
+
+  if (contextFilters.length === 0) {
+    const items = mergeGlobalFacetValues(tableType, facetField, cache, search, limit);
+    return items.length > 0 ? items : null;
+  }
+
+  const countryIso = resolveCountryIsoContext(contextFilters);
+  if (!countryIso) return null;
 
   const values = cache[tableType][countryIso]?.[facetField];
   if (!values) return null;

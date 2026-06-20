@@ -42,6 +42,9 @@ const envSchema = z.object({
   EXPORT_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   EXPORT_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
   EXPORT_RETENTION_LIMIT: z.coerce.number().int().min(1).default(100),
+  EXPORT_MAX_ROWS: z.coerce.number().int().positive().default(5_000_000),
+  TABLE_MAX_PAGE_SIZE: z.coerce.number().int().min(1).max(500).default(200),
+  TABLE_MAX_OFFSET_PAGE: z.coerce.number().int().min(1).default(500),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(20),
   STATEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   ASN_MAP_BATCH_SIZE: z.coerce.number().int().positive().default(50_000),
@@ -49,6 +52,10 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3000),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  ACCESS_LOG_ENABLED: z
+    .enum(['true', 'false', '1', '0'])
+    .default('true')
+    .transform((v) => v === 'true' || v === '1'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 }).transform((data) => ({
   ...data,

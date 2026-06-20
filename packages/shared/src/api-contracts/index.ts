@@ -172,42 +172,6 @@ export const paginationSchema = z.object({
   totalPages: z.number(),
 });
 
-export const cityTableRowSchema = z.object({
-  id: z.number(),
-  network: z.string(),
-  ipFamily: z.number(),
-  prefixLen: z.number(),
-  geonameId: z.number().nullable(),
-  continentName: z.string().nullable(),
-  countryIsoCode: z.string().nullable(),
-  countryName: z.string().nullable(),
-  subdivision1Name: z.string().nullable(),
-  subdivision2Name: z.string().nullable(),
-  cityName: z.string().nullable(),
-  timezone: z.string().nullable(),
-  latitude: z.number().nullable(),
-  longitude: z.number().nullable(),
-  accuracyRadius: z.number().nullable(),
-  postalCode: z.string().nullable(),
-  asn: z.number().nullable(),
-  asnOrg: z.string().nullable(),
-});
-
-export const countryTableRowSchema = z.object({
-  id: z.number(),
-  network: z.string(),
-  ipFamily: z.number(),
-  prefixLen: z.number(),
-  geonameId: z.number().nullable(),
-  continentName: z.string().nullable(),
-  countryIsoCode: z.string().nullable(),
-  countryName: z.string().nullable(),
-  subdivision1Name: z.string().nullable(),
-  subdivision2Name: z.string().nullable(),
-  asn: z.number().nullable(),
-  asnOrg: z.string().nullable(),
-});
-
 export const tableBrowseRowSchema = z.object({
   id: z.number(),
   network: z.string(),
@@ -242,15 +206,6 @@ export const tableResponseSchema = z.object({
       .nullable()
       .optional(),
   }),
-});
-
-export const filterMetadataSchema = z.object({
-  fields: z.record(
-    z.object({
-      type: z.enum(['string', 'number', 'boolean']),
-      distinctValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
-    }),
-  ),
 });
 
 export const exportJobSchema = z.object({
@@ -341,8 +296,6 @@ export type LookupResponse = z.infer<typeof lookupResponseSchema>;
 export type FilterClause = z.infer<typeof filterClauseSchema>;
 export type SortClause = z.infer<typeof sortClauseSchema>;
 export type TableQuery = z.infer<typeof tableQuerySchema>;
-export type CityTableRow = z.infer<typeof cityTableRowSchema>;
-export type CountryTableRow = z.infer<typeof countryTableRowSchema>;
 export type ExportJob = z.infer<typeof exportJobSchema>;
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
 export type TableSeekRequest = z.infer<typeof tableSeekRequestSchema>;

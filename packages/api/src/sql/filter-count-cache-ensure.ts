@@ -60,8 +60,3 @@ export function ensureDatasetCachesInBackground(): void {
     logger.error({ err }, 'Dataset cache build failed');
   });
 }
-
-/** @deprecated use ensureDatasetCachesInBackground */
-export function ensureFilterCountCacheInBackground(): void {
-  ensureDatasetCachesInBackground();
-}

@@ -1,29 +1,26 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
-import { migrate } from '../db/migrate.js';
-import { closeDb } from '../db/client.js';
-
-const runIntegration = process.env.RUN_INTEGRATION === '1';
+import { prepareIntegrationDb, runIntegration, teardownIntegrationDb } from './test-setup.js';
 
 describe.skipIf(!runIntegration)('keyset pagination (Phase C)', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    await migrate();
+    await prepareIntegrationDb();
     app = await buildApp();
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    await closeDb();
+    await teardownIntegrationDb();
   });
 
   it('page 2 with cursor uses keyset mode', async () => {
     const p1 = await app.inject({
       method: 'GET',
-      url: '/api/v1/table/city?page=1&pageSize=50&sort=[]&filters=[]',
+      url: '/api/v1/table/city?page=1&pageSize=1&sort=[]&filters=[]',
     });
     expect(p1.statusCode).toBe(200);
     const body1 = p1.json() as {
@@ -35,7 +32,7 @@ describe.skipIf(!runIntegration)('keyset pagination (Phase C)', () => {
 
     const p2 = await app.inject({
       method: 'GET',
-      url: `/api/v1/table/city?page=2&pageSize=50&sort=[]&filters=[]&afterId=${cursor.afterId}&afterNetwork=${encodeURIComponent(cursor.afterNetwork ?? '')}`,
+      url: `/api/v1/table/city?page=2&pageSize=1&sort=[]&filters=[]&afterId=${cursor.afterId}&afterNetwork=${encodeURIComponent(cursor.afterNetwork ?? '')}`,
     });
     expect(p2.statusCode).toBe(200);
     const body2 = p2.json() as { meta: { paginationMode?: string } };

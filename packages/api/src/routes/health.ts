@@ -18,9 +18,14 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
     };
   });
 
-  app.get('/api/v1/ready', async () => {
+  app.get('/api/v1/ready', async (_request, reply) => {
     const cached = getCachedReadyResponse();
-    if (cached) return cached;
+    if (cached) {
+      if (cached.status !== 'ready') {
+        return reply.status(503).send(cached);
+      }
+      return cached;
+    }
 
     let database = false;
     let dataset = false;
@@ -71,6 +76,9 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       timestamp: new Date().toISOString(),
     };
     setCachedReadyResponse(payload);
+    if (status !== 'ready') {
+      return reply.status(503).send(payload);
+    }
     return payload;
   });
 }

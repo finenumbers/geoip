@@ -1,24 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
-import { migrate } from '../db/migrate.js';
-import { closeDb } from '../db/client.js';
+import { prepareIntegrationDb, runIntegration, teardownIntegrationDb } from './test-setup.js';
 
-const runIntegration = process.env.RUN_INTEGRATION === '1';
 const API_KEY = process.env.IMPORT_API_KEY ?? 'ci-test-api-key-12345';
 
 describe.skipIf(!runIntegration)('export and facet validation integration', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    await migrate();
+    await prepareIntegrationDb();
     app = await buildApp();
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    await closeDb();
+    await teardownIntegrationDb();
   });
 
   it('POST /api/v1/exports/table rejects unsupported asn operator with 422', async () => {
@@ -45,7 +43,7 @@ describe.skipIf(!runIntegration)('export and facet validation integration', () =
     expect(body.details?.fieldErrors?.field?.[0]).toMatch(/Unknown facet field/);
   });
 
-  it('GET /api/v1/table/city normalizes lowercase country_iso_code filter', async () => {
+  it('@requiresDataset GET /api/v1/table/city normalizes lowercase country_iso_code filter', async () => {
     const filters = encodeURIComponent(
       JSON.stringify([{ field: 'country_iso_code', op: 'eq', value: 'ru' }]),
     );

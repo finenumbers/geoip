@@ -2,8 +2,10 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import { loadEnv } from './config/env.js';
+import { createFastifyLoggerConfig } from './config/logger.js';
 import { registerRequestId } from './plugins/request-id.js';
 import { registerApiKeyAuth } from './plugins/api-key-auth.js';
+import { registerMvReadiness } from './plugins/mv-readiness.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerDatasetRoutes } from './routes/dataset.js';
 import { registerLookupRoutes } from './routes/lookup.js';
@@ -15,7 +17,7 @@ export async function buildApp() {
   const env = loadEnv();
 
   const app = Fastify({
-    logger: false,
+    logger: createFastifyLoggerConfig(),
     requestIdHeader: 'x-request-id',
   });
 
@@ -31,6 +33,7 @@ export async function buildApp() {
 
   await registerRequestId(app);
   await registerApiKeyAuth(app);
+  await registerMvReadiness(app);
   await registerHealthRoutes(app);
   await registerDatasetRoutes(app);
   await registerLookupRoutes(app);

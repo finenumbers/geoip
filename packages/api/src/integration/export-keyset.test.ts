@@ -2,28 +2,30 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { readFileSync, rmSync } from 'node:fs';
 import { buildApp } from '../app.js';
-import { migrate } from '../db/migrate.js';
-import { closeDb } from '../db/client.js';
 import { streamTableExportToFile } from '../services/export-service.js';
+import { prepareIntegrationDb, requiresDataset, runIntegration, teardownIntegrationDb } from './test-setup.js';
 
-const runIntegration = process.env.RUN_INTEGRATION === '1';
 const EXPORT_BATCH_SIZE = 10_000;
 
 describe.skipIf(!runIntegration)('export keyset streaming (Phase E1)', () => {
   let app: FastifyInstance;
+  let datasetReady = false;
 
   beforeAll(async () => {
-    await migrate();
+    await prepareIntegrationDb();
+    datasetReady = await requiresDataset();
     app = await buildApp();
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    await closeDb();
+    await teardownIntegrationDb();
   });
 
-  it('exports multiple batches with unique row ids (no first-batch repeat)', async () => {
+  it('@requiresDataset exports multiple batches with unique row ids (no first-batch repeat)', async () => {
+    if (!datasetReady) return;
+
     const filePath = '/tmp/geoip-export-keyset-e1.csv';
     try {
       const exported = await streamTableExportToFile('country', [], [], filePath);

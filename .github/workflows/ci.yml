@@ -42,6 +42,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Migrate and seed fixture dataset
+        run: |
+          pnpm db:migrate
+          pnpm --filter @geoip/api seed:fixture
+
       - name: Lint
         run: pnpm lint
 

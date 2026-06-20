@@ -61,14 +61,6 @@ export function getTableProfile(tableType: TableType): TableProfile {
   return TABLE_PROFILES[tableType];
 }
 
-export function isAllowedFilterField(tableType: TableType, field: string): boolean {
-  return getTableProfile(tableType).filterFields.includes(field);
-}
-
-export function isAllowedSortField(tableType: TableType, field: string): boolean {
-  return getTableProfile(tableType).sortFields.includes(field);
-}
-
 export function isUiSortField(tableType: TableType, field: string): boolean {
   return getTableProfile(tableType).uiSortFields.includes(field);
 }

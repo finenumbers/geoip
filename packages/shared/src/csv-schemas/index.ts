@@ -51,9 +51,6 @@ export const countryLocationCsvHeaders = [
   'is_in_european_union',
 ] as const;
 
-/** @deprecated use cityLocationCsvHeaders or countryLocationCsvHeaders */
-export const locationCsvHeaders = cityLocationCsvHeaders;
-
 export const asnBlockCsvHeaders = [
   'network',
   'autonomous_system_number',

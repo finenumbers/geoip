@@ -183,6 +183,7 @@ async function fetchTableChunk(
   pageParam: TablePageParam | undefined,
   sortJson: string,
   filtersJson: string,
+  signal?: AbortSignal,
 ): Promise<TableResponse> {
   const params = new URLSearchParams();
   params.set('pageSize', String(INFINITE_PAGE_SIZE));
@@ -192,7 +193,7 @@ async function fetchTableChunk(
   if (pageParam?.afterId != null) params.set('afterId', String(pageParam.afterId));
   if (pageParam?.afterNetwork != null) params.set('afterNetwork', pageParam.afterNetwork);
   if (pageParam?.afterSortValue != null) params.set('afterSortValue', pageParam.afterSortValue);
-  return api.table(tableType, params);
+  return api.table(tableType, params, signal);
 }
 
 interface BrowsePageProps {
@@ -298,7 +299,8 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     hasNextPage,
   } = useInfiniteQuery({
     queryKey: ['table', tableType, 'infinite', sortJson, filtersJson],
-    queryFn: ({ pageParam }) => fetchTableChunk(tableType, pageParam, sortJson, filtersJson),
+    queryFn: ({ pageParam, signal }) =>
+      fetchTableChunk(tableType, pageParam, sortJson, filtersJson, signal),
     initialPageParam: undefined as TablePageParam | undefined,
     enabled: browseSessionReady,
     getNextPageParam: (lastPage, allPages) => {

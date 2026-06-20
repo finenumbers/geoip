@@ -1,21 +1,19 @@
 export const IMPORT_LOCK_KEY = 0x47454f4950; // 'GEOIP'
 
-export const CSV_FILES = {
-  city: {
-    blocksIpv4: 'RU-GeoIP-City-Blocks-IPv4.csv',
-    blocksIpv6: 'RU-GeoIP-City-Blocks-IPv6.csv',
-    locationsRu: 'RU-GeoIP-City-Locations-ru.csv',
-  },
-  country: {
-    blocksIpv4: 'RU-GeoIP-Country-Blocks-IPv4.csv',
-    blocksIpv6: 'RU-GeoIP-Country-Blocks-IPv6.csv',
-    locationsRu: 'RU-GeoIP-Country-Locations-ru.csv',
-  },
-  asn: {
-    blocksIpv4: 'RU-GeoIP-ASN-Blocks-IPv4.csv',
-    blocksIpv6: 'RU-GeoIP-ASN-Blocks-IPv6.csv',
-  },
+/** Base CSV filename (no extension) → staging table for COPY. IPv4/IPv6 share one target. */
+export const CSV_IMPORT_FILE_MAP = {
+  'RU-GeoIP-City-Blocks-IPv4': 'stg_geo_city_blocks',
+  'RU-GeoIP-City-Blocks-IPv6': 'stg_geo_city_blocks',
+  'RU-GeoIP-Country-Blocks-IPv4': 'stg_geo_country_blocks',
+  'RU-GeoIP-Country-Blocks-IPv6': 'stg_geo_country_blocks',
+  'RU-GeoIP-ASN-Blocks-IPv4': 'stg_geo_asn_blocks',
+  'RU-GeoIP-ASN-Blocks-IPv6': 'stg_geo_asn_blocks',
+  'RU-GeoIP-City-Locations-ru': 'stg_geo_city_locations',
+  'RU-GeoIP-Country-Locations-ru': 'stg_geo_country_locations',
 } as const;
+
+export type CsvImportStagingTable =
+  (typeof CSV_IMPORT_FILE_MAP)[keyof typeof CSV_IMPORT_FILE_MAP];
 
 export const ZIP_PATTERNS = {
   city: /^RU-GeoIP-City-CSV_(\d{8})\.zip$/,

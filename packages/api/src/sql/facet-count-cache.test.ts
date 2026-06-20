@@ -97,6 +97,14 @@ describe('resolveCachedFacetValues', () => {
     expect(items[0]?.value).toBe('Seven Network Inc.');
   });
 
+  it('returns merged global facet values without context filters', () => {
+    const items = resolveCachedFacetValues('city', 'city_name', [], '', 10, sampleCache);
+    expect(items).toEqual([
+      { value: 'Москва', count: 1000 },
+      { value: 'Санкт-Петербург', count: 500 },
+    ]);
+  });
+
   it('returns null for unsupported context', () => {
     expect(
       resolveCachedFacetValues(

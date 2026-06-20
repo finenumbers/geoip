@@ -6,7 +6,6 @@ import { getDb } from '../db/client.js';
 import { importRunSteps } from '../db/schema.js';
 import { getTopPgStatStatements } from '../sql/pg-stat-statements.js';
 import type { MetricsResponse } from '@geoip/shared';
-import { formatPrometheusMetrics } from '../services/prometheus-metrics.js';
 import {
   getTableQueryByModeMetrics,
   recordTableQueryMetric as recordTableQueryMetricBucket,
@@ -26,19 +25,14 @@ export function recordLookupLatency(ms: number): void {
   if (metrics.lookupLatencyMs.length > 1000) metrics.lookupLatencyMs.shift();
 }
 
-/** @deprecated Use recordTableQueryMetric for mode/filter breakdown. */
-export function recordTableQueryLatency(ms: number): void {
-  metrics.tableQueryLatencyMs.push(ms);
-  if (metrics.tableQueryLatencyMs.length > 1000) metrics.tableQueryLatencyMs.shift();
-}
-
 export function recordTableQueryMetric(input: {
   queryMs: number;
   mode: TableQueryMode;
   hasFilters: boolean;
 }): void {
   recordTableQueryMetricBucket(input);
-  recordTableQueryLatency(input.queryMs);
+  metrics.tableQueryLatencyMs.push(input.queryMs);
+  if (metrics.tableQueryLatencyMs.length > 1000) metrics.tableQueryLatencyMs.shift();
 }
 
 function percentile(arr: number[], p: number): number {
@@ -105,11 +99,5 @@ async function buildMetricsResponse(): Promise<MetricsResponse> {
 export async function registerMetricsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/metrics', { preHandler: [app.verifyApiKeyIfEnabled] }, async () => {
     return buildMetricsResponse();
-  });
-
-  app.get('/api/v1/metrics/prometheus', { preHandler: [app.verifyApiKeyIfEnabled] }, async (_request, reply) => {
-    const payload = await buildMetricsResponse();
-    reply.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
-    return formatPrometheusMetrics(payload);
   });
 }

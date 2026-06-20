@@ -5,20 +5,17 @@ import pg from 'pg';
 import copyFrom from 'pg-copy-streams';
 import type { Logger } from 'pino';
 import {
+  CSV_IMPORT_FILE_MAP,
   validateCsvHeaders,
   cityBlockCsvHeaders,
   countryBlockCsvHeaders,
   cityLocationCsvHeaders,
   countryLocationCsvHeaders,
   asnBlockCsvHeaders,
+  type CsvImportStagingTable,
 } from '@geoip/shared';
 
-type CopyTarget =
-  | 'stg_geo_city_blocks'
-  | 'stg_geo_country_blocks'
-  | 'stg_geo_asn_blocks'
-  | 'stg_geo_city_locations'
-  | 'stg_geo_country_locations';
+type CopyTarget = CsvImportStagingTable;
 
 interface CopyResult {
   rowCount: number;
@@ -225,18 +222,7 @@ export function matchCsvFile(
   filename: string,
 ): { target: CopyTarget; kind: string } | null {
   const base = filename.replace(/\.csv$/i, '');
-  const map: Record<string, CopyTarget> = {
-    'RU-GeoIP-City-Blocks-IPv4': 'stg_geo_city_blocks',
-    'RU-GeoIP-City-Blocks-IPv6': 'stg_geo_city_blocks',
-    'RU-GeoIP-Country-Blocks-IPv4': 'stg_geo_country_blocks',
-    'RU-GeoIP-Country-Blocks-IPv6': 'stg_geo_country_blocks',
-    'RU-GeoIP-ASN-Blocks-IPv4': 'stg_geo_asn_blocks',
-    'RU-GeoIP-ASN-Blocks-IPv6': 'stg_geo_asn_blocks',
-    'RU-GeoIP-City-Locations-ru': 'stg_geo_city_locations',
-    'RU-GeoIP-Country-Locations-ru': 'stg_geo_country_locations',
-  };
-
-  const target = map[base];
+  const target = CSV_IMPORT_FILE_MAP[base as keyof typeof CSV_IMPORT_FILE_MAP];
   if (!target) return null;
   return { target, kind: base };
 }

@@ -1,23 +1,20 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
-import { migrate } from '../db/migrate.js';
-import { closeDb } from '../db/client.js';
-
-const runIntegration = process.env.RUN_INTEGRATION === '1';
+import { prepareIntegrationDb, runIntegration, teardownIntegrationDb } from './test-setup.js';
 
 describe.skipIf(!runIntegration)('API integration smoke', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    await migrate();
+    await prepareIntegrationDb();
     app = await buildApp();
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    await closeDb();
+    await teardownIntegrationDb();
   });
 
   it('GET /api/v1/health returns ok', async () => {
@@ -28,10 +25,14 @@ describe.skipIf(!runIntegration)('API integration smoke', () => {
 
   it('GET /api/v1/ready returns structured checks', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/ready' });
-    expect(res.statusCode).toBe(200);
     const body = res.json() as { status: string; checks: Record<string, boolean> };
     expect(['ready', 'degraded', 'not_ready']).toContain(body.status);
     expect(body.checks).toHaveProperty('database');
+    if (body.status === 'ready') {
+      expect(res.statusCode).toBe(200);
+    } else {
+      expect(res.statusCode).toBe(503);
+    }
   });
 
   it('GET /api/v1/table/city returns paginated payload', async () => {

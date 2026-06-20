@@ -11,6 +11,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:backfill-asn": "tsx src/scripts/backfill-asn.ts",
     "import:trigger": "tsx src/scripts/trigger-import.ts",
+    "seed:fixture": "tsx src/scripts/seed-fixture-dataset.ts",
+    "probe:lk": "tsx src/scripts/probe-lk.ts",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },
