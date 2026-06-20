@@ -3,10 +3,17 @@ import { Link, useSearch, useNavigate } from '@tanstack/react-router';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef, type SortingState } from '@tanstack/react-table';
 import type { FilterClause, TableBrowseRow, TableResponse } from '@geoip/shared';
-import { isUiSortField, validateTextFilterValue, supportsKeysetPagination, usesOffsetOnlySort } from '@geoip/shared';
+import { isUiSortField, validateTextFilterValue, supportsKeysetPagination, usesOffsetOnlySort, normalizeCountryIsoCode } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { ui } from '@/lib/ui-strings';
-import { useNormalizeBrowseSearch, parseSortJson, DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
+import {
+  useNormalizeBrowseSearch,
+  parseSortJson,
+  parseFiltersJson,
+  validateBrowseQuery,
+  mapBrowseIssuesToFilterFields,
+  DEFAULT_BROWSE_SEARCH,
+} from '@/lib/table-query-state';
 import { DataTable } from '@/components/DataTable';
 import { ColumnFacetFilter } from '@/components/ColumnFacetFilter';
 import { ColumnTextFilter } from '@/components/ColumnTextFilter';
@@ -48,13 +55,6 @@ const API_TO_COLUMN: Record<string, string> = Object.fromEntries(
   Object.entries(COLUMN_API_FIELDS).map(([columnId, apiField]) => [apiField, columnId]),
 );
 
-function parseFilters(filtersJson: string): TableFilter[] {
-  try {
-    return JSON.parse(filtersJson) as TableFilter[];
-  } catch {
-    return [];
-  }
-}
 
 function getMultiFilterValues(filters: TableFilter[], field: string): string[] {
   const multi = filters.find((f) => f.field === field && f.op === 'in');
@@ -111,7 +111,60 @@ function setTextFilter(filters: TableFilter[], field: string, value: string): Ta
     return [...rest, { field, op: 'startsWith', value: trimmed }];
   }
 
+  if (field === 'country_iso_code') {
+    return [...rest, { field, op: 'eq', value: normalizeCountryIsoCode(trimmed) }];
+  }
+
   return [...rest, { field, op: 'eq', value: trimmed }];
+}
+
+function expandFilterChips(filters: TableFilter[]) {
+  const chips: Array<{
+    id: string;
+    field: string;
+    label: string;
+    displayValue: string;
+    removeValue?: string;
+  }> = [];
+
+  for (const filter of filters) {
+    const label = ui.filters[filter.field as keyof typeof ui.filters] ?? filter.field;
+    if (filter.op === 'in' && Array.isArray(filter.value)) {
+      for (const value of filter.value) {
+        const text = String(value);
+        chips.push({
+          id: `${filter.field}:${text}`,
+          field: filter.field,
+          label,
+          displayValue: text,
+          removeValue: text,
+        });
+      }
+      continue;
+    }
+    chips.push({
+      id: filter.field,
+      field: filter.field,
+      label,
+      displayValue: formatFilterDisplayValue(filter),
+    });
+  }
+
+  return chips;
+}
+
+function removeMultiFilterValue(filters: TableFilter[], field: string, value: string): TableFilter[] {
+  return filters.flatMap((filter) => {
+    if (filter.field !== field) return [filter];
+    if (filter.op === 'in' && Array.isArray(filter.value)) {
+      const next = filter.value.filter((entry) => String(entry) !== value);
+      if (next.length === 0) return [];
+      if (next.length === 1) return [{ field, op: 'eq' as const, value: next[0] }];
+      return [{ field, op: 'in' as const, value: next }];
+    }
+    if (filter.op === 'eq' && String(filter.value) === value) return [];
+    return [filter];
+  });
 }
 
 function formatFilterDisplayValue(filter: TableFilter): string {
@@ -154,17 +207,20 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   /** Bumps on full reset so header filters drop local draft/validation state. */
   const [browseUiKey, setBrowseUiKey] = useState(0);
-  /** Gates table fetch until tab-switch reset has applied default URL. */
-  const [browseSessionReady, setBrowseSessionReady] = useState(false);
-  const awaitingTabResetRef = useRef(true);
+  /** Gates table fetch until city/country tab switch reset has applied default URL. */
+  const [browseSessionReady, setBrowseSessionReady] = useState(true);
+  const prevTableTypeRef = useRef(tableType);
+  const pendingTabResetRef = useRef(false);
   const datasetFingerprintRef = useRef<string | null | undefined>(undefined);
 
   const sortJson = search.sort ?? DEFAULT_BROWSE_SEARCH.sort;
   const filtersJson = search.filters ?? DEFAULT_BROWSE_SEARCH.filters;
 
-  /** Fresh default view on tab switch and full page reload (always default). */
+  /** Reset browse state only when switching city ↔ country tabs. */
   useEffect(() => {
-    awaitingTabResetRef.current = true;
+    if (prevTableTypeRef.current === tableType) return;
+    prevTableTypeRef.current = tableType;
+    pendingTabResetRef.current = true;
     setBrowseSessionReady(false);
     setFieldErrors({});
     setBrowseUiKey((k) => k + 1);
@@ -177,14 +233,14 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   }, [tableType, browsePath, navigate, queryClient]);
 
   useEffect(() => {
-    if (awaitingTabResetRef.current) {
-      const isDefault =
-        sortJson === DEFAULT_BROWSE_SEARCH.sort && filtersJson === DEFAULT_BROWSE_SEARCH.filters;
-      if (isDefault) {
-        awaitingTabResetRef.current = false;
-        setBrowseSessionReady(true);
-      }
-    } else {
+    if (!pendingTabResetRef.current) {
+      setBrowseSessionReady(true);
+      return;
+    }
+    const isDefault =
+      sortJson === DEFAULT_BROWSE_SEARCH.sort && filtersJson === DEFAULT_BROWSE_SEARCH.filters;
+    if (isDefault) {
+      pendingTabResetRef.current = false;
       setBrowseSessionReady(true);
     }
   }, [sortJson, filtersJson]);
@@ -212,20 +268,12 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     void navigate(opts);
   });
 
-  const activeFilters = useMemo(() => parseFilters(filtersJson), [filtersJson]);
+  const activeFilters = useMemo(() => parseFiltersJson(filtersJson), [filtersJson]);
   const activeSort = useMemo(() => parseSortJson(sortJson), [sortJson]);
   const keysetCapableSort = useMemo(() => supportsKeysetPagination(activeSort), [activeSort]);
   const offsetOnlySort = useMemo(() => usesOffsetOnlySort(activeSort), [activeSort]);
 
-  const activeFilterChips = useMemo(
-    () =>
-      activeFilters.map((filter) => ({
-        field: filter.field,
-        label: ui.filters[filter.field as keyof typeof ui.filters] ?? filter.field,
-        displayValue: formatFilterDisplayValue(filter),
-      })),
-    [activeFilters],
-  );
+  const activeFilterChips = useMemo(() => expandFilterChips(activeFilters), [activeFilters]);
 
   const sorting: SortingState = useMemo(() => {
     try {
@@ -294,25 +342,31 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
       : 'exact';
   const lastPageMeta = data?.pages[data.pages.length - 1]?.meta;
 
-  const updateSearch = useCallback(
-    (updates: Partial<BrowseSearch>) => {
+  const commitBrowseSearch = useCallback(
+    (nextSortJson: string, nextFiltersJson: string) => {
+      const validated = validateBrowseQuery(tableType, nextSortJson, nextFiltersJson);
+      if (!validated.ok) {
+        setFieldErrors(mapBrowseIssuesToFilterFields(nextFiltersJson, validated.issues));
+        return false;
+      }
+      setFieldErrors({});
       void navigate({
         to: browsePath,
-        search: (prev) => ({
-          sort: prev.sort ?? '[]',
-          filters: prev.filters ?? '[]',
-          ...updates,
-        }),
+        search: {
+          sort: validated.sortJson,
+          filters: validated.filtersJson,
+        },
       });
+      return true;
     },
-    [browsePath, navigate],
+    [browsePath, navigate, tableType],
   );
 
   const applyFilters = useCallback(
     (nextFilters: TableFilter[]) => {
-      updateSearch({ filters: JSON.stringify(nextFilters) });
+      commitBrowseSearch(sortJson, JSON.stringify(nextFilters));
     },
-    [updateSearch],
+    [commitBrowseSearch, sortJson],
   );
 
   const setFieldError = useCallback((field: string, message: string | undefined) => {
@@ -359,7 +413,11 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   );
 
   const removeFilter = useCallback(
-    (field: string) => {
+    (field: string, removeValue?: string) => {
+      if (removeValue != null) {
+        applyFilters(removeMultiFilterValue(activeFilters, field, removeValue));
+        return;
+      }
       applyFilters(activeFilters.filter((f) => f.field !== field));
     },
     [activeFilters, applyFilters],
@@ -370,7 +428,7 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
       field: COLUMN_API_FIELDS[s.id] ?? s.id,
       dir: s.desc ? 'desc' : 'asc',
     }));
-    updateSearch({ sort: JSON.stringify(sort) });
+    commitBrowseSearch(JSON.stringify(sort), filtersJson);
   };
 
   const resetAll = useCallback(() => {
@@ -404,6 +462,7 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     tableType === 'city' && lastPageMeta?.sortOverrideHint === 'ru_partial_network';
 
   const showOffsetOnlyBanner = offsetOnlySort && lastPageMeta?.paginationWarning === 'offset_only';
+  const showEstimatedCountBanner = countSource === 'estimated' && rows.length > 0;
 
   const facetContext = useCallback(
     (excludeField: string) => activeFilters.filter((f) => f.field !== excludeField),
@@ -618,9 +677,29 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
         </div>
       )}
 
+      {showEstimatedCountBanner && (
+        <div className="shrink-0 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-900">
+          {ui.browse.estimatedCountBanner}
+        </div>
+      )}
+
+      {fieldErrors._sort && (
+        <div className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-800">
+          {fieldErrors._sort}
+        </div>
+      )}
+
+      {fieldErrors._form && (
+        <div className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-800">
+          {fieldErrors._form}
+        </div>
+      )}
+
       {Object.keys(fieldErrors).length > 0 && (
         <div className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-800">
-          {Object.entries(fieldErrors).map(([field, message]) => (
+          {Object.entries(fieldErrors)
+            .filter(([field]) => !field.startsWith('_'))
+            .map(([field, message]) => (
             <p key={field}>
               {ui.filters[field as keyof typeof ui.filters] ?? field}: {message}
             </p>

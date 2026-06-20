@@ -78,10 +78,41 @@ describe('buildTableQuery', () => {
       filters: [{ field: 'asn', op: 'startsWith', value: '13238' }],
     });
     expect(sql).toContain('geo_asn_blocks ab');
+    expect(sql).toContain('DISTINCT ON (v.id)');
+    expect(sql).toContain('masklen(ab.network) DESC');
+    expect(sql).toContain('ORDER BY v.network ASC, v.id ASC');
+    expect(sql).not.toMatch(/ORDER BY[\s\S]*cb\.id/);
     expect(sql).toContain('autonomous_system_number::text ILIKE');
     expect(countSql).toBeNull();
     expect(skipExactCount).toBe(true);
     expect(countParams).toEqual(['13238%']);
+  });
+
+  it('sorts by network when ASN filter uses live geo_asn_blocks join', () => {
+    const { sql } = buildTableQuery('city', {
+      page: 1,
+      pageSize: 25,
+      sort: [{ field: 'network', dir: 'desc' }],
+      filters: [{ field: 'asn', op: 'eq', value: 13238 }],
+    });
+    expect(sql).toContain('DISTINCT ON (v.id)');
+    expect(sql).toContain('ORDER BY v.network DESC, v.id ASC');
+    expect(sql).not.toMatch(/ORDER BY[\s\S]*cb\.id/);
+  });
+
+  it('applies keyset pagination on deduplicated live ASN join', () => {
+    const { sql, params } = buildTableQuery('city', {
+      page: 2,
+      pageSize: 25,
+      sort: [{ field: 'network', dir: 'asc' }],
+      filters: [{ field: 'asn', op: 'eq', value: 13238 }],
+      afterId: 42,
+      afterNetwork: '1.0.0.0/24',
+    });
+    expect(sql).toContain('DISTINCT ON (v.id)');
+    expect(sql).toContain('(v.network, v.id) >');
+    expect(sql).not.toContain('OFFSET');
+    expect(params).toEqual([13238, '1.0.0.0/24', 42, 25]);
   });
 
   it('filters ASN via precomputed mapping when enabled', () => {

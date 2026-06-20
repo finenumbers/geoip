@@ -299,6 +299,13 @@ export function validateTextFilterValue(field: string, rawValue: string): string
     }
   }
 
+  if (field === 'country_iso_code') {
+    const iso = normalizeCountryIsoCode(trimmed);
+    if (iso.length !== 2) {
+      return 'ISO код страны: 2 буквы';
+    }
+  }
+
   return null;
 }
 

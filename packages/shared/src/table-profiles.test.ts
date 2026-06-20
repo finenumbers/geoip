@@ -48,6 +48,11 @@ describe('table-profiles', () => {
     expect(validateTextFilterValue('network', '1.2.3')).toBeNull();
   });
 
+  it('validates country ISO text filter', () => {
+    expect(validateTextFilterValue('country_iso_code', 'RUS')).toMatch(/ISO/);
+    expect(validateTextFilterValue('country_iso_code', 'ru')).toBeNull();
+  });
+
   it('rejects empty in filter values', () => {
     const result = validateTableQueryProfile('city', [], [
       { field: 'country_iso_code', op: 'in', value: [] },

@@ -107,11 +107,11 @@ services:
       retries: 3
       start_period: 60s
 
-  export-worker:
+  export:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
-    container_name: geoip_export_worker
+    container_name: geoip_export
     command: node dist/jobs/export-worker.js
     env_file: .env
     environment:

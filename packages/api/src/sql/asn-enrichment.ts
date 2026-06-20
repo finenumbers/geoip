@@ -67,6 +67,13 @@ export async function loadPrecomputedAsn(
     [ids],
   );
 
+  for (const row of rows.rows) {
+    result.set(Number(row.block_id), {
+      asn: row.asn != null ? Number(row.asn) : null,
+      asnOrg: row.asn_org ?? null,
+    });
+  }
+
   return result;
 }
 

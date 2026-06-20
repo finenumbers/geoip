@@ -81,6 +81,7 @@ describe.skipIf(!runIntegration)('facet vs table consistency', () => {
     const table = tableRes.json() as {
       pagination: { totalRows: number };
       rows: unknown[];
+      meta?: { countSource?: string };
     };
 
     const facetRes = await app.inject({
@@ -90,7 +91,7 @@ describe.skipIf(!runIntegration)('facet vs table consistency', () => {
     expect(facetRes.statusCode).toBe(200);
     const facet = facetRes.json() as {
       items: Array<{ value: string; count: number }>;
-      meta?: { source?: string };
+      meta?: { source?: string; sampledRows?: number };
     };
 
     if (table.rows.length === 0) {
@@ -100,6 +101,12 @@ describe.skipIf(!runIntegration)('facet vs table consistency', () => {
 
     const facetSum = facet.items.reduce((sum, item) => sum + item.count, 0);
     expect(facetSum).toBeGreaterThan(0);
-    expect(facetSum).toBeLessThanOrEqual(table.pagination.totalRows);
+
+    if (facet.meta?.source === 'sample') {
+      expect(facet.meta.sampledRows).toBeGreaterThan(0);
+      expect(facetSum).toBeLessThanOrEqual(facet.meta.sampledRows ?? facetSum);
+    } else if (table.meta?.countSource !== 'estimated') {
+      expect(facetSum).toBeLessThanOrEqual(table.pagination.totalRows);
+    }
   }, 30_000);
 });

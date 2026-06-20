@@ -201,7 +201,10 @@ export function ColumnFacetFilter({
                       ✓
                     </span>
                     <span className="min-w-0 flex-1 truncate">{item.value}</span>
-                    <span className="shrink-0 text-muted tabular-nums">({formatCount(item.count)})</span>
+                    <span className="shrink-0 text-muted tabular-nums">
+                      ({facetMeta?.source === 'sample' ? '~' : ''}
+                      {formatCount(item.count)})
+                    </span>
                   </button>
                 );
               })
@@ -211,6 +214,15 @@ export function ColumnFacetFilter({
           {!debouncedSearch && items.length >= resultLimit && (
             <div className="border-t border-border px-3 py-2 text-xs text-muted">
               Показаны топ-{resultLimit}. Уточните поиск, чтобы найти остальные.
+            </div>
+          )}
+
+          {facetMeta?.source === 'sample' && (
+            <div className="border-t border-border px-3 py-2 text-xs text-sky-900">
+              {ui.browse.facetSampleBanner}
+              {facetMeta.sampledRows != null
+                ? ` (${facetMeta.sampledRows.toLocaleString('ru-RU')} строк).`
+                : ''}
             </div>
           )}
 

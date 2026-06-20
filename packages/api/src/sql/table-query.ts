@@ -421,22 +421,58 @@ function buildSortKeysetClause(
   return `(COALESCE(${column}::text, ''), ${alias}.id) ${comparator} (COALESCE($${params.length - 1}::text, ''), $${params.length})`;
 }
 
-function buildAsnBlocksOrderBy(
-  sort: SortClause[],
+function buildKeysetWhereParts(
+  effectiveSort: SortClause[],
+  useKeyset: boolean,
+  afterId: number | undefined,
+  afterNetwork: string | undefined,
+  afterSortValue: string | undefined,
+  params: unknown[],
+  alias: string,
+  tableType: TableType,
+  ruPartial: boolean,
+): string[] {
+  if (!useKeyset || afterId == null) return [];
+
+  if (usesNetworkKeysetSort(effectiveSort) && afterNetwork != null) {
+    return [buildKeysetClause(afterId, afterNetwork, params, alias)];
+  }
+
+  const cursorValue = afterSortValue ?? afterNetwork ?? '';
+  return [
+    buildSortKeysetClause(
+      effectiveSort,
+      afterId,
+      cursorValue,
+      params,
+      alias,
+      tableType,
+      ruPartial,
+    ),
+  ];
+}
+
+function buildLiveAsnBlocksQuerySql(
   tableType: TableType,
   alias: string,
-  ruPartial = false,
+  innerWhere: string,
+  outerWhere: string,
+  orderBy: string,
+  paginationSql: string,
 ): string {
-  if (sort.length === 0 || usesNetworkKeysetSort(sort)) {
-    return 'cb.id ASC';
-  }
-
-  const onlyNetworkSort = sort.length === 1 && sort[0]?.field === 'network';
-  if (onlyNetworkSort && sort[0]) {
-    return `cb.id ${sort[0].dir === 'desc' ? 'DESC' : 'ASC'}`;
-  }
-
-  return `cb.id ASC, ${buildOrderBy(sort, tableType, alias, ruPartial)}`;
+  return `
+    SELECT *
+    FROM (
+      SELECT DISTINCT ON (${alias}.id)
+        ${getAliasedInnerColumns(tableType, alias)}
+      ${getAsnBlocksFromClause(tableType, alias)}
+      ${innerWhere}
+      ORDER BY ${alias}.id, masklen(ab.network) DESC
+    ) ${alias}
+    ${outerWhere}
+    ORDER BY ${orderBy}
+    ${paginationSql}
+  `;
 }
 
 function buildWhereClauses(
@@ -590,33 +626,34 @@ export function buildTableQuery(
     usePrecomputedAsnFilter,
   });
   const view = dataCtx.view;
-  const whereParts = [...dataCtx.whereParts];
-
-  if (useKeyset && afterId != null) {
-    if (usesNetworkKeysetSort(effectiveSort) && afterNetwork != null) {
-      whereParts.push(buildKeysetClause(afterId, afterNetwork, dataParams, alias));
-    } else {
-      const cursorValue = afterSortValue ?? afterNetwork ?? '';
-      whereParts.push(
-        buildSortKeysetClause(
-          effectiveSort,
-          afterId,
-          cursorValue,
-          dataParams,
-          alias,
-          tableType,
-          ruPartial,
-        ),
-      );
-    }
-  }
-
-  const where = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
-  const orderBy =
-    useAsnBlocksJoin && !dataCtx.asnJoinPrecomputed
-      ? buildAsnBlocksOrderBy(effectiveSort, tableType, alias, ruPartial)
-      : buildOrderBy(effectiveSort, tableType, alias, ruPartial);
+  const orderBy = buildOrderBy(effectiveSort, tableType, alias, ruPartial);
+  const useLiveAsnBlocksJoin = useAsnBlocksJoin && !dataCtx.asnJoinPrecomputed;
+  const keysetWhereParts = buildKeysetWhereParts(
+    effectiveSort,
+    useKeyset,
+    afterId,
+    afterNetwork,
+    afterSortValue,
+    dataParams,
+    alias,
+    tableType,
+    ruPartial,
+  );
+  const filterWhereParts = [...dataCtx.whereParts];
+  const whereParts = useLiveAsnBlocksJoin
+    ? keysetWhereParts
+    : [...filterWhereParts, ...keysetWhereParts];
   const offset = useKeyset ? 0 : (page - 1) * pageSize;
+
+  const innerWhere =
+    useLiveAsnBlocksJoin && filterWhereParts.length > 0
+      ? `WHERE ${filterWhereParts.join(' AND ')}`
+      : '';
+  const where = !useLiveAsnBlocksJoin && whereParts.length > 0
+    ? `WHERE ${whereParts.join(' AND ')}`
+    : useLiveAsnBlocksJoin && whereParts.length > 0
+      ? `WHERE ${whereParts.join(' AND ')}`
+      : '';
 
   const countParams: unknown[] = [];
   const countWhereParts = useCachedCount
@@ -689,13 +726,14 @@ export function buildTableQuery(
       ${paginationSql}
     `;
     } else {
-      sql = `
-      SELECT ${getAliasedInnerColumns(tableType, alias)}
-      ${getAsnBlocksFromClause(tableType, alias)}
-      ${where}
-      ORDER BY ${orderBy}
-      ${paginationSql}
-    `;
+      sql = buildLiveAsnBlocksQuerySql(
+        tableType,
+        alias,
+        innerWhere,
+        where,
+        orderBy,
+        paginationSql,
+      );
     }
   } else {
     sql = `

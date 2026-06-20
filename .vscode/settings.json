@@ -1,0 +1,6 @@
+{
+  "npm.packageManager": "pnpm",
+  "npm.autoDetect": "off",
+  "task.autoDetect": "off",
+  "npm.exclude": "**/.pnpm-store/**"
+}

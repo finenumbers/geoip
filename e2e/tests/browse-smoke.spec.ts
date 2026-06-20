@@ -103,4 +103,20 @@ test.describe('Browse smoke (Phase D)', () => {
     await expect(page.getByText('Активные фильтры:')).not.toBeVisible();
     await expect(page.locator('[role="alert"]').filter({ hasText: 'целое число' })).toHaveCount(0);
   });
+
+  test('preserves sort and filters in URL after reload', async ({ page }) => {
+    await page.goto('/browse/city?sort=%5B%5D&filters=%5B%7B%22field%22%3A%22country_iso_code%22%2C%22op%22%3A%22eq%22%2C%22value%22%3A%22RU%22%7D%5D');
+    await page.waitForResponse(
+      (resp) => resp.url().includes('/api/v1/table/city') && resp.status() === 200,
+    );
+    await expect(page.getByText('ISO страны:')).toBeVisible();
+
+    await page.reload();
+    await page.waitForResponse(
+      (resp) => resp.url().includes('/api/v1/table/city') && resp.status() === 200,
+    );
+
+    await expect(page).toHaveURL(/country_iso_code.*RU/);
+    await expect(page.getByText('ISO страны:')).toBeVisible();
+  });
 });
