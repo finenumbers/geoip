@@ -467,6 +467,57 @@ docker exec geoip_postgres pg_dump -U geoip geoip | gzip > geoip_manual_$(date +
 
 ## 13. Troubleshooting
 
+### Stack «Limited» — «created outside of Portainer», нельзя обновить
+
+Если в списке Stacks у **geoip** в колонке **Control** написано **Limited** (подсказка: *This stack was created outside of Portainer*), Portainer **не может** нормально обновлять этот stack через Pull and redeploy / Editor. Так бывает, если контейнеры поднимали через SSH (`docker compose up`) или stack «подхватился» Portainer’ом автоматически.
+
+**Что делать — пересоздать stack через Portainer (данные можно сохранить):**
+
+#### Шаг 1. Остановить старые контainers (SSH на сервер или Portainer → Containers)
+
+```bash
+docker stop geoip_api geoip_web geoip_import geoip_export geoip_pgbouncer geoip_postgres geoip_postgres_backup 2>/dev/null || true
+docker rm geoip_api geoip_web geoip_import geoip_export geoip_pgbouncer geoip_postgres geoip_postgres_backup 2>/dev/null || true
+```
+
+> Volumes (`pg_data`, `config_data` и т.д.) **не удаляются** — настройки Admin и БД сохранятся, если не удалять volumes вручную.
+
+#### Шаг 2. Удалить запись stack в Portainer
+
+**Stacks → geoip → Remove** (или иконка корзины).  
+Если Remove недоступен — после шага 1 запись часто исчезает сама или удаляется без «remove volumes».
+
+**Не ставьте галочку «remove volumes»**, если хотите сохранить БД и `config_data`.
+
+#### Шаг 3. Создать stack заново (правильный способ)
+
+**Stacks → + Add stack**
+
+| Поле | Значение |
+|------|----------|
+| Name | `geoip` |
+| Build method | **Repository** |
+| Repository URL | `https://github.com/finenumbers/geoip` |
+| Reference | `main` |
+| **Compose path** | **`docker-compose.portainer.yml`** |
+| Environment | см. [`stack.env.example`](../infra/portainer/stack.env.example) |
+
+**Deploy the stack**
+
+Статус Control должен стать **Total** (как у `n8n` / `nginx` на вашем скриншоте).
+
+#### Шаг 4. Проверка
+
+```bash
+curl -s http://127.0.0.1:8080/api/v1/health
+```
+
+Откройте `http://<сервер>:8080/admin/login` (или `/admin/setup`, если admin ещё не создан).
+
+**На будущее:** не запускайте `docker compose up` для geoip на этом хосте вручную — только через Portainer Stack, иначе снова будет **Limited**.
+
+---
+
 ### `userlist.txt` mount error / `not a directory`
 
 ```
