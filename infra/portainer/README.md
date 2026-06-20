@@ -6,7 +6,9 @@
 docker-compose.portainer.yml
 ```
 
-**Любой** compose path из репозитория (`docker-compose.yml`, `docker-compose.portainer.yml`) — без `build:`, только GHCR images. После push в GitHub нажмите **Pull and redeploy** в Portainer.
+**Только** `docker-compose.portainer.yml` — без bind mounts, GHCR images. После push: **Pull and redeploy** (работает только при **Control: Total**).
+
+> **Control: Limited?** Stack создан вне Portainer — обновить нельзя. [Инструкция по пересозданию](../../docs/PORTAINER.md#stack-limited--created-outside-of-portainer-нельзя-обновить)
 
 ## Быстрый старт
 
