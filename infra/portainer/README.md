@@ -4,21 +4,9 @@ Production-деплой через **Portainer → Stacks**.
 
 ## Главная инструкция
 
-**[docs/PORTAINER.md](../../docs/PORTAINER.md)** — пошаговый гайд: создание stack из GitHub, переменные окружения, Admin setup, import ГРЧЦ, обновление, troubleshooting.
+**[docs/PORTAINER.md](../../docs/PORTAINER.md)** — пошаговый гайд.
 
-## Файлы
-
-| Файл | Назначение |
-|------|------------|
-| [`stack.compose.yml`](stack.compose.yml) | Compose path для Portainer (`include` корневых файлов) |
-| [`stack.env.example`](stack.env.example) | Шаблон Environment variables |
-
-Корневые compose (подключаются автоматически):
-
-- [`docker-compose.yml`](../../docker-compose.yml)
-- [`docker-compose.prod.yml`](../../docker-compose.prod.yml)
-
-## Быстрый старт (5 полей)
+## Быстрый старт
 
 **Portainer → Stacks → Add stack → Repository**
 
@@ -26,10 +14,18 @@ Production-деплой через **Portainer → Stacks**.
 |------|----------|
 | Repository URL | `https://github.com/finenumbers/geoip` |
 | Reference | `main` |
-| Compose path | `infra/portainer/stack.compose.yml` |
-| Environment | см. [`stack.env.example`](stack.env.example) |
+| **Compose path** | **`docker-compose.yml`** |
+| Environment | см. [`stack.env.example`](stack.env.example) — **обязательно `COMPOSE_FILE`** |
 
 Deploy → `http://<host>:8080/admin/setup`
+
+## Файлы
+
+| Файл | Назначение |
+|------|------------|
+| [`stack.env.example`](stack.env.example) | Environment variables (включая `COMPOSE_FILE`) |
+| [`docker-compose.images.yml`](docker-compose.images.yml) | GHCR-образы вместо локальной сборки |
+| [`stack.compose.yml`](stack.compose.yml) | Legacy (сборка на хосте; не для Portainer CE) |
 
 ---
 

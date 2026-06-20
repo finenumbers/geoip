@@ -1,10 +1,14 @@
 # Portainer Stack — production-like GeoIP Analytics
 #
-# In Portainer: Stacks → Add stack → Web editor → paste this file
-# Set environment variables from stack.env.example (Stack → Environment variables)
+# RECOMMENDED in Portainer (Repository method):
+#   Compose path: docker-compose.yml
+#   Environment variable:
+#     COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:infra/portainer/docker-compose.images.yml
 #
-# Repository layout must include docker-compose.yml and docker-compose.prod.yml
-# at the repo root (paths below are relative to this file).
+# This pulls pre-built GHCR images and avoids `docker compose build` (which needs packages/ source).
+#
+# Legacy path (builds on host — requires full monorepo clone):
+#   Compose path: infra/portainer/stack.compose.yml
 
 include:
   - path: ../../docker-compose.yml
