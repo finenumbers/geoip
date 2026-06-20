@@ -7,6 +7,7 @@ import type {
   LookupResponse,
   MetricsResponse,
   ReadyResponse,
+  SetupChecklistResponse,
   TableResponse,
 } from '@geoip/shared';
 
@@ -51,6 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   ready: () => request<ReadyResponse>('/ready'),
+  setupChecklist: () => request<SetupChecklistResponse>('/public/setup-checklist'),
   dataset: () => request<DatasetState>('/dataset/active'),
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
   importById: (id: string) => request<ImportRun>(`/imports/${id}`),

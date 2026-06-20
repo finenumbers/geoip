@@ -1,4 +1,7 @@
-const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? '';
+import { Link } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
+import { fetchPublicRuntime } from '@/lib/admin-api';
+import { ui } from '@/lib/ui-strings';
 
 function formatCoord(value: number): string {
   return value.toLocaleString('ru', { maximumFractionDigits: 6 });
@@ -25,6 +28,13 @@ export function LookupMapCard({
   accuracyRadius?: number | null;
   cityName?: string | null;
 }) {
+  const { data: runtime } = useQuery({
+    queryKey: ['public-runtime'],
+    queryFn: fetchPublicRuntime,
+    staleTime: 60_000,
+  });
+  const mapsApiKey = runtime?.googleMapsApiKey?.trim() || '';
+
   const coords = resolveCoords(latitude, longitude);
 
   const embedUrl = coords
@@ -39,8 +49,10 @@ export function LookupMapCard({
 
       {coords && !mapsApiKey && (
         <p className="text-muted text-sm">
-          Карта не настроена: задайте <code className="text-foreground">VITE_GOOGLE_MAPS_API_KEY</code> и
-          пересоберите web.
+          Карта не настроена.{' '}
+          <Link to="/admin" search={{ section: 'integrations' }} className="font-medium text-primary underline-offset-2 hover:underline">
+            {ui.setup.mapsConfigureLink}
+          </Link>
         </p>
       )}
 

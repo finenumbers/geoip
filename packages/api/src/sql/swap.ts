@@ -185,10 +185,6 @@ export async function refreshMaterializedViews(): Promise<void> {
   await refreshOrRecreateMaterializedViews();
 }
 
-export async function refreshMaterializedViewsNonConcurrent(): Promise<void> {
-  await refreshOrRecreateMaterializedViews();
-}
-
 export async function getMaterializedViewCounts(): Promise<{ city: number; country: number }> {
   const city = await query<{ count: number }>('SELECT COUNT(*)::int AS count FROM mv_city_blocks_analytics');
   const country = await query<{ count: number }>('SELECT COUNT(*)::int AS count FROM mv_country_blocks_analytics');

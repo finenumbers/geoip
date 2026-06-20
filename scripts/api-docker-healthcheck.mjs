@@ -17,13 +17,15 @@ async function main() {
     process.exit(0);
   }
 
-  if (
-    body.status === 'not_ready' &&
-    body.checks?.database &&
-    body.checks?.dataset &&
-    body.checks.materializedViews === false
-  ) {
-    process.exit(0);
+  if (body.status === 'not_ready' && body.checks?.database) {
+    // Fresh install: empty DB before first import
+    if (!body.checks.dataset) {
+      process.exit(0);
+    }
+    // MV warmup after import
+    if (body.checks.dataset && body.checks.materializedViews === false) {
+      process.exit(0);
+    }
   }
 
   process.exit(1);

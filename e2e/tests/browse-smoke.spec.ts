@@ -51,7 +51,7 @@ test.describe('Browse smoke (Phase D)', () => {
         resp.status() === 200,
     );
 
-    await page.getByRole('button', { name: /Сортировка Страна/ }).click();
+    await page.getByRole('button', { name: /Сортировка Country/ }).click();
     await sortResponse;
 
     await expect(page).toHaveURL(/sort=.*country_name/);

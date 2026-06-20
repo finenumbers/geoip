@@ -3,7 +3,11 @@ import { AppLayout } from '@/components/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LookupPage } from '@/pages/LookupPage';
 import { BrowsePage } from '@/pages/BrowsePage';
+import { AdminPage } from '@/pages/AdminPage';
+import { AdminLoginPage } from '@/pages/AdminLoginPage';
+import { AdminSetupPage } from '@/pages/AdminSetupPage';
 import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
+import { parseAdminSearch } from '@/lib/admin-sections';
 
 const rootRoute = createRootRoute({
   component: AppLayout,
@@ -40,11 +44,33 @@ const browseCountryRoute = createRoute({
   validateSearch: browseSearchSchema,
 });
 
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin',
+  component: AdminPage,
+  validateSearch: parseAdminSearch,
+});
+
+const adminLoginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/login',
+  component: AdminLoginPage,
+});
+
+const adminSetupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/setup',
+  component: AdminSetupPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   lookupRoute,
   browseCityRoute,
   browseCountryRoute,
+  adminRoute,
+  adminLoginRoute,
+  adminSetupRoute,
 ]);
 
 export const router = createRouter({ routeTree });

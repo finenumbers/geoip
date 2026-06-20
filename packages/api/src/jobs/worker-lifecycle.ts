@@ -41,7 +41,10 @@ export function registerWorkerShutdown(onShutdown?: () => Promise<void>): void {
   process.on('SIGINT', () => void handle('SIGINT'));
 }
 
-export function startWorkerPoll(poll: () => Promise<void>, intervalMs: number): void {
+export function startWorkerPoll(
+  poll: () => Promise<void>,
+  intervalMs: number,
+): (nextIntervalMs: number) => void {
   const run = async () => {
     if (shutdownRequested) return;
     touchWorkerHeartbeat();
@@ -52,4 +55,11 @@ export function startWorkerPoll(poll: () => Promise<void>, intervalMs: number): 
   pollTimer = setInterval(() => {
     void run();
   }, intervalMs);
+
+  return (nextIntervalMs: number) => {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      void run();
+    }, nextIntervalMs);
+  };
 }

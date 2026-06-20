@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { getDatasetState, listImportRuns, getImportRunById } from '../repositories/dataset-repository.js';
-import { IMPORT_HISTORY_LIMIT } from '../constants/import-history-limit.js';
+import { getImportHistoryLimit } from '../jobs/import-history-retention.js';
 import { loadEnv } from '../config/env.js';
 import { query } from '../db/client.js';
 import { getNextDailyCronRun } from '../utils/next-cron-run.js';
@@ -31,7 +31,7 @@ export async function registerDatasetRoutes(app: FastifyInstance): Promise<void>
   });
 
   app.get('/api/v1/imports', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request) => {
-    const requested = Number((request.query as { limit?: string }).limit ?? IMPORT_HISTORY_LIMIT);
+    const requested = Number((request.query as { limit?: string }).limit ?? getImportHistoryLimit());
     return listImportRuns(requested);
   });
 

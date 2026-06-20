@@ -1,6 +1,7 @@
 import { closeDb } from '../db/client.js';
 import { migrate } from '../db/migrate.js';
 import { isFixtureDatasetReady, seedFixtureDataset } from './seed-fixture-dataset.js';
+import { loadEnv } from '../config/env.js';
 
 export const runIntegration = process.env.RUN_INTEGRATION === '1';
 
@@ -8,6 +9,11 @@ export const runIntegration = process.env.RUN_INTEGRATION === '1';
 export async function prepareIntegrationDb(): Promise<void> {
   await migrate();
   await seedFixtureDataset();
+}
+
+/** API key from runtime config store (auto-generated on first boot; not from IMPORT_API_KEY env). */
+export function getIntegrationApiKey(): string {
+  return loadEnv().API_KEY;
 }
 
 /** True when MVs are ready and fixture rows are queryable. */

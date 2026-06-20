@@ -494,10 +494,6 @@ function needsAsnJoin(filters: FilterClause[], sort: SortClause[]): boolean {
   return sort.some((s) => s.field === 'asn' || s.field === 'asn_org');
 }
 
-export function facetNeedsAsnJoin(tableType: TableType, field: string, _contextFilters: FilterClause[]): boolean {
-  return field === 'asn' || field === 'asn_org';
-}
-
 export function resolveSortOverrideHint(
   tableType: TableType,
   sort: SortClause[],
@@ -578,15 +574,6 @@ export function buildBrowseContextWhere(
     useAsnBlocksJoin,
     asnJoinPrecomputed: useAsnBlocksJoin && options.usePrecomputedAsnFilter === true,
   };
-}
-
-export function buildFacetContextWhere(
-  tableType: TableType,
-  contextFilters: FilterClause[],
-  params: unknown[],
-  alias = 'v',
-): string {
-  return buildBrowseContextWhere(tableType, contextFilters, params, { alias }).whereSql;
 }
 
 export function canUseCachedCount(filters: FilterClause[]): boolean {

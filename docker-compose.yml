@@ -43,8 +43,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      CONFIG_DATA_DIR: /data/geoip/config
+      CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY:-}
     volumes:
       - export_data:/tmp/geoip-exports
+      - config_data:/data/geoip/config
     ports:
       - "3000:3000"
     depends_on:
@@ -67,6 +70,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      CONFIG_DATA_DIR: /data/geoip/config
+      CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY:-}
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -74,6 +79,7 @@ services:
         condition: service_healthy
     volumes:
       - import_data:/tmp/geoip-import
+      - config_data:/data/geoip/config
 
   export:
     build:
@@ -85,6 +91,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
       DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@postgres:5432/${POSTGRES_DB:-geoip}
+      CONFIG_DATA_DIR: /data/geoip/config
+      CONFIG_MASTER_KEY: ${CONFIG_MASTER_KEY:-}
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -92,16 +100,17 @@ services:
         condition: service_healthy
     volumes:
       - export_data:/tmp/geoip-exports
+      - config_data:/data/geoip/config
 
   web:
     build:
       context: .
       dockerfile: packages/web/Dockerfile
-      args:
-        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
     container_name: geoip_web
     environment:
-      API_KEY: ${API_KEY:-${IMPORT_API_KEY:-change-me-in-production}}
+      CONFIG_DATA_DIR: /data/geoip/config
+    volumes:
+      - config_data:/data/geoip/config:ro
     ports:
       - "8080:80"
     depends_on:
@@ -112,3 +121,4 @@ volumes:
   pg_data:
   import_data:
   export_data:
+  config_data:

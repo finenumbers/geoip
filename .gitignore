@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env
 .env.local
+.env.*
+!.env.example
 *.log
 .DS_Store
 coverage/
@@ -10,4 +12,13 @@ import_tmp/
 /tmp/
 .pnpm-store/
 test-results/
+playwright-report/
+blob-report/
+.playwright/
 *.tsbuildinfo
+data/
+packages/api/data/
+**/secrets.enc
+**/proxy.env
+backups/
+*.sql.gz

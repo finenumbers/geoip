@@ -43,13 +43,12 @@ export const COUNTRY_TABLE_PROFILE: TableProfile = {
     'prefix_len',
     'country_iso_code',
     'country_name',
-    'subdivision_1_name',
     'asn',
     'asn_org',
   ],
-  facetFields: ['country_name', 'subdivision_1_name', 'asn_org'],
+  facetFields: ['country_name', 'asn_org'],
   sortFields: COUNTRY_TABLE_SORT_FIELDS,
-  uiSortFields: ['network', 'country_iso_code', 'country_name', 'subdivision_1_name'],
+  uiSortFields: ['network', 'country_iso_code', 'country_name'],
 };
 
 export const TABLE_PROFILES: Record<TableType, TableProfile> = {

@@ -1,27 +1,97 @@
-# Portainer deployment
+# Установка через Portainer
 
-Production-like stack for a single Docker host behind NGINX Proxy Manager.
+Production stack GeoIP Analytics на одном Docker-хосте. Использует те же compose-файлы, что и CLI-установка.
 
-## Stack file
+**Репозиторий:** [github.com/finenumbers/geoip](https://github.com/finenumbers/geoip)
 
-Use [`stack.compose.yml`](stack.compose.yml) in Portainer (**Stacks → Add stack → Web editor**). It includes the root [`docker-compose.yml`](../../docker-compose.yml) and [`docker-compose.prod.yml`](../../docker-compose.prod.yml) overlays.
+Полное руководство: [docs/УСТАНОВКА.md](../../docs/УСТАНОВКА.md).
 
-## Environment
+## Файлы stack
 
-Copy [`stack.env.example`](stack.env.example) into Portainer stack environment variables (or maintain a `.env` file next to the compose files on the host).
+| Файл | Назначение |
+|------|------------|
+| [`stack.compose.yml`](stack.compose.yml) | Точка входа для Portainer (`include` корневых compose) |
+| [`stack.env.example`](stack.env.example) | Шаблон переменных окружения |
 
-After changing `POSTGRES_PASSWORD`, update [`../pgbouncer/userlist.txt`](../pgbouncer/userlist.txt) and redeploy.
+Корневые файлы (подключаются автоматически):
 
-## NPM (perimeter)
+- [`docker-compose.yml`](../../docker-compose.yml) — базовые сервисы
+- [`docker-compose.prod.yml`](../../docker-compose.prod.yml) — prod overlay (только `:8080`, backup, limits)
 
-- Proxy Host → `http://<docker-host>:8080` (scheme **HTTP**)
-- SSL + Access List on the NPM host only
-- Do not publish API or Postgres ports (prod overlay)
+## Быстрый старт в Portainer
 
-## Post-deploy checks
+### 1. Создать stack
+
+**Portainer → Stacks → Add stack**
+
+- **Name:** `geoip`
+- **Repository** (рекомендуется): `https://github.com/finenumbers/geoip`, branch `main`, compose path `infra/portainer/stack.compose.yml`
+- **Или Web editor:** вставьте содержимое `stack.compose.yml` (репозиторий должен быть на хосте по пути `infra/portainer/`)
+
+### 2. Environment variables
+
+Скопируйте из [`stack.env.example`](stack.env.example):
+
+```env
+POSTGRES_USER=geoip
+POSTGRES_PASSWORD=ваш-сильный-пароль
+POSTGRES_DB=geoip
+CONFIG_MASTER_KEY=<64 hex-символа>
+BACKUP_INTERVAL_SECONDS=86400
+```
+
+- `CONFIG_MASTER_KEY` — сгенерируйте один раз, сохраните backup (шифрует `config_data`).
+- После смены `POSTGRES_PASSWORD` обновите [`../pgbouncer/userlist.txt`](../pgbouncer/userlist.txt) и redeploy.
+
+### 3. Deploy
+
+Дождитесь статуса `running` у всех контейнеров. Первый запуск API — до ~2 мин (migrations).
+
+### 4. Admin setup
+
+1. `http://<docker-host>:8080/admin/setup` (или через NPM: `https://<домен>/admin/setup`)
+2. Создайте admin login/password
+3. **Admin → ГРЧЦ / Import** — creds ЛК, «Проверить ГРЧЦ»
+4. **Admin → Обзор** → «Импортировать датасет»
+5. (Опционально) **Admin → Интеграции** — Google Maps key
+
+**Не используйте** `seed:fixture` в production.
+
+## NGINX Proxy Manager
+
+См. [docs/NGINX-PROXY-MANAGER.md](../../docs/NGINX-PROXY-MANAGER.md).
+
+- Proxy Host → `http://<docker-host>:8080` (схема **HTTP**)
+- SSL + Access List только на NPM
+- API (`3000`) и Postgres не публикуются на хост
+
+## Обновление stack
+
+1. Pull изменений (git или Portainer webhook)
+2. **Stacks → geoip → Update the stack**
+3. Volumes (`config_data`, `pg_data`) сохраняются
+
+## Проверки после деплоя
 
 ```bash
+curl -s http://localhost:8080/api/v1/health
+curl -s http://localhost:8080/api/v1/public/setup-checklist
 curl -s http://localhost:8080/api/v1/ready
-pnpm --filter @geoip/api seed:fixture   # first run on empty Postgres (CI/dev)
-docker compose exec import node dist/scripts/trigger-import.js
 ```
+
+В Portainer: **Containers → geoip_import → Logs** — import worker и cron.
+
+## Troubleshooting
+
+| Симптом | Действие |
+|---------|----------|
+| API не healthy | Logs `geoip_api`, дождитесь migrations |
+| `not_ready` на Dashboard | Ожидаемо до первого import — см. checklist |
+| 401 на API в prod | Проверьте volume `config_data` и `proxy.env` у `geoip_web` |
+| PgBouncer auth failed | Синхронизируйте `userlist.txt` с `POSTGRES_PASSWORD` |
+
+См. [docs/FAQ.md](../../docs/FAQ.md).
+
+---
+
+**Finenumbers** · [finenumbers.com](https://finenumbers.com) · apps@finenumbers.com

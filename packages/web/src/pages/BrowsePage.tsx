@@ -398,63 +398,71 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           />,
         ),
       },
-      {
-        accessorKey: 'countryName',
-        header: ui.filters.country_name,
-        meta: columnMeta(
-          'country_name',
-          <ColumnFacetFilter
-            label={ui.filters.country_name}
-            field="country_name"
-            tableType={tableType}
-            selectedValues={getMultiFilterValues(activeFilters, 'country_name')}
-            contextFilters={facetContext('country_name')}
-            compact
-            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'country_name', values))}
-            onClear={() => applyFilters(setMultiFilter(activeFilters, 'country_name', []))}
-          />,
-        ),
-      },
     ];
 
+    const countryNameColumn: ColumnDef<TableBrowseRow> = {
+      accessorKey: 'countryName',
+      header: ui.filters.country_name,
+      meta: columnMeta(
+        'country_name',
+        <ColumnFacetFilter
+          label={ui.filters.country_name}
+          field="country_name"
+          tableType={tableType}
+          selectedValues={getMultiFilterValues(activeFilters, 'country_name')}
+          contextFilters={facetContext('country_name')}
+          compact
+          onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'country_name', values))}
+          onClear={() => applyFilters(setMultiFilter(activeFilters, 'country_name', []))}
+        />,
+      ),
+    };
+
+    const regionColumn: ColumnDef<TableBrowseRow> = {
+      accessorKey: 'subdivision1Name',
+      header: ui.filters.subdivision_1_name,
+      meta: columnMeta(
+        'subdivision_1_name',
+        <ColumnFacetFilter
+          label={ui.filters.subdivision_1_name}
+          field="subdivision_1_name"
+          tableType={tableType}
+          selectedValues={getMultiFilterValues(activeFilters, 'subdivision_1_name')}
+          contextFilters={facetContext('subdivision_1_name')}
+          compact
+          onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', values))}
+          onClear={() => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', []))}
+        />,
+      ),
+    };
+
     if (tableType === 'city') {
-      base.push({
-        accessorKey: 'cityName',
-        header: ui.filters.city_name,
-        meta: columnMeta(
-          'city_name',
-          <ColumnFacetFilter
-            label={ui.filters.city_name}
-            field="city_name"
-            tableType={tableType}
-            selectedValues={getMultiFilterValues(activeFilters, 'city_name')}
-            contextFilters={facetContext('city_name')}
-            compact
-            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'city_name', values))}
-            onClear={() => applyFilters(setMultiFilter(activeFilters, 'city_name', []))}
-          />,
-        ),
-      });
+      base.push(
+        countryNameColumn,
+        regionColumn,
+        {
+          accessorKey: 'cityName',
+          header: ui.filters.city_name,
+          meta: columnMeta(
+            'city_name',
+            <ColumnFacetFilter
+              label={ui.filters.city_name}
+              field="city_name"
+              tableType={tableType}
+              selectedValues={getMultiFilterValues(activeFilters, 'city_name')}
+              contextFilters={facetContext('city_name')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'city_name', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'city_name', []))}
+            />,
+          ),
+        },
+      );
+    } else {
+      base.push(countryNameColumn);
     }
 
     base.push(
-      {
-        accessorKey: 'subdivision1Name',
-        header: ui.filters.subdivision_1_name,
-        meta: columnMeta(
-          'subdivision_1_name',
-          <ColumnFacetFilter
-            label={ui.filters.subdivision_1_name}
-            field="subdivision_1_name"
-            tableType={tableType}
-            selectedValues={getMultiFilterValues(activeFilters, 'subdivision_1_name')}
-            contextFilters={facetContext('subdivision_1_name')}
-            compact
-            onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', values))}
-            onClear={() => applyFilters(setMultiFilter(activeFilters, 'subdivision_1_name', []))}
-          />,
-        ),
-      },
       {
         accessorKey: 'asn',
         header: ui.filters.asn,

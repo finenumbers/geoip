@@ -16,7 +16,7 @@ export type FacetCountCache = {
 };
 
 const CITY_FACET_FIELDS: FacetField[] = ['city_name', 'country_name', 'subdivision_1_name', 'asn_org'];
-const COUNTRY_FACET_FIELDS: FacetField[] = ['country_name', 'subdivision_1_name', 'asn_org'];
+const COUNTRY_FACET_FIELDS: FacetField[] = ['country_name', 'asn_org'];
 
 const EMPTY_CACHE: FacetCountCache = { city: {}, country: {} };
 

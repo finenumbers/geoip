@@ -38,7 +38,6 @@ const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
     'prefix_len',
     'country_iso_code',
     'country_name',
-    'subdivision_1_name',
     'asn',
     'asn_org',
   ],

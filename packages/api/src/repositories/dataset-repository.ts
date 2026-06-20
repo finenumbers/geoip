@@ -12,7 +12,11 @@ import {
 import {
   parseFacetCountCache,
 } from '../sql/facet-count-cache.js';
-import { IMPORT_HISTORY_LIMIT } from '../constants/import-history-limit.js';
+import { loadEnv } from '../config/env.js';
+
+function getImportHistoryLimit(): number {
+  return loadEnv().IMPORT_HISTORY_LIMIT;
+}
 
 const DATASET_STATE_CACHE_MS = 60_000;
 
@@ -98,9 +102,9 @@ export async function getDatasetState(): Promise<DatasetStateSnapshot> {
   return data;
 }
 
-export async function listImportRuns(limit = IMPORT_HISTORY_LIMIT) {
+export async function listImportRuns(limit = getImportHistoryLimit()) {
   const db = getDb();
-  const cappedLimit = Math.min(Math.max(limit, 1), IMPORT_HISTORY_LIMIT);
+  const cappedLimit = Math.min(Math.max(limit, 1), getImportHistoryLimit());
   const items = await db
     .select()
     .from(importRuns)

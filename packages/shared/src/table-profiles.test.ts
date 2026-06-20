@@ -19,6 +19,23 @@ describe('table-profiles', () => {
     expect(sanitized).toEqual([{ field: 'country_iso_code', op: 'eq', value: 'RU' }]);
   });
 
+  it('removes region filter from country table', () => {
+    const sanitized = sanitizeFiltersForTableType('country', [
+      { field: 'subdivision_1_name', op: 'in', value: ['Москва'] },
+      { field: 'country_name', op: 'in', value: ['Российская Федерация'] },
+    ]);
+    expect(sanitized).toEqual([
+      { field: 'country_name', op: 'in', value: ['Российская Федерация'] },
+    ]);
+  });
+
+  it('rejects region facet on country table', () => {
+    const result = validateTableQueryProfile('country', [], [
+      { field: 'subdivision_1_name', op: 'in', value: ['Москва'] },
+    ]);
+    expect(result.ok).toBe(false);
+  });
+
   it('rejects unknown filter fields', () => {
     const result = validateTableQueryProfile('city', [], [
       { field: 'invalid_field', op: 'eq', value: 'x' },

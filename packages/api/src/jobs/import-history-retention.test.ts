@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { pruneImportHistory, IMPORT_HISTORY_LIMIT } from './import-history-retention.js';
+import { pruneImportHistory, getImportHistoryLimit } from './import-history-retention.js';
 import { query } from '../db/client.js';
 import { getDatasetState, getRunningImport } from '../repositories/dataset-repository.js';
 
@@ -10,6 +10,10 @@ vi.mock('../db/client.js', () => ({
 vi.mock('../repositories/dataset-repository.js', () => ({
   getDatasetState: vi.fn(),
   getRunningImport: vi.fn(),
+}));
+
+vi.mock('../config/env.js', () => ({
+  loadEnv: vi.fn(() => ({ IMPORT_HISTORY_LIMIT: 10 })),
 }));
 
 describe('pruneImportHistory', () => {
@@ -29,16 +33,16 @@ describe('pruneImportHistory', () => {
       datasetFingerprint: null,
       cityRowCount: 0,
       countryRowCount: 0,
-  volumes: {
-    cityBlocks: 0,
-    countryBlocks: 0,
-    asnBlocks: 0,
-    cityLocations: 0,
-    countryLocations: 0,
-    ruCityBlocks: 0,
-    ipv4Addresses: '0',
-    ipv6Addresses: '0',
-  },
+      volumes: {
+        cityBlocks: 0,
+        countryBlocks: 0,
+        asnBlocks: 0,
+        cityLocations: 0,
+        countryLocations: 0,
+        ruCityBlocks: 0,
+        ipv4Addresses: '0',
+        ipv6Addresses: '0',
+      },
       filterCountCache: { city: {}, country: {} },
       facetCountCache: { city: {}, country: {} },
     });
@@ -52,7 +56,7 @@ describe('pruneImportHistory', () => {
     expect(result).toEqual({ deletedCount: 2, keptCount: 10 });
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining('DELETE FROM import_runs'),
-      [IMPORT_HISTORY_LIMIT, ['active-id', 'running-id']],
+      [getImportHistoryLimit(), ['active-id', 'running-id']],
     );
   });
 
@@ -66,16 +70,16 @@ describe('pruneImportHistory', () => {
       datasetFingerprint: null,
       cityRowCount: 0,
       countryRowCount: 0,
-  volumes: {
-    cityBlocks: 0,
-    countryBlocks: 0,
-    asnBlocks: 0,
-    cityLocations: 0,
-    countryLocations: 0,
-    ruCityBlocks: 0,
-    ipv4Addresses: '0',
-    ipv6Addresses: '0',
-  },
+      volumes: {
+        cityBlocks: 0,
+        countryBlocks: 0,
+        asnBlocks: 0,
+        cityLocations: 0,
+        countryLocations: 0,
+        ruCityBlocks: 0,
+        ipv4Addresses: '0',
+        ipv6Addresses: '0',
+      },
       filterCountCache: { city: {}, country: {} },
       facetCountCache: { city: {}, country: {} },
     });
@@ -87,6 +91,6 @@ describe('pruneImportHistory', () => {
     const result = await pruneImportHistory();
 
     expect(result).toEqual({ deletedCount: 0, keptCount: 5 });
-    expect(query).toHaveBeenCalledWith(expect.any(String), [IMPORT_HISTORY_LIMIT, []]);
+    expect(query).toHaveBeenCalledWith(expect.any(String), [getImportHistoryLimit(), []]);
   });
 });

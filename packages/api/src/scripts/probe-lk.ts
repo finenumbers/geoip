@@ -14,7 +14,7 @@ async function main() {
     process.exit(1);
   }
 
-  const client = new GrchcClient(env.GEOIP_LK_EMAIL, env.GEOIP_LK_PASSWORD);
+  const client = new GrchcClient(env.GEOIP_LK_EMAIL, env.GEOIP_LK_PASSWORD, env.GEOIP_LK_BASE_URL);
   console.log('Logging in...');
   await client.login();
   console.log('Login OK');

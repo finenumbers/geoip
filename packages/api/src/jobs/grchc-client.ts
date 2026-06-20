@@ -1,8 +1,6 @@
 import { CookieJar } from 'tough-cookie';
 import { fetch as undiciFetch, Agent, type RequestInit as UndiciRequestInit } from 'undici';
-import { ZIP_PATTERNS } from '@geoip/shared';
-
-const LK_BASE_URL = 'https://geoip.noc.gov.ru';
+import { DEFAULT_GEOIP_LK_BASE_URL, ZIP_PATTERNS } from '@geoip/shared';
 
 export type DownloadType = 'city' | 'country' | 'asn';
 
@@ -37,7 +35,12 @@ export class GrchcClient {
   constructor(
     private email: string,
     private password: string,
+    private baseUrl: string = DEFAULT_GEOIP_LK_BASE_URL,
   ) {}
+
+  private get lkBaseUrl(): string {
+    return this.baseUrl.replace(/\/$/, '');
+  }
 
   private async fetch(url: string, init: UndiciRequestInit = {}): Promise<Response> {
     const cookieHeader = await this.jar.getCookieString(url);
@@ -74,7 +77,7 @@ export class GrchcClient {
   }
 
   async login(): Promise<void> {
-    const response = await this.fetch(`${LK_BASE_URL}/api/auth/login`, {
+    const response = await this.fetch(`${this.lkBaseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login: this.email, password: this.password }),
@@ -85,14 +88,14 @@ export class GrchcClient {
       throw new Error(`Login failed with status ${response.status}: ${body}`);
     }
 
-    const cookieHeader = await this.jar.getCookieString(LK_BASE_URL);
+    const cookieHeader = await this.jar.getCookieString(this.lkBaseUrl);
     if (!cookieHeader.includes('session-id')) {
       throw new Error('Login failed: no session cookie received');
     }
   }
 
   private async fetchFilesManifest(): Promise<FilesResponse> {
-    const response = await this.fetch(`${LK_BASE_URL}/api/files`, { method: 'GET' });
+    const response = await this.fetch(`${this.lkBaseUrl}/api/files`, { method: 'GET' });
     if (!response.ok) {
       throw new Error(`Failed to fetch files manifest: ${response.status}`);
     }
@@ -115,7 +118,7 @@ export class GrchcClient {
       links.push({
         type,
         date,
-        url: `${LK_BASE_URL}/api/files/${entry.filename}`,
+        url: `${this.lkBaseUrl}/api/files/${entry.filename}`,
         filename: entry.filename,
         sizeBytes: entry.size ?? 0,
       });

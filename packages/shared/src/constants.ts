@@ -39,7 +39,6 @@ export const COUNTRY_TABLE_SORT_FIELDS = [
   'prefix_len',
   'country_iso_code',
   'country_name',
-  'subdivision_1_name',
   'asn',
   'asn_org',
 ] as const;

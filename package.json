@@ -1,7 +1,19 @@
 {
   "name": "geoip-analytics",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "GeoIP Analytics — analytics and lookup for GRChC Russia GeoIP datasets",
+  "author": "Finenumbers <apps@finenumbers.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/finenumbers/geoip#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/finenumbers/geoip.git"
+  },
+  "bugs": {
+    "url": "https://github.com/finenumbers/geoip/issues",
+    "email": "apps@finenumbers.com"
+  },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "pnpm --parallel --filter @geoip/api --filter @geoip/web dev",

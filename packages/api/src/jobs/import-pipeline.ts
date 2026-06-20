@@ -18,7 +18,6 @@ import {
   dropOldStagingData,
   rebuildProductionIndexes,
   refreshMaterializedViews,
-  refreshMaterializedViewsNonConcurrent,
   validateStagingData,
   getMaterializedViewCounts,
 } from '../sql/swap.js';
@@ -139,7 +138,7 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
     // Discover & download
     await recordStep(importRunId, 'discover_date', 'running');
     stepStart = Date.now();
-    const client = new GrchcClient(env.GEOIP_LK_EMAIL, env.GEOIP_LK_PASSWORD);
+    const client = new GrchcClient(env.GEOIP_LK_EMAIL, env.GEOIP_LK_PASSWORD, env.GEOIP_LK_BASE_URL);
     await client.login();
     const datasetDateRaw = await client.getLatestDatasetDate();
     const datasetDate = formatDatasetDate(datasetDateRaw);
@@ -358,7 +357,7 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
       await refreshMaterializedViews();
     } catch {
       log.warn('Materialized view refresh failed, retrying recreate');
-      await refreshMaterializedViewsNonConcurrent();
+      await refreshMaterializedViews();
     }
 
     const mvCounts = await getMaterializedViewCounts();

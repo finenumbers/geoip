@@ -17,6 +17,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.0.0",
     "@fastify/rate-limit": "^10.2.2",
     "@geoip/shared": "workspace:*",

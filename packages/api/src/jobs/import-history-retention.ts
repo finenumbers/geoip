@@ -1,9 +1,11 @@
 import type { Logger } from 'pino';
 import { query } from '../db/client.js';
 import { getDatasetState, getRunningImport } from '../repositories/dataset-repository.js';
-import { IMPORT_HISTORY_LIMIT } from '../constants/import-history-limit.js';
+import { loadEnv } from '../config/env.js';
 
-export { IMPORT_HISTORY_LIMIT } from '../constants/import-history-limit.js';
+export function getImportHistoryLimit(): number {
+  return loadEnv().IMPORT_HISTORY_LIMIT;
+}
 
 export async function pruneImportHistory(
   log?: Logger,
@@ -38,7 +40,7 @@ export async function pruneImportHistory(
        RETURNING id
      )
      SELECT id FROM deleted`,
-    [IMPORT_HISTORY_LIMIT, protectedArray],
+    [getImportHistoryLimit(), protectedArray],
   );
 
   const countResult = await query<{ count: number }>(

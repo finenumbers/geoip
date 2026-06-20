@@ -126,9 +126,8 @@ export async function queryTable(
 
   const { page, pageSize, sort, afterId, afterNetwork, afterSortValue } = parsed.data;
   const filters = normalizeFiltersForQuery(parsed.data.filters);
-  const keysetEnabled = supportsKeysetPagination(sort);
   const usesKeyset =
-    keysetEnabled && afterId != null && afterNetwork != null;
+    resolvePaginationMode(sort, page, afterId, afterNetwork, afterSortValue) === 'keyset';
   const limitCheck = validateTableQueryLimits(page, pageSize, usesKeyset);
   if (!limitCheck.ok) {
     return {
@@ -218,7 +217,7 @@ export async function queryTable(
       browseView,
       paginationMode,
       nextCursor:
-        lastRow != null && keysetEnabled
+        lastRow != null && supportsKeysetPagination(sort)
           ? {
               afterId: lastRow.id,
               afterNetwork: lastRow.network,

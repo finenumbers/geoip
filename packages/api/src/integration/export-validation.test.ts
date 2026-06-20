@@ -1,17 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
-import { prepareIntegrationDb, runIntegration, teardownIntegrationDb } from './test-setup.js';
-
-const API_KEY = process.env.IMPORT_API_KEY ?? 'ci-test-api-key-12345';
+import { prepareIntegrationDb, runIntegration, teardownIntegrationDb, getIntegrationApiKey } from './test-setup.js';
 
 describe.skipIf(!runIntegration)('export and facet validation integration', () => {
   let app: FastifyInstance;
+  let apiKey: string;
 
   beforeAll(async () => {
     await prepareIntegrationDb();
     app = await buildApp();
     await app.ready();
+    apiKey = getIntegrationApiKey();
   });
 
   afterAll(async () => {
@@ -23,7 +23,7 @@ describe.skipIf(!runIntegration)('export and facet validation integration', () =
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/exports/table',
-      headers: { 'x-api-key': API_KEY },
+      headers: { 'x-api-key': apiKey },
       payload: {
         tableType: 'city',
         filters: [{ field: 'asn', op: 'contains', value: '123' }],

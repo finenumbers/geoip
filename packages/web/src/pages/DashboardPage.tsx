@@ -4,6 +4,7 @@ import type { ImportRun } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
+import { SetupChecklistBanner } from '@/components/SetupChecklistBanner';
 
 function formatMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return '—';
@@ -111,6 +112,7 @@ export function DashboardPage() {
 
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-auto">
+      <SetupChecklistBanner />
       {(readyError || datasetError || metricsError || importsError || importDetailError) && (
         <QueryErrorNotice
           error={readyErr ?? datasetErr ?? metricsErr ?? importsErr ?? importDetailErr}

@@ -35,6 +35,15 @@ describe.skipIf(!runIntegration)('API integration smoke', () => {
     }
   });
 
+  it('GET /api/v1/public/setup-checklist returns onboarding steps', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/public/setup-checklist' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { blockingReady: boolean; steps: Array<{ id: string; done: boolean }> };
+    expect(typeof body.blockingReady).toBe('boolean');
+    expect(body.steps.length).toBeGreaterThanOrEqual(3);
+    expect(body.steps.some((s) => s.id === 'adminAccount')).toBe(true);
+  });
+
   it('GET /api/v1/table/city returns paginated payload', async () => {
     const res = await app.inject({
       method: 'GET',

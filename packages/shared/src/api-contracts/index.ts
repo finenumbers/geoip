@@ -141,14 +141,6 @@ export const tableQuerySchema = z.object({
   afterSortValue: z.string().optional(),
 });
 
-export const tableCursorSchema = z
-  .object({
-    afterId: z.number().int().positive(),
-    afterNetwork: z.string(),
-    afterSortValue: z.string().optional(),
-  })
-  .nullable();
-
 export const paginationSchema = z.object({
   page: z.number(),
   pageSize: z.number(),
@@ -306,3 +298,19 @@ export const facetValuesResponseSchema = z.object({
 });
 
 export type FacetValuesResponse = z.infer<typeof facetValuesResponseSchema>;
+
+export const setupChecklistStepSchema = z.object({
+  id: z.enum(['adminAccount', 'grchcCredentials', 'datasetImported', 'googleMapsKey']),
+  label: z.string(),
+  done: z.boolean(),
+  optional: z.boolean().optional(),
+  href: z.string().optional(),
+});
+
+export const setupChecklistResponseSchema = z.object({
+  steps: z.array(setupChecklistStepSchema),
+  blockingReady: z.boolean(),
+});
+
+export type SetupChecklistStep = z.infer<typeof setupChecklistStepSchema>;
+export type SetupChecklistResponse = z.infer<typeof setupChecklistResponseSchema>;

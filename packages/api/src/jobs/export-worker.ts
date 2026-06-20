@@ -1,11 +1,13 @@
 import { mkdirSync } from 'node:fs';
-import { loadEnv } from '../config/env.js';
+import { loadEnv, resetEnvCache } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { migrate } from '../db/migrate.js';
 import { processQueuedExports } from '../services/export-service.js';
 import { pruneExportHistory } from '../jobs/export-retention.js';
 import { registerWorkerShutdown, startWorkerPoll } from './worker-lifecycle.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
+import { subscribeConfigChanges } from '../config/runtime-config.js';
+import { watchConfigFileChanges } from '../config/config-reload-watcher.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -16,6 +18,7 @@ async function main(): Promise<void> {
   registerWorkerShutdown();
 
   let retentionRunning = false;
+  let restartPoll: ((intervalMs: number) => void) | null = null;
 
   const poll = async () => {
     try {
@@ -40,7 +43,16 @@ async function main(): Promise<void> {
     }
   };
 
-  startWorkerPoll(poll, env.EXPORT_POLL_INTERVAL_MS);
+  restartPoll = startWorkerPoll(poll, env.EXPORT_POLL_INTERVAL_MS);
+
+  subscribeConfigChanges(() => {
+    resetEnvCache();
+    const current = loadEnv();
+    mkdirSync(current.EXPORT_DIR, { recursive: true });
+    restartPoll?.(current.EXPORT_POLL_INTERVAL_MS);
+    logger.info('Export worker reloaded runtime config');
+  });
+  watchConfigFileChanges();
 }
 
 main().catch((err) => {

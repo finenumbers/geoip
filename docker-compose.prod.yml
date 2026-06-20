@@ -10,8 +10,6 @@ services:
     ports: !reset []
     environment:
       NODE_ENV: production
-      API_AUTH_ENABLED: ${API_AUTH_ENABLED:-true}
-      ACCESS_LOG_ENABLED: ${ACCESS_LOG_ENABLED:-true}
     healthcheck:
       test: ["CMD", "node", "/app/scripts/api-docker-healthcheck.mjs"]
       interval: 15s

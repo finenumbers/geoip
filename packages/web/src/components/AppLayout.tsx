@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Search,
   Table2,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -37,6 +38,12 @@ const nav: NavItem[] = [
     icon: Search,
     match: (pathname) => pathname.startsWith('/lookup'),
   },
+  {
+    to: '/admin',
+    label: ui.nav.admin,
+    icon: Settings,
+    match: (pathname) => pathname.startsWith('/admin'),
+  },
 ];
 
 export function AppLayout() {
@@ -46,6 +53,12 @@ export function AppLayout() {
     queryFn: api.dataset,
     refetchInterval: 30_000,
   });
+  const { data: checklist } = useQuery({
+    queryKey: ['setup-checklist'],
+    queryFn: api.setupChecklist,
+    refetchInterval: 30_000,
+  });
+  const showAdminBadge = checklist != null && !checklist.blockingReady;
 
   return (
     <div className="min-h-screen">
@@ -62,11 +75,20 @@ export function AppLayout() {
               title={item.label}
               aria-label={item.label}
               className={cn(
-                'rounded-lg p-3 text-muted transition-colors hover:bg-accent hover:text-foreground',
+                'relative flex w-14 flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-muted transition-colors hover:bg-accent hover:text-foreground',
                 active && 'bg-accent text-primary',
               )}
             >
               <Icon className="h-5 w-5" strokeWidth={1.75} />
+              {item.to === '/admin' && showAdminBadge && (
+                <span
+                  className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-amber-500"
+                  aria-hidden
+                />
+              )}
+              {item.to === '/admin' && (
+                <span className="text-[10px] font-medium leading-none">Admin</span>
+              )}
             </Link>
           );
         })}

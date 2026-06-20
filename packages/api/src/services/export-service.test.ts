@@ -44,13 +44,29 @@ describe('resolveExportFilePath', () => {
     resetEnvCache();
   });
 
-  it('writes under EXPORT_DIR', async () => {
+  it('writes under EXPORT_DIR from runtime config', async () => {
+    const configDir = mkdtempSync(join(tmpdir(), 'geoip-export-config-'));
     vi.stubEnv('DATABASE_URL', 'postgresql://geoip:geoip@localhost:5432/geoip');
-    vi.stubEnv('IMPORT_API_KEY', 'test-api-key-12345');
-    vi.stubEnv('EXPORT_DIR', '/tmp/test-exports-phase-c');
+    vi.stubEnv('CONFIG_DATA_DIR', configDir);
+    vi.stubEnv('CONFIG_MASTER_KEY', 'a'.repeat(64));
     vi.resetModules();
-    const { resolveExportFilePath } = await import('./export-service.js');
-    expect(resolveExportFilePath('abc-123')).toBe('/tmp/test-exports-phase-c/abc-123.csv');
+    try {
+      const { loadRuntimeConfig, persistRuntimeConfig } = await import('../config/runtime-config.js');
+      const config = loadRuntimeConfig();
+      persistRuntimeConfig(
+        {
+          ...config.settings,
+          export: { ...config.settings.export, dir: '/tmp/test-exports-phase-c' },
+        },
+        config.secrets,
+      );
+      const { resetEnvCache } = await import('../config/env.js');
+      resetEnvCache();
+      const { resolveExportFilePath } = await import('./export-service.js');
+      expect(resolveExportFilePath('abc-123')).toBe('/tmp/test-exports-phase-c/abc-123.csv');
+    } finally {
+      rmSync(configDir, { recursive: true, force: true });
+    }
   });
 });
 
