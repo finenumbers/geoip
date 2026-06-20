@@ -1,0 +1,23 @@
+# Local/CI image build overlay — NOT used by Portainer.
+# docker compose -f docker-compose.yml -f docker-compose.build.yml build api web
+services:
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    image: geoip-api:local
+  import:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    image: geoip-api:local
+  export:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    image: geoip-api:local
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    image: geoip-web:local

@@ -111,7 +111,7 @@ flowchart LR
 | `export_data` | Готовые CSV-экспорты |
 | `pg_backups` | Автобэкапы Postgres |
 
-> **Важно:** Compose path = **`docker-compose.portainer.yml`**. Не используйте `docker-compose.yml` — Portainer запустит `compose build` и упадёт с `lstat .../packages`.
+> **Важно:** после обновления репозитория нажмите **Pull and redeploy** — иначе Portainer использует старый compose с `build:` и ошибкой `lstat .../packages`.
 
 ---
 
@@ -476,16 +476,14 @@ Failed to deploy a stack: compose build operation failed:
 resolve : lstat /data/compose/58/packages: no such file or directory
 ```
 
-**Причина:** в Portainer указан **неверный Compose path** (`docker-compose.yml` или `infra/portainer/stack.compose.yml`). Эти файлы содержат `build: context: .` с `packages/`. Portainer **всегда** вызывает `compose build` по одному compose path и **игнорирует** переменную `COMPOSE_FILE`.
+**Причина:** Portainer деплоит **старую версию** compose из кэша stack (до commit с GHCR images) — в ней был `build: context: .` с `packages/`. Либо не нажали **Pull and redeploy** после `git push`.
 
 **Решение:**
 
-1. **Stacks → geoip → Editor** (или пересоздайте stack)
-2. **Compose path:** `docker-compose.portainer.yml` ← **именно этот файл**
-3. Удалите переменную `COMPOSE_FILE` если добавляли — она не работает
+1. **Stacks → geoip → Pull and redeploy** (обязательно — подтянуть последний `main`)
+2. Compose path: `docker-compose.portainer.yml` или `docker-compose.yml` — оба без `build:` в актуальном репозитории
+3. Удалите `COMPOSE_FILE` из env если есть
 4. **Update the stack**
-
-Файл `docker-compose.portainer.yml` не содержит `build:` — только `image: ghcr.io/finenumbers/...`.
 
 ### Stack не деплоится / «compose file not found»
 

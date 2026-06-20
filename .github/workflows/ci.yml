@@ -60,7 +60,7 @@ jobs:
         run: pnpm build
 
       - name: Docker build smoke
-        run: docker compose build api web
+        run: docker compose -f docker-compose.yml -f docker-compose.build.yml build api web
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps

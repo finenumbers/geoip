@@ -6,7 +6,7 @@
 docker-compose.portainer.yml
 ```
 
-**Не используйте** `docker-compose.yml`, `infra/portainer/stack.compose.yml` или `COMPOSE_FILE` — Portainer **игнорирует** `COMPOSE_FILE` и всегда запускает `compose build` по одному compose path. Файлы с `build:` падают с ошибкой `lstat .../packages: no such file or directory`.
+**Любой** compose path из репозитория (`docker-compose.yml`, `docker-compose.portainer.yml`) — без `build:`, только GHCR images. После push в GitHub нажмите **Pull and redeploy** в Portainer.
 
 ## Быстрый старт
 

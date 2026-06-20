@@ -35,9 +35,7 @@ services:
       start_period: 10s
 
   api:
-    build:
-      context: .
-      dockerfile: packages/api/Dockerfile
+    image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
     container_name: geoip_api
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-geoip}:${POSTGRES_PASSWORD:-geoip}@pgbouncer:6432/${POSTGRES_DB:-geoip}
@@ -60,9 +58,7 @@ services:
       start_period: 30s
 
   import:
-    build:
-      context: .
-      dockerfile: packages/api/Dockerfile
+    image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
     container_name: geoip_import
     command: ["node", "dist/jobs/import-worker.js"]
     environment:
@@ -80,9 +76,7 @@ services:
       - config_data:/data/geoip/config
 
   export:
-    build:
-      context: .
-      dockerfile: packages/api/Dockerfile
+    image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
     container_name: geoip_export
     command: ["node", "dist/jobs/export-worker.js"]
     environment:
@@ -100,9 +94,7 @@ services:
       - config_data:/data/geoip/config
 
   web:
-    build:
-      context: .
-      dockerfile: packages/web/Dockerfile
+    image: ghcr.io/finenumbers/geoip-web:${GEOIP_IMAGE_TAG:-latest}
     container_name: geoip_web
     environment:
       CONFIG_DATA_DIR: /data/geoip/config

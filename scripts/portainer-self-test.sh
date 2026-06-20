@@ -20,8 +20,9 @@ log_event() {
   curl -sS -X POST "$ENDPOINT" -H 'Content-Type: application/json' -H "X-Debug-Session-Id: $SESSION_ID" -d "$line" >/dev/null 2>&1 || true
 }
 
-mkdir -p "$SIM/infra/pgbouncer" "$SIM/scripts"
-cp "$ROOT/docker-compose.portainer.yml" "$ROOT/docker-compose.yml" "$SIM/"
+mkdir -p "$SIM/infra/portainer" "$SIM/infra/pgbouncer" "$SIM/scripts"
+cp "$ROOT/docker-compose.portainer.yml" "$ROOT/docker-compose.yml" "$ROOT/docker-compose.prod.yml" "$SIM/"
+cp "$ROOT/infra/portainer/stack.compose.yml" "$SIM/infra/portainer/"
 cp "$ROOT/infra/pgbouncer/"* "$SIM/infra/pgbouncer/"
 cp "$ROOT/scripts/backup-postgres.sh" "$SIM/scripts/"
 
@@ -30,30 +31,39 @@ has_packages=false
 log_event "A" "portainer-self-test:setup" "simulated Portainer stack dir" \
   "{\"simDir\":\"$SIM\",\"hasPackages\":$has_packages}"
 
-# Wrong Portainer path (docker-compose.yml) — build fails without packages/
-wrong_out=$(cd "$SIM" && docker compose -f docker-compose.yml build 2>&1 || true)
-wrong_fail=false
-echo "$wrong_out" | grep -q 'packages: no such file' && wrong_fail=true
-log_event "B" "portainer-self-test:wrong-path" "docker-compose.yml build (Portainer default mistake)" \
-  "{\"failedAsExpected\":$wrong_fail,\"snippet\":\"$(echo "$wrong_out" | tail -1 | sed 's/"/\\"/g')\"}"
+# Legacy Portainer compose paths — must NOT require packages/ after fix
+legacy_ok=true
+root_build=$(cd "$SIM" && docker compose -f docker-compose.yml build 2>&1 || true)
+root_packages_err=false
+echo "$root_build" | grep -q 'packages: no such file' && root_packages_err=true
+echo "$root_build" | grep -q 'No services to build' || root_packages_err=true
+log_event "G" "portainer-self-test:docker-compose-yml" "docker-compose.yml build without packages" \
+  "{\"packagesError\":$root_packages_err,\"noServicesToBuild\":$(echo "$root_build" | grep -q 'No services to build' && echo true || echo false)}"
+$root_packages_err && legacy_ok=false
 
-# Correct Portainer path — single file, no build
+stack_build=$(cd "$SIM/infra/portainer" && docker compose -f stack.compose.yml build 2>&1 || true)
+stack_packages_err=false
+echo "$stack_build" | grep -q 'packages: no such file' && stack_packages_err=true
+echo "$stack_build" | grep -q 'No services to build' || stack_packages_err=true
+log_event "G" "portainer-self-test:stack-compose-yml" "stack.compose.yml build without packages" \
+  "{\"packagesError\":$stack_packages_err,\"noServicesToBuild\":$(echo "$stack_build" | grep -q 'No services to build' && echo true || echo false)}"
+$stack_packages_err && legacy_ok=false
+
 port_cfg=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml config 2>/dev/null || true)
 build_count=$(printf '%s\n' "$port_cfg" | grep -c '^    build:' || true)
 ghcr_count=$(printf '%s\n' "$port_cfg" | grep -c '^    image: ghcr.io/finenumbers/' || true)
-build_out=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml build 2>&1 || true)
+port_build=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml build 2>&1 || true)
 no_build=false
-echo "$build_out" | grep -q 'No services to build' && no_build=true
+echo "$port_build" | grep -q 'No services to build' && no_build=true
 log_event "F" "portainer-self-test:portainer-yml" "docker-compose.portainer.yml build" \
   "{\"buildStanzaCount\":$build_count,\"ghcrImageCount\":$ghcr_count,\"noServicesToBuild\":$no_build}"
 
-# GHCR pull via portainer compose file
 pull_out=$(cd "$SIM" && docker compose -f docker-compose.portainer.yml pull api web 2>&1 || true)
 api_pulled=false
 web_pulled=false
 echo "$pull_out" | grep -q 'geoip-api.*Pulled\|geoip-api.*up to date' && api_pulled=true
 echo "$pull_out" | grep -q 'geoip-web.*Pulled\|geoip-web.*up to date' && web_pulled=true
-log_event "F" "portainer-self-test:ghcr-pull" "GHCR pull via portainer compose" \
+log_event "F" "portainer-self-test:ghcr-pull" "GHCR pull" \
   "{\"apiPulled\":$api_pulled,\"webPulled\":$web_pulled}"
 
 health_out=$(docker run --rm --entrypoint node ghcr.io/finenumbers/geoip-api:latest -e "console.log('image-ok')" 2>&1 || true)
@@ -64,7 +74,7 @@ log_event "F" "portainer-self-test:api-image" "api image runs" "{\"nodeExecOk\":
 rm -rf "$SIM"
 
 passed=0
-$wrong_fail && ((passed++)) || true
+$legacy_ok && ((passed++)) || true
 $no_build && ((passed++)) || true
 [[ "$build_count" -eq 0 ]] && ((passed++)) || true
 $api_pulled && ((passed++)) || true
