@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { loadEnv } from './config/env.js';
+import { loadEnv, resetEnvCache } from './config/env.js';
 import { logger } from './config/logger.js';
 import { migrate } from './db/migrate.js';
 import { closeDb } from './db/client.js';
@@ -9,6 +9,8 @@ import { recoverStaleImportRuns } from './jobs/import-orphan-recovery.js';
 import { ensureAsnMappingsInBackground } from './sql/asn-backfill.js';
 import { ensureDatasetCachesInBackground } from './sql/filter-count-cache-ensure.js';
 import { ensureDatasetVolumesInBackground } from './sql/dataset-volumes-backfill.js';
+import { subscribeConfigChanges } from './config/runtime-config.js';
+import { watchConfigFileChanges } from './config/config-reload-watcher.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -25,8 +27,15 @@ async function main(): Promise<void> {
   ensureDatasetVolumesInBackground();
   recreateMaterializedViewsInBackground();
 
+  subscribeConfigChanges(() => {
+    resetEnvCache();
+    logger.info('API reloaded runtime config from volume');
+  });
+  const stopConfigWatch = watchConfigFileChanges();
+
   const shutdown = async () => {
     logger.info('Shutting down');
+    stopConfigWatch();
     await app.close();
     await closeDb();
     process.exit(0);

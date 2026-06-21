@@ -24,6 +24,8 @@ export const CONFIG_FILES = {
   secrets: 'secrets.enc',
   meta: 'meta.json',
   lock: '.lock',
+  generatedMasterKey: '.master-key',
+  proxyEnv: 'proxy.env',
 } as const;
 
 export type ConfigMeta = {
@@ -46,6 +48,8 @@ export type ConfigStorePaths = {
   secretsPath: string;
   metaPath: string;
   lockPath: string;
+  generatedMasterKeyPath: string;
+  proxyEnvPath: string;
 };
 
 export function resolveConfigPaths(configDir: string): ConfigStorePaths {
@@ -55,6 +59,8 @@ export function resolveConfigPaths(configDir: string): ConfigStorePaths {
     secretsPath: join(configDir, CONFIG_FILES.secrets),
     metaPath: join(configDir, CONFIG_FILES.meta),
     lockPath: join(configDir, CONFIG_FILES.lock),
+    generatedMasterKeyPath: join(configDir, CONFIG_FILES.generatedMasterKey),
+    proxyEnvPath: join(configDir, CONFIG_FILES.proxyEnv),
   };
 }
 
@@ -74,6 +80,9 @@ function acquireFileLock(lockPath: string): number {
     if (ageMs <= STALE_LOCK_MS) {
       throw new Error('Config store is locked by another process');
     }
+    process.stderr.write(
+      `[config-store] Removing stale config lock (age ${Math.round(ageMs / 1000)}s)\n`,
+    );
     unlinkSync(lockPath);
     return openSync(lockPath, 'wx');
   }
@@ -158,6 +167,36 @@ export function configStoreExists(paths: ConfigStorePaths): boolean {
   return settingsFileExists(paths) || secretsFileExists(paths);
 }
 
+function readGeneratedMasterKey(paths: ConfigStorePaths): string | null {
+  if (!existsSync(paths.generatedMasterKeyPath)) return null;
+  const key = readFileSync(paths.generatedMasterKeyPath, 'utf8').trim();
+  return key.length > 0 ? key : null;
+}
+
+function writeGeneratedMasterKey(paths: ConfigStorePaths, key: string): void {
+  ensureConfigDir(paths.dir);
+  atomicWriteFile(paths.generatedMasterKeyPath, `${key}\n`, 0o600);
+}
+
+function migrateLegacyGeneratedMasterKey(
+  paths: ConfigStorePaths,
+  meta: ConfigMeta,
+): { key: string | null; metaUpdated: ConfigMeta } {
+  const legacy = (meta as ConfigMeta & { generatedMasterKey?: string }).generatedMasterKey;
+  if (!legacy) {
+    return { key: null, metaUpdated: meta };
+  }
+  writeGeneratedMasterKey(paths, legacy);
+  const metaUpdated: ConfigMeta = {
+    version: meta.version,
+    updatedAt: meta.updatedAt,
+    migratedFromEnv: meta.migratedFromEnv,
+    masterKeyGenerated: true,
+  };
+  writeConfigMeta(paths, metaUpdated);
+  return { key: legacy, metaUpdated };
+}
+
 export function resolveMasterKey(
   bootstrapKey: string | undefined,
   meta: ConfigMeta,
@@ -166,18 +205,25 @@ export function resolveMasterKey(
   if (bootstrapKey && bootstrapKey.length > 0) {
     return { key: bootstrapKey, metaUpdated: meta };
   }
+
+  const fromFile = readGeneratedMasterKey(paths);
+  if (fromFile) {
+    return { key: fromFile, metaUpdated: meta };
+  }
+
   if (existsSync(paths.metaPath)) {
     const stored = readConfigMeta(paths);
-    const storedKey = (stored as ConfigMeta & { generatedMasterKey?: string }).generatedMasterKey;
-    if (storedKey) {
-      return { key: storedKey, metaUpdated: stored };
+    const migrated = migrateLegacyGeneratedMasterKey(paths, stored);
+    if (migrated.key) {
+      return { key: migrated.key, metaUpdated: migrated.metaUpdated };
     }
   }
+
   const generated = generateMasterKeyHex();
-  const metaUpdated: ConfigMeta & { generatedMasterKey: string } = {
+  writeGeneratedMasterKey(paths, generated);
+  const metaUpdated: ConfigMeta = {
     ...meta,
     masterKeyGenerated: true,
-    generatedMasterKey: generated,
   };
   writeConfigMeta(paths, metaUpdated);
   return { key: generated, metaUpdated };
@@ -187,7 +233,13 @@ export function withConfigLock<T>(paths: ConfigStorePaths, fn: () => T): T {
   return withFileLock(paths.lockPath, fn);
 }
 
-export function writeProxyEnv(paths: ConfigStorePaths, apiKey: string): void {
-  ensureConfigDir(paths.dir);
-  atomicWriteFile(join(paths.dir, 'proxy.env'), `API_KEY=${apiKey}\n`, 0o600);
+export function syncProxyEnv(paths: ConfigStorePaths, apiKey: string): void {
+  if (apiKey) {
+    ensureConfigDir(paths.dir);
+    atomicWriteFile(paths.proxyEnvPath, `API_KEY=${apiKey}\n`, 0o600);
+    return;
+  }
+  if (existsSync(paths.proxyEnvPath)) {
+    unlinkSync(paths.proxyEnvPath);
+  }
 }

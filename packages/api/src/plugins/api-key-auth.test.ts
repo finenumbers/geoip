@@ -41,6 +41,17 @@ describe('api-key-auth', () => {
     await app.close();
   });
 
+  it('rejects wrong key on always-protected routes', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/always',
+      headers: { 'x-api-key': 'wrong-key' },
+    });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
   it('rejects missing key when API auth is enabled', async () => {
     const app = await buildTestApp();
     const res = await app.inject({ method: 'GET', url: '/protected' });

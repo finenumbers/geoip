@@ -1,5 +1,4 @@
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   runtimeSettingsSchema,
   runtimeSecretsSchema,
@@ -24,7 +23,7 @@ import {
   writeConfigMeta,
   writeSecrets,
   writeSettings,
-  writeProxyEnv,
+  syncProxyEnv,
   withConfigLock,
   settingsFileExists,
   secretsFileExists,
@@ -138,9 +137,7 @@ function persistRuntimeConfigUnlocked(
 
   writeSettings(paths, normalizedSettings);
   writeSecrets(paths, normalizedSecrets, masterKey);
-  if (normalizedSecrets.api.apiKey) {
-    writeProxyEnv(paths, normalizedSecrets.api.apiKey);
-  }
+  syncProxyEnv(paths, normalizedSecrets.api.apiKey);
   const updatedMeta = { ...meta, updatedAt: new Date().toISOString() };
   writeConfigMeta(paths, updatedMeta);
 
@@ -210,15 +207,15 @@ function loadFromDiskUnlocked(): RuntimeConfig {
 
   const settingsChanged = JSON.stringify(settings) !== JSON.stringify(diskSettings);
   const secretsChanged = JSON.stringify(secrets) !== JSON.stringify(diskSecrets);
-  const proxyPath = join(paths.dir, 'proxy.env');
-  const needsProxyEnv = Boolean(secrets.api.apiKey) && !existsSync(proxyPath);
+  const proxyExists = existsSync(paths.proxyEnvPath);
+  const needsProxySync =
+    (Boolean(secrets.api.apiKey) && !proxyExists) ||
+    (!secrets.api.apiKey && proxyExists);
 
-  if (settingsChanged || secretsChanged || needsProxyEnv) {
+  if (settingsChanged || secretsChanged || needsProxySync) {
     writeSettings(paths, settings);
     writeSecrets(paths, secrets, masterKey);
-    if (secrets.api.apiKey) {
-      writeProxyEnv(paths, secrets.api.apiKey);
-    }
+    syncProxyEnv(paths, secrets.api.apiKey);
     meta = { ...meta, updatedAt: new Date().toISOString() };
     writeConfigMeta(paths, meta);
   }

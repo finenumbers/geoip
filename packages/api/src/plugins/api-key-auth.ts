@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { loadEnv } from '../config/env.js';
+import { secureStringEqual } from '../utils/secure-compare.js';
 
 function extractApiKey(request: FastifyRequest): string | undefined {
   const header = request.headers['x-api-key'];
@@ -17,7 +18,7 @@ export async function registerApiKeyAuth(app: FastifyInstance): Promise<void> {
   app.decorate('verifyApiKey', async (request: FastifyRequest, reply: FastifyReply) => {
     const env = loadEnv();
     const key = extractApiKey(request);
-    if (!key || key !== env.API_KEY) {
+    if (!key || !secureStringEqual(key, env.API_KEY)) {
       rejectUnauthorized(reply);
       return;
     }
@@ -28,7 +29,7 @@ export async function registerApiKeyAuth(app: FastifyInstance): Promise<void> {
     if (!env.API_AUTH_ENABLED) return;
 
     const key = extractApiKey(request);
-    if (!key || key !== env.API_KEY) {
+    if (!key || !secureStringEqual(key, env.API_KEY)) {
       rejectUnauthorized(reply);
     }
   });

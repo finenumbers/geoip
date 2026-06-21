@@ -37,9 +37,17 @@ export async function registerDatasetRoutes(app: FastifyInstance): Promise<void>
     };
   });
 
-  app.get('/api/v1/imports', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request) => {
-    const requested = Number((request.query as { limit?: string }).limit ?? getImportHistoryLimit());
-    return listImportRuns(requested);
+  app.get('/api/v1/imports', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {
+    const parsed = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+      })
+      .safeParse(request.query);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
+    }
+    const limit = parsed.data.limit ?? getImportHistoryLimit();
+    return listImportRuns(limit);
   });
 
   app.get('/api/v1/imports/:id', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {

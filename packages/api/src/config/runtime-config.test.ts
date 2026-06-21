@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import {
   resetRuntimeConfigCache,
   toAdminConfigResponse,
   persistRuntimeConfig,
+  getConfigPaths,
 } from './runtime-config.js';
 import { resetBootstrapEnvCache } from './bootstrap-env.js';
 import { ensureGeneratedMasterKeyForTests } from './runtime-config.js';
@@ -79,5 +80,22 @@ describe('runtime-config', () => {
     resetRuntimeConfigCache();
     const reloaded = loadRuntimeConfig();
     expect(reloaded.secrets.api.importApiKey).toBe(importKey);
+  });
+
+  it('removes proxy.env when external API key is cleared', () => {
+    const config = loadRuntimeConfig();
+    persistRuntimeConfig(config.settings, {
+      ...config.secrets,
+      api: { ...config.secrets.api, apiKey: 'external-key-for-proxy' },
+    });
+    expect(existsSync(getConfigPaths().proxyEnvPath)).toBe(true);
+
+    const updated = loadRuntimeConfig();
+    persistRuntimeConfig(updated.settings, {
+      ...updated.secrets,
+      api: { ...updated.secrets.api, apiKey: '' },
+    });
+    resetRuntimeConfigCache();
+    expect(existsSync(getConfigPaths().proxyEnvPath)).toBe(false);
   });
 });
