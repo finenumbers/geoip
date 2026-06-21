@@ -78,7 +78,7 @@ export function AdminSetupApiKeyPage() {
     <AdminAuthShell title={ui.admin.setupApiKeyTitle}>
       <p className="mb-6 max-w-md text-sm text-muted">{ui.admin.setupApiKeyHint}</p>
       <form
-        className="mx-auto w-full max-w-md space-y-4"
+        className="w-full max-w-md space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);

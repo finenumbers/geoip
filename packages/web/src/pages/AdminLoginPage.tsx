@@ -48,7 +48,7 @@ export function AdminLoginPage() {
   return (
     <AdminAuthShell title={ui.admin.loginTitle}>
       <form
-        className="mx-auto w-full max-w-md space-y-4"
+        className="w-full max-w-md space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);

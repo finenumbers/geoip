@@ -46,7 +46,7 @@ export function AdminSetupPage() {
     <AdminAuthShell title={ui.admin.setupTitle}>
       <p className="mb-6 text-sm text-muted">{ui.admin.setupHint}</p>
       <form
-        className="mx-auto w-full max-w-md space-y-4"
+        className="w-full max-w-md space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
