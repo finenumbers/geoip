@@ -3,6 +3,7 @@ import type {
   AdminConfigPatch,
   AdminSessionInfo,
   AdminReloadStatus,
+  PublicRuntimeConfig,
 } from '@geoip/shared';
 
 const ADMIN_BASE = '/api/v1/admin';
@@ -77,8 +78,8 @@ export const adminApi = {
 
 export type { AdminConfigResponse, AdminConfigPatch };
 
-export async function fetchPublicRuntime(): Promise<{ googleMapsApiKey: string }> {
+export async function fetchPublicRuntime(): Promise<PublicRuntimeConfig> {
   const res = await fetch('/api/v1/public/runtime');
-  if (!res.ok) return { googleMapsApiKey: '' };
-  return res.json() as Promise<{ googleMapsApiKey: string }>;
+  if (!res.ok) return { googleMapsApiKey: '', displayTimezone: '' };
+  return res.json() as Promise<PublicRuntimeConfig>;
 }

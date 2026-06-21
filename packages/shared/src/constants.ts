@@ -39,12 +39,6 @@ export const CSV_IMPORT_FILE_MAP = {
 export type CsvImportStagingTable =
   (typeof CSV_IMPORT_FILE_MAP)[keyof typeof CSV_IMPORT_FILE_MAP];
 
-export const ZIP_PATTERNS = {
-  city: /^RU-GeoIP-City-CSV_(\d{8})\.zip$/,
-  country: /^RU-GeoIP-Country-CSV_(\d{8})\.zip$/,
-  asn: /^RU-GeoIP-ASN-CSV_(\d{8})\.zip$/,
-} as const;
-
 export const CITY_TABLE_SORT_FIELDS = [
   'network',
   'prefix_len',

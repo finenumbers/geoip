@@ -20,5 +20,7 @@ data/
 packages/api/data/
 **/secrets.enc
 **/proxy.env
+**/meta.json
+**/.master-key
 backups/
 *.sql.gz

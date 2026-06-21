@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { FIXED_IMPORT_CRON, FIXED_IMPORT_TIMEZONE } from '@geoip/shared';
+import { FIXED_IMPORT_CRON, FIXED_IMPORT_TIMEZONE, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
 import { getDatasetState, listImportRuns, getImportRunById } from '../repositories/dataset-repository.js';
 import { getImportHistoryLimit } from '../jobs/import-history-retention.js';
 import { loadEnv } from '../config/env.js';
@@ -12,7 +12,7 @@ export async function registerDatasetRoutes(app: FastifyInstance): Promise<void>
   app.get('/api/v1/dataset/active', { preHandler: [app.verifyApiKeyIfEnabled] }, async () => {
     const state = await getDatasetState();
     const config = loadRuntimeConfig();
-    const displayTimezone = config.settings.general.displayTimezone.trim() || 'Europe/Moscow';
+    const displayTimezone = config.settings.general.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE;
 
     const sizeResult = await query<{ size: string }>(
       'SELECT pg_database_size(current_database()) AS size',

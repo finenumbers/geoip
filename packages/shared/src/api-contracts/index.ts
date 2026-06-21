@@ -187,17 +187,6 @@ export const tableResponseSchema = z.object({
   }),
 });
 
-export const exportJobSchema = z.object({
-  id: z.string().uuid(),
-  status: z.enum(['queued', 'running', 'succeeded', 'failed']),
-  tableType: z.enum(['city', 'country']),
-  createdAt: z.string().datetime(),
-  finishedAt: z.string().datetime().nullable(),
-  downloadPath: z.string().nullable(),
-  errorMessage: z.string().nullable(),
-  rowCount: z.number().nullable(),
-});
-
 export const exportRequestSchema = z.object({
   tableType: z.enum(['city', 'country']),
   filters: z.array(filterClauseSchema).default([]),
@@ -220,11 +209,6 @@ export const exportStatusResponseSchema = z.object({
   finishedAt: z.string().datetime().nullable(),
   errorMessage: z.string().nullable(),
   rowCount: z.number().nullable(),
-});
-
-export const healthResponseSchema = z.object({
-  status: z.literal('ok'),
-  timestamp: z.string().datetime(),
 });
 
 export const readyResponseSchema = z.object({
@@ -288,18 +272,14 @@ export const metricsResponseSchema = z.object({
 
 export type ImportRun = z.infer<typeof importRunSchema>;
 export type DatasetState = z.infer<typeof datasetStateSchema>;
-export type LookupRequest = z.infer<typeof lookupRequestSchema>;
 export type LookupResponse = z.infer<typeof lookupResponseSchema>;
 export type FilterClause = z.infer<typeof filterClauseSchema>;
 export type SortClause = z.infer<typeof sortClauseSchema>;
-export type TableQuery = z.infer<typeof tableQuerySchema>;
-export type ExportJob = z.infer<typeof exportJobSchema>;
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
 export type ExportCreateResponse = z.infer<typeof exportCreateResponseSchema>;
 export type ExportStatusResponse = z.infer<typeof exportStatusResponseSchema>;
 export type MetricsResponse = z.infer<typeof metricsResponseSchema>;
 export type ReadyResponse = z.infer<typeof readyResponseSchema>;
-export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ImportRunListResponse = z.infer<typeof importRunListSchema>;
 export type TableResponse = z.infer<typeof tableResponseSchema>;
 export type TableBrowseRow = z.infer<typeof tableBrowseRowSchema>;
@@ -335,5 +315,4 @@ export const setupChecklistResponseSchema = z.object({
   blockingReady: z.boolean(),
 });
 
-export type SetupChecklistStep = z.infer<typeof setupChecklistStepSchema>;
 export type SetupChecklistResponse = z.infer<typeof setupChecklistResponseSchema>;

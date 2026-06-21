@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 export const cityBlockCsvHeaders = [
   'network',
   'geoname_id',
@@ -56,52 +54,6 @@ export const asnBlockCsvHeaders = [
   'autonomous_system_number',
   'autonomous_system_organization',
 ] as const;
-
-export const cityBlockRowSchema = z.object({
-  network: z.string(),
-  geoname_id: z.string(),
-  registered_country_geoname_id: z.string().optional(),
-  represented_country_geoname_id: z.string().optional(),
-  postal_code: z.string().optional(),
-  latitude: z.string().optional(),
-  longitude: z.string().optional(),
-  accuracy_radius: z.string().optional(),
-});
-
-export const countryBlockRowSchema = z.object({
-  network: z.string(),
-  geoname_id: z.string(),
-  registered_country_geoname_id: z.string().optional(),
-  represented_country_geoname_id: z.string().optional(),
-});
-
-export const locationRowSchema = z.object({
-  geoname_id: z.string(),
-  locale_code: z.string(),
-  continent_code: z.string().optional(),
-  continent_name: z.string().optional(),
-  country_iso_code: z.string().optional(),
-  country_name: z.string().optional(),
-  subdivision_1_iso_code: z.string().optional(),
-  subdivision_1_name: z.string().optional(),
-  subdivision_2_iso_code: z.string().optional(),
-  subdivision_2_name: z.string().optional(),
-  city_name: z.string().optional(),
-  metro_code: z.string().optional(),
-  time_zone: z.string().optional(),
-  is_in_european_union: z.string().optional(),
-});
-
-export const asnBlockRowSchema = z.object({
-  network: z.string(),
-  autonomous_system_number: z.string(),
-  autonomous_system_organization: z.string().optional(),
-});
-
-export type CityBlockCsvRow = z.infer<typeof cityBlockRowSchema>;
-export type CountryBlockCsvRow = z.infer<typeof countryBlockRowSchema>;
-export type LocationCsvRow = z.infer<typeof locationRowSchema>;
-export type AsnBlockCsvRow = z.infer<typeof asnBlockRowSchema>;
 
 export function validateCsvHeaders(
   actual: string[],

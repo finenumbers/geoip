@@ -31,16 +31,25 @@ export const CONFIG_FILES = {
 export type ConfigMeta = {
   version: number;
   updatedAt: string | null;
-  migratedFromEnv: boolean;
   masterKeyGenerated: boolean;
 };
 
 const DEFAULT_META: ConfigMeta = {
   version: 1,
   updatedAt: null,
-  migratedFromEnv: false,
   masterKeyGenerated: false,
 };
+
+function normalizeConfigMeta(raw: Record<string, unknown>): ConfigMeta {
+  return {
+    version: typeof raw.version === 'number' ? raw.version : DEFAULT_META.version,
+    updatedAt: typeof raw.updatedAt === 'string' || raw.updatedAt === null ? raw.updatedAt : DEFAULT_META.updatedAt,
+    masterKeyGenerated:
+      typeof raw.masterKeyGenerated === 'boolean'
+        ? raw.masterKeyGenerated
+        : DEFAULT_META.masterKeyGenerated,
+  };
+}
 
 export type ConfigStorePaths = {
   dir: string;
@@ -118,8 +127,8 @@ export function readConfigMeta(paths: ConfigStorePaths): ConfigMeta {
   if (!existsSync(paths.metaPath)) {
     return { ...DEFAULT_META };
   }
-  const raw = JSON.parse(readFileSync(paths.metaPath, 'utf8')) as Partial<ConfigMeta>;
-  return { ...DEFAULT_META, ...raw };
+  const raw = JSON.parse(readFileSync(paths.metaPath, 'utf8')) as Record<string, unknown>;
+  return normalizeConfigMeta(raw);
 }
 
 export function writeConfigMeta(paths: ConfigStorePaths, meta: ConfigMeta): void {
@@ -182,7 +191,11 @@ function migrateLegacyGeneratedMasterKey(
   paths: ConfigStorePaths,
   meta: ConfigMeta,
 ): { key: string | null; metaUpdated: ConfigMeta } {
-  const legacy = (meta as ConfigMeta & { generatedMasterKey?: string }).generatedMasterKey;
+  if (!existsSync(paths.metaPath)) {
+    return { key: null, metaUpdated: meta };
+  }
+  const raw = JSON.parse(readFileSync(paths.metaPath, 'utf8')) as { generatedMasterKey?: string };
+  const legacy = raw.generatedMasterKey?.trim();
   if (!legacy) {
     return { key: null, metaUpdated: meta };
   }
@@ -190,7 +203,6 @@ function migrateLegacyGeneratedMasterKey(
   const metaUpdated: ConfigMeta = {
     version: meta.version,
     updatedAt: meta.updatedAt,
-    migratedFromEnv: meta.migratedFromEnv,
     masterKeyGenerated: true,
   };
   writeConfigMeta(paths, metaUpdated);

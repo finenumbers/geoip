@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { DEFAULT_DISPLAY_TIMEZONE, FIXED_IMPORT_TIMEZONE } from './constants.js';
 
 export const DEFAULT_GEOIP_LK_BASE_URL = 'https://geoip.noc.gov.ru';
 
 export const runtimeSettingsSchema = z.object({
   general: z
     .object({
-      displayTimezone: z.string().default('Europe/Moscow'),
+      displayTimezone: z.string().default(DEFAULT_DISPLAY_TIMEZONE),
     })
     .default({}),
   geoipLk: z
@@ -16,7 +17,7 @@ export const runtimeSettingsSchema = z.object({
   import: z
     .object({
       cron: z.string().min(1).default('0 10 * * *'),
-      cronTimezone: z.string().default('Europe/Moscow'),
+      cronTimezone: z.string().default(FIXED_IMPORT_TIMEZONE),
       pollIntervalMs: z.number().int().positive().default(5000),
       staleMinutes: z.number().int().min(5).max(120).default(20),
       downloadDir: z.string().default('/tmp/geoip-import'),
@@ -162,7 +163,6 @@ export type AdminConfigResponse = {
     version: number;
     updatedAt: string | null;
     setupComplete: boolean;
-    migratedFromEnv: boolean;
   };
   reloadHints: {
     requiresApiRestart: string[];

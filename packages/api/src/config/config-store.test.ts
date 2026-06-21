@@ -39,7 +39,6 @@ describe('config-store', () => {
     writeConfigMeta(paths, {
       version: 1,
       updatedAt: null,
-      migratedFromEnv: false,
       masterKeyGenerated: true,
     });
     writeFileSync(
@@ -47,7 +46,7 @@ describe('config-store', () => {
       JSON.stringify({
         version: 1,
         updatedAt: null,
-        migratedFromEnv: false,
+        migratedFromEnv: true,
         masterKeyGenerated: true,
         generatedMasterKey: legacyKey,
       }),
@@ -68,5 +67,26 @@ describe('config-store', () => {
 
     syncProxyEnv(paths, '');
     expect(existsSync(paths.proxyEnvPath)).toBe(false);
+  });
+
+  it('ignores legacy migratedFromEnv in meta.json on read', () => {
+    const paths = resolveConfigPaths(configDir);
+    writeFileSync(
+      paths.metaPath,
+      JSON.stringify({
+        version: 1,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        migratedFromEnv: true,
+        masterKeyGenerated: false,
+      }),
+      { mode: 0o640 },
+    );
+
+    expect(readConfigMeta(paths)).toEqual({
+      version: 1,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      masterKeyGenerated: false,
+    });
+    expect(JSON.parse(readFileSync(paths.metaPath, 'utf8'))).toHaveProperty('migratedFromEnv');
   });
 });

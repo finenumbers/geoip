@@ -163,7 +163,6 @@ function loadFromDiskUnlocked(): RuntimeConfig {
   meta = metaUpdated;
 
   const hasStore = settingsFileExists(paths) && secretsFileExists(paths);
-  let migratedFromEnv = meta.migratedFromEnv;
 
   if (!hasStore) {
     const settings = applyEnvironmentProfile(DEFAULT_RUNTIME_SETTINGS, bootstrap.NODE_ENV);
@@ -173,10 +172,8 @@ function loadFromDiskUnlocked(): RuntimeConfig {
     meta = {
       ...meta,
       updatedAt: new Date().toISOString(),
-      migratedFromEnv: false,
     };
     writeConfigMeta(paths, meta);
-    migratedFromEnv = false;
   }
 
   const diskSettings = readSettings(paths);
@@ -223,7 +220,7 @@ function loadFromDiskUnlocked(): RuntimeConfig {
   return {
     settings,
     secrets,
-    meta: { ...meta, migratedFromEnv },
+    meta,
     masterKey,
   };
 }
@@ -341,7 +338,6 @@ export function toAdminConfigResponse(config: RuntimeConfig): AdminConfigRespons
       version: meta.version,
       updatedAt: meta.updatedAt,
       setupComplete,
-      migratedFromEnv: meta.migratedFromEnv,
     },
     reloadHints: getReloadHints(),
   };

@@ -38,7 +38,6 @@ describe('runtime-config', () => {
     expect(config.secrets.geoipLk.password).toBe('');
     expect(config.secrets.api.importApiKey.length).toBeGreaterThanOrEqual(64);
     expect(config.secrets.api.apiKey).toBe('');
-    expect(config.meta.migratedFromEnv).toBe(false);
 
     const response = toAdminConfigResponse(config);
     expect(response.secrets.geoipLk.password.hasValue).toBe(false);

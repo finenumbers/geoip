@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { adminLoginSchema, adminSetupSchema } from '@geoip/shared';
+import { adminLoginSchema, adminSetupSchema, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
 import { loadBootstrapEnv } from '../config/bootstrap-env.js';
 import { loadRuntimeConfig, toAdminConfigResponse } from '../config/runtime-config.js';
 import {
@@ -187,7 +187,7 @@ export async function registerPublicConfigRoutes(app: FastifyInstance): Promise<
     const config = loadRuntimeConfig();
     return {
       googleMapsApiKey: env.GOOGLE_MAPS_API_KEY,
-      displayTimezone: config.settings.general.displayTimezone.trim() || 'Europe/Moscow',
+      displayTimezone: config.settings.general.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE,
     };
   });
 

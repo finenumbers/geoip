@@ -1,5 +1,6 @@
 import { defineConfig } from 'drizzle-kit';
 
+/** Schema reference for drizzle-orm queries. Migrations are hand-written SQL in ./migrations/. */
 export default defineConfig({
   schema: './src/db/schema.ts',
   out: './migrations',

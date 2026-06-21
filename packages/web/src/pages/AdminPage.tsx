@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminConfigPatch, AdminConfigResponse } from '@geoip/shared';
-import { DISPLAY_TIMEZONE_OPTIONS } from '@geoip/shared';
+import { DISPLAY_TIMEZONE_OPTIONS, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
@@ -216,7 +216,7 @@ export function AdminPage() {
               onClick={() =>
                 save.mutate({
                   settings: {
-                    general: { displayTimezone: form.displayTimezone.trim() || 'Europe/Moscow' },
+                    general: { displayTimezone: form.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE },
                   },
                 })
               }
@@ -559,7 +559,7 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
   const [geoipLkEmail, setGeoipLkEmail] = useState('');
   const [geoipLkPassword, setGeoipLkPassword] = useState('');
   const [geoipLkBaseUrl, setGeoipLkBaseUrl] = useState('');
-  const [displayTimezone, setDisplayTimezone] = useState('Europe/Moscow');
+  const [displayTimezone, setDisplayTimezone] = useState(DEFAULT_DISPLAY_TIMEZONE);
   const [zipCacheEnabled, setZipCacheEnabled] = useState(true);
   const [skipUnchanged, setSkipUnchanged] = useState(false);
   const [stagingSnapshot, setStagingSnapshot] = useState(true);

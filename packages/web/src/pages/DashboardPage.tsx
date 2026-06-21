@@ -6,7 +6,7 @@ import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
 import { SetupChecklistBanner } from '@/components/SetupChecklistBanner';
 import { SystemInitializingBanner } from '@/components/SystemInitializingBanner';
-import { isDatasetInitializing } from '@geoip/shared';
+import { isDatasetInitializing, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
 import {
   formatSystemCheckLabel,
   formatSystemCheckStatus,
@@ -154,7 +154,7 @@ export function DashboardPage() {
   const mvStatus = metrics?.mvStatus ?? dataset?.mvStatus;
   const isInitializing = isDatasetInitializing(datasetDate, mvStatus);
   const volumes = dataset?.volumes;
-  const displayTimezone = dataset?.displayTimezone ?? 'Europe/Moscow';
+  const displayTimezone = dataset?.displayTimezone ?? DEFAULT_DISPLAY_TIMEZONE;
 
   const toggleImportDetail = (runId: string) => {
     setSelectedImportId((current) => (current === runId ? null : runId));

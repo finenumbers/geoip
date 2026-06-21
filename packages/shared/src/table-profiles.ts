@@ -15,7 +15,7 @@ export type TableProfile = {
   uiSortFields: readonly string[];
 };
 
-export const CITY_TABLE_PROFILE: TableProfile = {
+const CITY_TABLE_PROFILE: TableProfile = {
   filterFields: [
     'network',
     'prefix_len',
@@ -37,7 +37,7 @@ export const CITY_TABLE_PROFILE: TableProfile = {
   ],
 };
 
-export const COUNTRY_TABLE_PROFILE: TableProfile = {
+const COUNTRY_TABLE_PROFILE: TableProfile = {
   filterFields: [
     'network',
     'prefix_len',
@@ -51,7 +51,7 @@ export const COUNTRY_TABLE_PROFILE: TableProfile = {
   uiSortFields: ['network', 'country_iso_code', 'country_name'],
 };
 
-export const TABLE_PROFILES: Record<TableType, TableProfile> = {
+const TABLE_PROFILES: Record<TableType, TableProfile> = {
   city: CITY_TABLE_PROFILE,
   country: COUNTRY_TABLE_PROFILE,
 };

@@ -1,6 +1,6 @@
 import { CookieJar } from 'tough-cookie';
 import { fetch as undiciFetch, Agent, type RequestInit as UndiciRequestInit } from 'undici';
-import { DEFAULT_GEOIP_LK_BASE_URL, ZIP_PATTERNS } from '@geoip/shared';
+import { DEFAULT_GEOIP_LK_BASE_URL } from '@geoip/shared';
 
 export type DownloadType = 'city' | 'country' | 'asn';
 
@@ -160,6 +160,3 @@ export class GrchcClient {
     return response.body as ReadableStream<Uint8Array>;
   }
 }
-
-// Keep patterns exported for validation elsewhere
-export { ZIP_PATTERNS };
