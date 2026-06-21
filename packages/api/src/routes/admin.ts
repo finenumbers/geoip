@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { adminLoginSchema, adminSetupSchema, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
-import { loadBootstrapEnv } from '../config/bootstrap-env.js';
 import { loadRuntimeConfig, toAdminConfigResponse } from '../config/runtime-config.js';
 import {
   AdminConfigError,
@@ -13,14 +12,15 @@ import {
   parseSessionToken,
   SESSION_COOKIE,
   sessionCookieOptions,
+  sessionCookieSecure,
 } from '../services/admin-session.js';
 import { clientIp, publicClientIp } from '../utils/client-ip.js';
 import { lookupServerPublicIp } from '../utils/external-ip-lookup.js';
-import { checkAdminAuthRateLimit } from '../utils/admin-auth-rate-limit.js';
+import { isAdminAuthRateLimited, recordAdminAuthFailure } from '../utils/admin-auth-rate-limit.js';
 
-function setSessionCookie(reply: FastifyReply, username: string): void {
+function setSessionCookie(reply: FastifyReply, request: FastifyRequest, username: string): void {
   const config = loadRuntimeConfig();
-  const secure = loadBootstrapEnv().NODE_ENV === 'production';
+  const secure = sessionCookieSecure(request);
   const token = createSessionToken(username, config.secrets.admin.sessionSecret);
   reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions(secure));
 }
@@ -38,7 +38,7 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
 
   app.post('/api/v1/admin/auth/setup', async (request, reply) => {
     const ip = clientIp(request);
-    if (!checkAdminAuthRateLimit(ip)) {
+    if (isAdminAuthRateLimited(ip)) {
       return reply.status(429).send({
         error: 'TooManyRequests',
         message: 'Слишком много попыток настройки. Попробуйте позже.',
@@ -47,14 +47,16 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
 
     const parsed = adminSetupSchema.safeParse(request.body);
     if (!parsed.success) {
+      recordAdminAuthFailure(ip);
       return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
     }
 
     try {
       completeAdminSetup(parsed.data);
-      setSessionCookie(reply, parsed.data.username);
+      setSessionCookie(reply, request, parsed.data.username);
       return { ok: true, username: parsed.data.username };
     } catch (err) {
+      recordAdminAuthFailure(ip);
       if (err instanceof AdminConfigError) {
         return reply.status(400).send({ error: err.code, message: err.message });
       }
@@ -64,7 +66,7 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
 
   app.post('/api/v1/admin/auth/login', async (request, reply) => {
     const ip = clientIp(request);
-    if (!checkAdminAuthRateLimit(ip)) {
+    if (isAdminAuthRateLimited(ip)) {
       return reply.status(429).send({
         error: 'TooManyRequests',
         message: 'Слишком много попыток входа. Попробуйте позже.',
@@ -73,6 +75,7 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
 
     const parsed = adminLoginSchema.safeParse(request.body);
     if (!parsed.success) {
+      recordAdminAuthFailure(ip);
       return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
     }
 
@@ -84,22 +87,26 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
     }
 
     if (!verifyAdminCredentials(parsed.data.username, parsed.data.password)) {
+      recordAdminAuthFailure(ip);
       return reply.status(401).send({
         error: 'Unauthorized',
         message: 'Неверный логин или пароль',
       });
     }
 
-    setSessionCookie(reply, parsed.data.username);
+    setSessionCookie(reply, request, parsed.data.username);
     const config = loadRuntimeConfig();
-    const secure = loadBootstrapEnv().NODE_ENV === 'production';
     const token = createSessionToken(parsed.data.username, config.secrets.admin.sessionSecret);
     const session = parseSessionToken(token, config.secrets.admin.sessionSecret);
     return session ?? { username: parsed.data.username, expiresAt: new Date().toISOString() };
   });
 
-  app.post('/api/v1/admin/auth/logout', async (_request, reply) => {
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+  app.post('/api/v1/admin/auth/logout', async (request, reply) => {
+    reply.clearCookie(SESSION_COOKIE, {
+      path: '/',
+      secure: sessionCookieSecure(request),
+      sameSite: 'lax',
+    });
     return { ok: true };
   });
 }

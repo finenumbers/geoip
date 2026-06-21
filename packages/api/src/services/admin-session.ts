@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { FastifyRequest } from 'fastify';
 import type { AdminSessionInfo } from '@geoip/shared';
 
 const SESSION_COOKIE = 'geoip_admin_session';
@@ -55,10 +56,15 @@ export function parseSessionToken(
   };
 }
 
+/** Secure only when the client connection is HTTPS (incl. X-Forwarded-Proto via trustProxy). */
+export function sessionCookieSecure(request: FastifyRequest): boolean {
+  return request.protocol === 'https';
+}
+
 export function sessionCookieOptions(secure: boolean) {
   return {
     httpOnly: true,
-    sameSite: 'strict' as const,
+    sameSite: 'lax' as const,
     secure,
     path: '/',
     maxAge: SESSION_TTL_MS / 1000,

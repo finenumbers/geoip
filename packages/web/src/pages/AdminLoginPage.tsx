@@ -24,8 +24,15 @@ export function AdminLoginPage() {
 
   const login = useMutation({
     mutationFn: () => adminApi.login(username, password),
-    onSuccess: () => {
-      void navigate({ to: '/admin' });
+    onSuccess: async () => {
+      try {
+        await adminApi.me();
+        void navigate({ to: '/admin' });
+      } catch {
+        setError(
+          'Вход выполнен, но сессия не сохранилась. Откройте сайт по HTTPS или обновите образ после деплоя.',
+        );
+      }
     },
     onError: (err: Error) => setError(err.message),
   });
