@@ -1,6 +1,4 @@
 import { createWriteStream, mkdirSync } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { ExportRequest, FilterClause, SortClause } from '@geoip/shared';
@@ -9,15 +7,25 @@ import { getDb, query } from '../db/client.js';
 import { exportJobs } from '../db/schema.js';
 import { buildTableQuery, hasAsnBlocksFilter, supportsKeysetPagination } from '../sql/table-query.js';
 import { usesRankSortField, rankColumn } from '../sql/sort-rank.js';
-import { estimateFilteredCount } from '../sql/count-estimate.js';
 import { isAsnMappingReady } from '../sql/asn-mapping-status.js';
 import { enrichBlockRowsWithAsn } from '../sql/asn-enrichment.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
 import { loadEnv } from '../config/env.js';
 import { createChildLogger } from '../config/logger.js';
+import { resolveFilteredRowCount } from './filter-row-count.js';
+import {
+  createExportZipArchive,
+  exportCsvEntryName,
+  removeExportCsvAfterArchive,
+  resolveExportZipPath,
+} from './export-archive.js';
 
 const SYNC_EXPORT_LIMIT = 10_000;
 const EXPORT_BATCH_SIZE = 10_000;
+
+/** Excel (RU/EU locales) opens CSV correctly with UTF-8 BOM and semicolon delimiter. */
+export const CSV_DELIMITER = ';';
+export const CSV_UTF8_BOM = '\uFEFF';
 
 const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
   city: [
@@ -43,17 +51,25 @@ const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
   ],
 };
 
-function escapeCsvValue(value: unknown): string {
+export function escapeCsvValue(value: unknown, delimiter: string = CSV_DELIMITER): string {
   if (value === null || value === undefined) return '';
   const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  if (str.includes(delimiter) || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
 }
 
-function formatCsvRow(row: Record<string, unknown>, columns: string[]): string {
-  return columns.map((column) => escapeCsvValue(row[column])).join(',');
+export function formatCsvRow(
+  row: Record<string, unknown>,
+  columns: string[],
+  delimiter: string = CSV_DELIMITER,
+): string {
+  return columns.map((column) => escapeCsvValue(row[column], delimiter)).join(delimiter);
+}
+
+export function formatCsvHeader(columns: string[], delimiter: string = CSV_DELIMITER): string {
+  return columns.join(delimiter);
 }
 
 function getExportSortCursor(row: Record<string, unknown>, sort: SortClause[]): string | undefined {
@@ -99,7 +115,7 @@ export async function streamTableExportToFile(
 ): Promise<number> {
   const columns = CSV_COLUMNS[tableType];
   const stream = createWriteStream(filePath, { encoding: 'utf-8' });
-  stream.write(`${columns.join(',')}\n`);
+  stream.write(`${CSV_UTF8_BOM}${formatCsvHeader(columns)}\n`);
 
   let rowCount = 0;
   let page = 1;
@@ -153,24 +169,7 @@ export async function estimateExportRows(
   filters: FilterClause[],
   sort: SortClause[],
 ): Promise<number | null> {
-  const usePrecomputedAsnFilter = await isAsnMappingReady();
-  const { countSql, countParams, useCachedCount } = buildTableQuery(tableType, {
-    page: 1,
-    pageSize: 1,
-    sort,
-    filters,
-    usePrecomputedAsnFilter,
-  });
-  if (useCachedCount) {
-    const state = await import('../repositories/dataset-repository.js').then((m) =>
-      m.getDatasetState(),
-    );
-    return tableType === 'city' ? state.cityRowCount : state.countryRowCount;
-  }
-  if (!countSql) {
-    return hasAsnBlocksFilter(filters) ? null : 0;
-  }
-  return estimateFilteredCount(countSql, countParams);
+  return resolveFilteredRowCount(tableType, filters, sort);
 }
 
 export async function createExportJob(request: ExportRequest) {
@@ -251,21 +250,25 @@ export async function processExportJob(
       return;
     }
 
-    const filePath = resolveExportFilePath(jobId);
+    const csvPath = resolveExportFilePath(jobId);
 
-    const rowCount = await streamTableExportToFile(job.tableType, filters, sort, filePath);
+    const rowCount = await streamTableExportToFile(job.tableType, filters, sort, csvPath);
+
+    const zipPath = resolveExportZipPath(loadEnv().EXPORT_DIR, jobId);
+    await createExportZipArchive(csvPath, zipPath, exportCsvEntryName(job.tableType));
+    await removeExportCsvAfterArchive(csvPath);
 
     await db
       .update(exportJobs)
       .set({
         status: 'succeeded',
         finishedAt: new Date(),
-        downloadPath: filePath,
+        downloadPath: zipPath,
         rowCount,
       })
       .where(eq(exportJobs.id, jobId));
 
-    log.info({ rowCount, filePath }, 'Export completed');
+    log.info({ rowCount, zipPath }, 'Export completed');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -305,8 +308,19 @@ export function shouldUseSyncExport(estimatedRows: number): boolean {
   return estimatedRows <= SYNC_EXPORT_LIMIT;
 }
 
-export async function readExportFile(path: string): Promise<string | null> {
-  const { existsSync, readFileSync } = await import('node:fs');
-  if (!existsSync(path)) return null;
-  return readFileSync(path, 'utf-8');
+export function resolveExportDownloadHeaders(
+  downloadPath: string,
+  tableType: 'city' | 'country',
+  jobId: string,
+): { contentType: string; filename: string } {
+  if (downloadPath.endsWith('.zip')) {
+    return {
+      contentType: 'application/zip',
+      filename: `geoip-${tableType}-export-${jobId}.zip`,
+    };
+  }
+  return {
+    contentType: 'text/csv; charset=utf-8',
+    filename: `geoip-${tableType}-export-${jobId}.csv`,
+  };
 }

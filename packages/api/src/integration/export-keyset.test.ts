@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { readFileSync, rmSync } from 'node:fs';
 import { buildApp } from '../app.js';
-import { streamTableExportToFile } from '../services/export-service.js';
+import { streamTableExportToFile, CSV_DELIMITER } from '../services/export-service.js';
 import { prepareIntegrationDb, requiresDataset, runIntegration, teardownIntegrationDb } from './test-setup.js';
 
 const EXPORT_BATCH_SIZE = 10_000;
@@ -36,7 +36,7 @@ describe.skipIf(!runIntegration)('export keyset streaming (Phase E1)', () => {
       const lines = readFileSync(filePath, 'utf-8').trim().split('\n');
       expect(lines.length).toBe(exported + 1);
 
-      const ids = lines.slice(1).map((line) => Number(line.split(',')[0]));
+      const ids = lines.slice(1).map((line) => Number(line.split(CSV_DELIMITER)[0]));
       expect(new Set(ids).size).toBe(ids.length);
 
       const firstId = ids[0];

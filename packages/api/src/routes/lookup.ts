@@ -7,7 +7,7 @@ export async function registerLookupRoutes(app: FastifyInstance): Promise<void> 
   app.post(
     '/api/v1/lookup',
     {
-      preHandler: [app.verifyApiKeyIfEnabled, app.ensureMaterializedViewsReady],
+      preHandler: [app.verifyApiKeyIfEnabled],
     },
     async (request, reply) => {
     const parsed = lookupRequestSchema.safeParse(request.body);

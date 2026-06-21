@@ -458,7 +458,7 @@ docker exec geoip_postgres pg_dump -U geoip geoip | gzip > geoip_manual_$(date +
 | Readiness | `curl :8080/api/v1/ready` | `ready` после import |
 | Onboarding | `curl :8080/api/v1/public/setup-checklist` | все шаги `done` |
 | UI | браузер `/` | Dashboard без ошибок |
-| Browse | `/browse/city` | таблица с данными |
+| Browse | `/browse/city` | таблица с данными; **Экспорт CSV** — вся выборка по фильтрам (не только строки на экране) |
 | Lookup | `/lookup` | lookup по IP |
 | Admin | `/admin` | вход по паролю |
 | Import logs | Portainer → geoip_import | без ERROR после import |

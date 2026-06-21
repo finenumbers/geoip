@@ -12,8 +12,11 @@ import { isAsnMappingReady } from '../sql/asn-mapping-status.js';
 import { rankCursorField, usesRankSortField } from '../sql/sort-rank.js';
 import { buildTableQuery, resolvePaginationMode, resolveTableSortHint, resolveSortOverrideHint } from '../sql/table-query.js';
 import { resolveBrowseView } from '../sql/mv-view-resolver.js';
-import { resolveCachedFilterCount } from '../sql/filter-count-cache.js';
 import { getDatasetState } from '../repositories/dataset-repository.js';
+import {
+  queryExactFilteredRowCount,
+  resolveImmediateFilteredRowCount,
+} from './filter-row-count.js';
 import { validateTableQueryLimits } from './query-limits.js';
 import type { SortClause } from '@geoip/shared';
 
@@ -146,31 +149,26 @@ export async function queryTable(
   );
 
   const state = await getDatasetState();
-  const cachedTotal =
-    tableType === 'city' ? state.cityRowCount : state.countryRowCount;
 
-  const cachedFilterTotal = resolveCachedFilterCount(
+  const immediateCount = resolveImmediateFilteredRowCount(
     tableType,
     filters,
-    state.filterCountCache,
+    useCachedCount,
+    state,
   );
 
   const countPromise =
-    !useCachedCount && countSql && cachedFilterTotal == null
-      ? query<{ count: number }>(countSql, countParams)
+    !immediateCount && countSql && !skipExactCount
+      ? queryExactFilteredRowCount(countSql, countParams)
       : null;
 
   const dataResult = await query<Record<string, unknown>>(sql, params);
 
-  let totalRows = cachedTotal;
-  let countSource: 'cached' | 'exact' | 'estimated' = useCachedCount ? 'cached' : 'exact';
+  let totalRows = immediateCount?.totalRows ?? 0;
+  let countSource: 'cached' | 'exact' | 'estimated' = immediateCount?.countSource ?? 'exact';
 
-  if (cachedFilterTotal != null) {
-    totalRows = cachedFilterTotal;
-    countSource = 'cached';
-  } else if (countPromise) {
-    const countResult = await countPromise;
-    totalRows = countResult.rows[0]?.count ?? 0;
+  if (countPromise) {
+    totalRows = await countPromise;
   }
 
   const mapper = tableType === 'city' ? mapCityRow : mapCountryRow;

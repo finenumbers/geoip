@@ -1,3 +1,4 @@
+import { EXPORT_ROW_LIMIT_CODE } from '@geoip/shared';
 import { loadEnv } from '../config/env.js';
 
 export function validateTableQueryLimits(
@@ -26,12 +27,16 @@ export function validateTableQueryLimits(
   return { ok: true };
 }
 
-export function validateExportRowLimit(estimatedRows: number): { ok: true } | { ok: false; message: string } {
+export function validateExportRowLimit(
+  estimatedRows: number,
+): { ok: true } | { ok: false; code: typeof EXPORT_ROW_LIMIT_CODE; estimatedRows: number; maxRows: number } {
   const env = loadEnv();
   if (estimatedRows > env.EXPORT_MAX_ROWS) {
     return {
       ok: false,
-      message: `Export exceeds maximum row limit (${env.EXPORT_MAX_ROWS.toLocaleString()} rows)`,
+      code: EXPORT_ROW_LIMIT_CODE,
+      estimatedRows,
+      maxRows: env.EXPORT_MAX_ROWS,
     };
   }
   return { ok: true };

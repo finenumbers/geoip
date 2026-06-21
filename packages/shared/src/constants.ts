@@ -1,5 +1,8 @@
 export const IMPORT_LOCK_KEY = 0x47454f4950; // 'GEOIP'
 
+/** API error code when export row count exceeds configured maxRows. */
+export const EXPORT_ROW_LIMIT_CODE = 'export_row_limit_exceeded';
+
 /** Base CSV filename (no extension) → staging table for COPY. IPv4/IPv6 share one target. */
 export const CSV_IMPORT_FILE_MAP = {
   'RU-GeoIP-City-Blocks-IPv4': 'stg_geo_city_blocks',

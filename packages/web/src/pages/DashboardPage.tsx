@@ -1,10 +1,20 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ImportRun } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
 import { SetupChecklistBanner } from '@/components/SetupChecklistBanner';
+import { SystemInitializingBanner } from '@/components/SystemInitializingBanner';
+import { isDatasetInitializing } from '@geoip/shared';
+import {
+  formatSystemCheckLabel,
+  formatSystemCheckStatus,
+  formatMaterializedViewsStatus,
+  systemCheckStatusClass,
+  type SystemCheckId,
+} from '@/lib/system-status-labels';
+import { cn } from '@/lib/utils';
 
 function formatMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return '—';
@@ -45,13 +55,27 @@ function formatBytes(bytes: number | null | undefined): string {
   })} ${units[unitIndex]}`;
 }
 
-function systemStatusLabel(status: string | undefined): string {
+function systemStatusLabel(
+  status: string | undefined,
+  datasetDate: string | null,
+  mvStatus: string | undefined,
+): string {
+  if (isDatasetInitializing(datasetDate, mvStatus as 'ready' | 'refreshing' | 'unavailable' | undefined)) {
+    return ui.dashboard.statusInitializing;
+  }
   if (status === 'ready') return ui.dashboard.statusReady;
   if (status === 'degraded') return ui.dashboard.statusDegraded;
   return ui.dashboard.statusNotReady;
 }
 
-function systemStatusClass(status: string | undefined): string {
+function systemStatusClass(
+  status: string | undefined,
+  datasetDate: string | null,
+  mvStatus: string | undefined,
+): string {
+  if (isDatasetInitializing(datasetDate, mvStatus as 'ready' | 'refreshing' | 'unavailable' | undefined)) {
+    return 'text-amber-600';
+  }
   if (status === 'ready') return 'text-green-600';
   if (status === 'degraded') return 'text-amber-600';
   return 'text-red-600';
@@ -59,17 +83,33 @@ function systemStatusClass(status: string | undefined): string {
 
 export function DashboardPage() {
   const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const {
-    data: ready,
-    isError: readyError,
-    error: readyErr,
-  } = useQuery({ queryKey: ['ready'], queryFn: api.ready });
   const {
     data: dataset,
     isError: datasetError,
     error: datasetErr,
-  } = useQuery({ queryKey: ['dataset'], queryFn: api.dataset });
+  } = useQuery({
+    queryKey: ['dataset'],
+    queryFn: api.dataset,
+    refetchInterval: (query) =>
+      isDatasetInitializing(query.state.data?.datasetDate, query.state.data?.mvStatus) ? 10_000 : 30_000,
+  });
+  const {
+    data: ready,
+    isError: readyError,
+    error: readyErr,
+  } = useQuery({
+    queryKey: ['ready'],
+    queryFn: api.ready,
+    refetchInterval: (query) => {
+      if (query.state.data?.status === 'ready') return false;
+      if (isDatasetInitializing(dataset?.datasetDate, dataset?.mvStatus)) return 10_000;
+      const checks = query.state.data?.checks;
+      if (checks?.dataset && !checks.materializedViews) return 10_000;
+      return false;
+    },
+  });
   const {
     data: metrics,
     isError: metricsError,
@@ -86,7 +126,14 @@ export function DashboardPage() {
   } = useQuery({
     queryKey: ['imports'],
     queryFn: () => api.imports(10),
+    refetchInterval: 15_000,
   });
+
+  useEffect(() => {
+    if (imports?.items.some((item) => item.status === 'succeeded')) {
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
+    }
+  }, [imports?.items, queryClient]);
   const {
     data: importDetail,
     isError: importDetailError,
@@ -104,7 +151,15 @@ export function DashboardPage() {
   const hasDataset = Boolean(datasetDate);
   const hasDatabaseVolume = Boolean(dataset?.databaseSizeBytes && dataset.databaseSizeBytes > 0);
   const systemStatus = ready?.status;
+  const mvStatus = metrics?.mvStatus ?? dataset?.mvStatus;
+  const isInitializing = isDatasetInitializing(datasetDate, mvStatus);
   const volumes = dataset?.volumes;
+
+  const mvDisplay = formatMaterializedViewsStatus({
+    checks: ready?.checks,
+    initializing: isInitializing,
+    mvStatus,
+  });
 
   const toggleImportDetail = (runId: string) => {
     setSelectedImportId((current) => (current === runId ? null : runId));
@@ -113,18 +168,19 @@ export function DashboardPage() {
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-auto">
       <SetupChecklistBanner />
-      {(readyError || datasetError || metricsError || importsError || importDetailError) && (
+      <SystemInitializingBanner datasetDate={datasetDate} mvStatus={mvStatus} />
+      {(datasetError || metricsError || importsError || importDetailError || (readyError && !isInitializing)) && (
         <QueryErrorNotice
-          error={readyErr ?? datasetErr ?? metricsErr ?? importsErr ?? importDetailErr}
+          error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr ?? readyErr}
         />
       )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))] xl:grid-cols-[repeat(3,minmax(0,1fr))]">
         <Card title={ui.dashboard.systemStatus} summaryTitle>
-          <SummaryHeadline className={systemStatusClass(systemStatus)}>
-            {systemStatusLabel(systemStatus)}
+          <SummaryHeadline className={systemStatusClass(systemStatus, datasetDate, mvStatus)}>
+            {systemStatusLabel(systemStatus, datasetDate, mvStatus)}
           </SummaryHeadline>
           {ready?.checks && (
-            <StatusSummaryDetails checks={ready.checks} />
+            <StatusSummaryDetails checks={ready.checks} initializing={isInitializing} />
           )}
         </Card>
 
@@ -140,8 +196,9 @@ export function DashboardPage() {
               }
             />
             <DetailItem
-              label={ui.dashboard.mvStatus}
-              value={metrics?.mvStatus ?? dataset?.mvStatus ?? '—'}
+              label={formatSystemCheckLabel('materializedViews')}
+              value={mvDisplay.text}
+              valueClassName={systemCheckStatusClass(mvDisplay.state)}
             />
             <DetailItem
               label={ui.dashboard.fingerprint}
@@ -326,29 +383,47 @@ function SummaryHeadline({
 
 function SummaryDetails({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-2 grid grid-cols-[9.5rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-sm">
+    <div className="mt-2 grid grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-sm">
       {children}
     </div>
   );
 }
 
-function StatusSummaryDetails({ checks }: { checks: Record<string, boolean> }) {
+function StatusSummaryDetails({
+  checks,
+  initializing = false,
+}: {
+  checks: Record<string, boolean>;
+  initializing?: boolean;
+}) {
+  const mvPending = initializing && Boolean(checks.dataset) && !checks.materializedViews;
+
   return (
-    <div className="mt-2 grid grid-cols-[9.5rem_auto] items-baseline gap-x-4 gap-y-1 text-sm">
-      <CheckItem label={ui.dashboard.checkDb} ok={Boolean(checks.database)} />
-      <CheckItem label={ui.dashboard.checkDataset} ok={Boolean(checks.dataset)} />
-      <CheckItem label={ui.dashboard.checkMv} ok={Boolean(checks.materializedViews)} />
-      <CheckItem label={ui.dashboard.checkIndexes} ok={Boolean(checks.productionIndexes)} />
-      <CheckItem label={ui.dashboard.checkAsn} ok={Boolean(checks.asnMapping)} />
+    <div className="mt-2 grid grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-sm">
+      <SystemCheckRow checkId="database" ok={Boolean(checks.database)} />
+      <SystemCheckRow checkId="dataset" ok={Boolean(checks.dataset)} />
+      <SystemCheckRow checkId="materializedViews" ok={Boolean(checks.materializedViews)} pending={mvPending} />
+      <SystemCheckRow checkId="productionIndexes" ok={Boolean(checks.productionIndexes)} />
+      <SystemCheckRow checkId="asnMapping" ok={Boolean(checks.asnMapping)} />
     </div>
   );
 }
 
-function CheckItem({ label, ok }: { label: string; ok: boolean }) {
+function SystemCheckRow({
+  checkId,
+  ok,
+  pending = false,
+}: {
+  checkId: SystemCheckId;
+  ok: boolean;
+  pending?: boolean;
+}) {
+  const { text, state } = formatSystemCheckStatus(checkId, ok, pending);
+
   return (
     <>
-      <span className="text-muted">{label}:</span>
-      <span className={ok ? 'text-foreground' : 'text-red-600'}>{ok ? '✓' : '✗'}</span>
+      <span className="text-muted">{formatSystemCheckLabel(checkId)}:</span>
+      <span className={systemCheckStatusClass(state)}>{text}</span>
     </>
   );
 }
@@ -357,15 +432,20 @@ function DetailItem({
   label,
   value,
   title,
+  valueClassName,
 }: {
   label: string;
   value: string;
   title?: string;
+  valueClassName?: string;
 }) {
   return (
     <>
       <span className="text-muted">{label}:</span>
-      <span className="min-w-0 truncate text-foreground" title={title}>
+      <span
+        className={cn('min-w-0 truncate', valueClassName ?? 'text-foreground')}
+        title={title}
+      >
         {value}
       </span>
     </>

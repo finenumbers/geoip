@@ -2,11 +2,11 @@ import {
   isAdminAccountConfigured,
   isGoogleMapsConfigured,
   isGrchcConfigured,
+  hasPendingSetupSteps,
   type SetupChecklistResponse,
 } from '@geoip/shared';
 import { loadRuntimeConfig } from '../config/runtime-config.js';
 import { getDatasetState } from '../repositories/dataset-repository.js';
-import { materializedViewsExist } from '../sql/recreate-materialized-views.js';
 
 export async function buildSetupChecklist(): Promise<SetupChecklistResponse> {
   const config = loadRuntimeConfig();
@@ -15,8 +15,7 @@ export async function buildSetupChecklist(): Promise<SetupChecklistResponse> {
   let datasetImported = false;
   try {
     const state = await getDatasetState();
-    const mvPresent = await materializedViewsExist();
-    datasetImported = state.datasetDate !== null && state.mvStatus === 'ready' && mvPresent;
+    datasetImported = state.datasetDate !== null;
   } catch {
     datasetImported = false;
   }
@@ -54,6 +53,6 @@ export async function buildSetupChecklist(): Promise<SetupChecklistResponse> {
 
   return {
     steps,
-    blockingReady: adminDone && grchcDone && datasetImported,
+    blockingReady: !hasPendingSetupSteps(steps),
   };
 }

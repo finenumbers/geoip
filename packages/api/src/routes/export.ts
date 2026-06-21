@@ -1,10 +1,12 @@
+import { createReadStream } from 'node:fs';
+import { access, stat } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import { exportRequestSchema, validateTableQueryProfile, profileValidationToFieldErrors, normalizeFiltersForQuery } from '@geoip/shared';
 import {
   createExportJob,
   getExportJob,
-  readExportFile,
   estimateExportRows,
+  resolveExportDownloadHeaders,
 } from '../services/export-service.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
 import { validateExportRowLimit } from '../services/query-limits.js';
@@ -39,7 +41,12 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       if (totalRows != null) {
         const exportLimit = validateExportRowLimit(totalRows);
         if (!exportLimit.ok) {
-          return reply.status(422).send({ error: 'Validation error', message: exportLimit.message });
+          return reply.status(422).send({
+            error: 'Validation error',
+            code: exportLimit.code,
+            estimatedRows: exportLimit.estimatedRows,
+            maxRows: exportLimit.maxRows,
+          });
         }
       }
 
@@ -83,13 +90,19 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       return reply.status(404).send({ error: 'Export not ready' });
     }
 
-    const content = await readExportFile(job.downloadPath);
-    if (!content) {
+    try {
+      await access(job.downloadPath);
+    } catch {
       return reply.status(404).send({ error: 'File not found' });
     }
 
-    reply.header('Content-Type', 'text/csv');
-    reply.header('Content-Disposition', `attachment; filename="geoip-export-${id}.csv"`);
-    return content;
+    const fileStat = await stat(job.downloadPath);
+    const { contentType, filename } = resolveExportDownloadHeaders(job.downloadPath, job.tableType, id);
+
+    return reply
+      .header('Content-Type', contentType)
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .header('Content-Length', fileStat.size)
+      .send(createReadStream(job.downloadPath));
   });
 }

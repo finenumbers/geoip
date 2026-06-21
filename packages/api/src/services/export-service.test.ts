@@ -2,9 +2,19 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { exportKeysetQueryPage, resolveExportUseKeyset } from './export-service.js';
+import { exportKeysetQueryPage, resolveExportUseKeyset, CSV_UTF8_BOM, formatCsvRow, escapeCsvValue } from './export-service.js';
 
-/** Documents the atomic claim predicate used by processExportJob and claimNextExportJob. */
+describe('csv format for Excel', () => {
+  it('uses semicolon delimiter and quotes values with delimiter characters', () => {
+    expect(formatCsvRow({ name: 'ООО "Тест"; Москва' }, ['name'])).toBe('"ООО ""Тест""; Москва"');
+  });
+
+  it('preserves Cyrillic without quoting when safe', () => {
+    expect(escapeCsvValue('Ростовская область')).toBe('Ростовская область');
+    expect(formatCsvRow({ city: 'Москва', country: 'RU' }, ['city', 'country'])).toBe('Москва;RU');
+  });
+});
+
 describe('export job claim semantics', () => {
   it('only transitions queued jobs to running', () => {
     const claimable: Record<string, boolean> = {
@@ -193,9 +203,12 @@ describe('streamTableExportToFile keyset batches', () => {
         { page: 2, afterId: 10_000 },
       ]);
 
-      const lines = readFileSync(filePath, 'utf-8').trim().split('\n');
+      const raw = readFileSync(filePath, 'utf-8');
+      expect(raw.charCodeAt(0)).toBe(CSV_UTF8_BOM.charCodeAt(0));
+      const lines = raw.trim().split('\n');
       expect(lines).toHaveLength(10_002);
       expect(lines[0]).toContain('asn');
+      expect(lines[0]).toContain(';');
       expect(lines[1]).toContain('10.0.0.0/24');
       expect(lines.at(-1)).toContain('10.10000.0.0/24');
     } finally {

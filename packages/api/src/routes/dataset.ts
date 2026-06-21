@@ -27,6 +27,7 @@ export async function registerDatasetRoutes(app: FastifyInstance): Promise<void>
       volumes: state.volumes,
       databaseSizeBytes,
       nextImportAt,
+      exportMaxRows: env.EXPORT_MAX_ROWS,
     };
   });
 

@@ -17,15 +17,24 @@ vi.mock('../repositories/dataset-repository.js', () => ({
   getDatasetState: vi.fn(),
 }));
 
-vi.mock('../sql/recreate-materialized-views.js', () => ({
-  materializedViewsExist: vi.fn(),
-}));
-
 import { getDatasetState } from '../repositories/dataset-repository.js';
-import { materializedViewsExist } from '../sql/recreate-materialized-views.js';
 
 const mockGetDatasetState = vi.mocked(getDatasetState);
-const mockMaterializedViewsExist = vi.mocked(materializedViewsExist);
+
+function configureAdminAndGrchc(): void {
+  const config = loadRuntimeConfig();
+  persistRuntimeConfig(config.settings, {
+    ...createFreshSecrets(),
+    geoipLk: { email: 'user@example.com', password: 'secret' },
+    admin: {
+      username: 'admin',
+      passwordHash: hashAdminPassword('password'),
+      sessionSecret: config.secrets.admin.sessionSecret,
+    },
+    api: config.secrets.api,
+    integrations: config.secrets.integrations,
+  });
+}
 
 describe('setup-checklist', () => {
   let configDir: string;
@@ -45,7 +54,6 @@ describe('setup-checklist', () => {
       countryRowCount: 0,
       mvRefreshedAt: null,
     });
-    mockMaterializedViewsExist.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -66,18 +74,7 @@ describe('setup-checklist', () => {
   });
 
   it('marks admin and grchc done when configured', async () => {
-    const config = loadRuntimeConfig();
-    persistRuntimeConfig(config.settings, {
-      ...createFreshSecrets(),
-      geoipLk: { email: 'user@example.com', password: 'secret' },
-      admin: {
-        username: 'admin',
-        passwordHash: hashAdminPassword('password'),
-        sessionSecret: config.secrets.admin.sessionSecret,
-      },
-      api: config.secrets.api,
-      integrations: config.secrets.integrations,
-    });
+    configureAdminAndGrchc();
 
     const checklist = await buildSetupChecklist();
     expect(checklist.steps.find((s) => s.id === 'adminAccount')?.done).toBe(true);
@@ -86,18 +83,7 @@ describe('setup-checklist', () => {
   });
 
   it('marks blockingReady when dataset is imported', async () => {
-    const config = loadRuntimeConfig();
-    persistRuntimeConfig(config.settings, {
-      ...createFreshSecrets(),
-      geoipLk: { email: 'user@example.com', password: 'secret' },
-      admin: {
-        username: 'admin',
-        passwordHash: hashAdminPassword('password'),
-        sessionSecret: config.secrets.admin.sessionSecret,
-      },
-      api: config.secrets.api,
-      integrations: config.secrets.integrations,
-    });
+    configureAdminAndGrchc();
     mockGetDatasetState.mockResolvedValue({
       datasetDate: '2026-06-20',
       mvStatus: 'ready',
@@ -105,7 +91,21 @@ describe('setup-checklist', () => {
       countryRowCount: 10,
       mvRefreshedAt: new Date().toISOString(),
     });
-    mockMaterializedViewsExist.mockResolvedValue(true);
+
+    const checklist = await buildSetupChecklist();
+    expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(true);
+    expect(checklist.blockingReady).toBe(true);
+  });
+
+  it('marks dataset imported while MV is refreshing after restart', async () => {
+    configureAdminAndGrchc();
+    mockGetDatasetState.mockResolvedValue({
+      datasetDate: '2026-06-20',
+      mvStatus: 'refreshing',
+      cityRowCount: 100,
+      countryRowCount: 10,
+      mvRefreshedAt: new Date().toISOString(),
+    });
 
     const checklist = await buildSetupChecklist();
     expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(true);

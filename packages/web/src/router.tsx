@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter } from '@tanstack/react-rout
 import { AppLayout } from '@/components/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LookupPage } from '@/pages/LookupPage';
+import { ApiDocsPage } from '@/pages/ApiDocsPage';
 import { BrowsePage } from '@/pages/BrowsePage';
 import { AdminPage } from '@/pages/AdminPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
@@ -23,6 +24,12 @@ const lookupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/lookup',
   component: LookupPage,
+});
+
+const apiDocsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/api-docs',
+  component: ApiDocsPage,
 });
 
 const browseSearchSchema = (search: Record<string, unknown>) => ({
@@ -66,6 +73,7 @@ const adminSetupRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   lookupRoute,
+  apiDocsRoute,
   browseCityRoute,
   browseCountryRoute,
   adminRoute,

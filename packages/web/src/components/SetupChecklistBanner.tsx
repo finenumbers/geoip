@@ -1,20 +1,31 @@
-import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { CheckCircle2, Circle } from 'lucide-react';
 import type { SetupChecklistResponse } from '@geoip/shared';
+import { isSetupComplete } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { adminLinkForSetupStep } from '@/lib/admin-sections';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
 
+const SETUP_CHECKLIST_QUERY_KEY = ['setup-checklist'] as const;
+
+function setupChecklistRefetchInterval(query: { state: { data?: SetupChecklistResponse } }): number | false {
+  const checklist = query.state.data;
+  if (checklist && isSetupComplete(checklist)) {
+    return false;
+  }
+  return 10_000;
+}
+
 export function SetupChecklistBanner({ className }: { className?: string }) {
   const { data: checklist } = useQuery({
-    queryKey: ['setup-checklist'],
+    queryKey: SETUP_CHECKLIST_QUERY_KEY,
     queryFn: api.setupChecklist,
-    refetchInterval: 30_000,
+    refetchInterval: setupChecklistRefetchInterval,
   });
 
-  if (!checklist || checklist.blockingReady) {
+  if (!checklist || isSetupComplete(checklist)) {
     return null;
   }
 
@@ -24,6 +35,7 @@ export function SetupChecklistBanner({ className }: { className?: string }) {
         'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950',
         className,
       )}
+      data-testid="setup-checklist-banner"
     >
       <p className="mb-2 font-medium">{ui.setup.title}</p>
       <SetupChecklistSteps checklist={checklist} />
@@ -33,22 +45,19 @@ export function SetupChecklistBanner({ className }: { className?: string }) {
 
 export function SetupChecklistPanel({ className }: { className?: string }) {
   const { data: checklist, isLoading } = useQuery({
-    queryKey: ['setup-checklist'],
+    queryKey: SETUP_CHECKLIST_QUERY_KEY,
     queryFn: api.setupChecklist,
-    refetchInterval: 30_000,
+    refetchInterval: setupChecklistRefetchInterval,
   });
 
-  if (isLoading || !checklist) {
+  if (isLoading || !checklist || isSetupComplete(checklist)) {
     return null;
   }
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={cn('space-y-2', className)} data-testid="setup-checklist-panel">
       <p className="text-sm font-medium">{ui.setup.title}</p>
       <SetupChecklistSteps checklist={checklist} />
-      {checklist.blockingReady && (
-        <p className="text-sm text-green-700">{ui.setup.allBlockingDone}</p>
-      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app.js';
-import { prepareIntegrationDb, runIntegration, teardownIntegrationDb } from './test-setup.js';
+import { prepareIntegrationDb, runIntegration, teardownIntegrationDb, integrationApiHeaders } from './test-setup.js';
 
 describe.skipIf(!runIntegration)('API integration smoke', () => {
   let app: FastifyInstance;
@@ -70,6 +70,7 @@ describe.skipIf(!runIntegration)('API integration smoke', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/lookup',
+      headers: integrationApiHeaders(),
       payload: { ip: 'not-an-ip' },
     });
     expect(res.statusCode).toBe(400);

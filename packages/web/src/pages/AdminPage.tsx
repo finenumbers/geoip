@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
+import { useNavigate, useSearch, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminConfigPatch, AdminConfigResponse } from '@geoip/shared';
 import { adminApi } from '@/lib/admin-api';
@@ -111,7 +111,10 @@ export function AdminPage() {
 
   const triggerImport = useMutation({
     mutationFn: adminApi.triggerImport,
-    onSuccess: () => setMessage(ui.admin.importQueued),
+    onSuccess: () => {
+      setMessage(ui.admin.importQueued);
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
+    },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -290,8 +293,15 @@ export function AdminPage() {
 
         {section === 'api' && (
           <Section title={ui.admin.sections.api}>
+            <HelpBox title={ui.apiDocs.title}>
+              <p>
+                <Link to="/api-docs" className="font-medium underline">
+                  {ui.apiDocs.openDocsLink}
+                </Link>
+              </p>
+            </HelpBox>
             <Toggle label="API auth enabled" checked={form.apiAuthEnabled} onChange={form.setApiAuthEnabled} />
-            <Field label="Import API key">
+            <Field label={ui.admin.importApiKey}>
               <div className="flex gap-2">
                 <input
                   type="password"
@@ -305,7 +315,8 @@ export function AdminPage() {
                 </button>
               </div>
             </Field>
-            <Field label="API key (nginx proxy)">
+            <Field label={ui.admin.apiKeyExternalLookup}>
+              <p className="text-xs text-muted">{ui.admin.apiKeyExternalLookupHint}</p>
               <div className="flex gap-2">
                 <input
                   type="password"

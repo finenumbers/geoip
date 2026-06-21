@@ -63,6 +63,7 @@ export const datasetStateSchema = z.object({
   volumes: datasetVolumesSchema,
   databaseSizeBytes: z.number().nullable(),
   nextImportAt: z.string().datetime().nullable(),
+  exportMaxRows: z.number().int().positive(),
 });
 
 export const lookupSectionSchema = z.enum(['city', 'country', 'asn']);
@@ -201,6 +202,24 @@ export const exportRequestSchema = z.object({
   sort: z.array(sortClauseSchema).default([]),
 });
 
+export const exportCreateResponseSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed']),
+  tableType: z.enum(['city', 'country']),
+  createdAt: z.string().datetime(),
+  estimatedRows: z.number().nullable(),
+});
+
+export const exportStatusResponseSchema = z.object({
+  id: z.string().uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed']),
+  tableType: z.enum(['city', 'country']),
+  createdAt: z.string().datetime(),
+  finishedAt: z.string().datetime().nullable(),
+  errorMessage: z.string().nullable(),
+  rowCount: z.number().nullable(),
+});
+
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   timestamp: z.string().datetime(),
@@ -274,6 +293,8 @@ export type SortClause = z.infer<typeof sortClauseSchema>;
 export type TableQuery = z.infer<typeof tableQuerySchema>;
 export type ExportJob = z.infer<typeof exportJobSchema>;
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
+export type ExportCreateResponse = z.infer<typeof exportCreateResponseSchema>;
+export type ExportStatusResponse = z.infer<typeof exportStatusResponseSchema>;
 export type MetricsResponse = z.infer<typeof metricsResponseSchema>;
 export type ReadyResponse = z.infer<typeof readyResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;

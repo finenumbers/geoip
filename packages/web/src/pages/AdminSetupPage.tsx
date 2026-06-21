@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 
 export function AdminSetupPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,6 +20,7 @@ export function AdminSetupPage() {
   const setup = useMutation({
     mutationFn: () => adminApi.setup(username, password, confirmPassword),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
       void navigate({ to: '/admin' });
     },
     onError: (err: Error) => setError(err.message),

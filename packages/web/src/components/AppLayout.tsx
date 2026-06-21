@@ -5,12 +5,14 @@ import {
   Search,
   Table2,
   Settings,
+  Code2,
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
+import { isSetupComplete } from '@geoip/shared';
 
 type NavItem = {
   to: string;
@@ -39,6 +41,12 @@ const nav: NavItem[] = [
     match: (pathname) => pathname.startsWith('/lookup'),
   },
   {
+    to: '/api-docs',
+    label: ui.nav.apiDocs,
+    icon: Code2,
+    match: (pathname) => pathname.startsWith('/api-docs'),
+  },
+  {
     to: '/admin',
     label: ui.nav.admin,
     icon: Settings,
@@ -58,7 +66,7 @@ export function AppLayout() {
     queryFn: api.setupChecklist,
     refetchInterval: 30_000,
   });
-  const showAdminBadge = checklist != null && !checklist.blockingReady;
+  const showAdminBadge = checklist != null && !isSetupComplete(checklist);
 
   return (
     <div className="min-h-screen">
@@ -75,19 +83,16 @@ export function AppLayout() {
               title={item.label}
               aria-label={item.label}
               className={cn(
-                'relative flex w-14 flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-muted transition-colors hover:bg-accent hover:text-foreground',
+                'relative flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-accent hover:text-foreground',
                 active && 'bg-accent text-primary',
               )}
             >
               <Icon className="h-5 w-5" strokeWidth={1.75} />
               {item.to === '/admin' && showAdminBadge && (
                 <span
-                  className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-amber-500"
+                  className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500"
                   aria-hidden
                 />
-              )}
-              {item.to === '/admin' && (
-                <span className="text-[10px] font-medium leading-none">Admin</span>
               )}
             </Link>
           );

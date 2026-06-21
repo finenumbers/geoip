@@ -11,6 +11,13 @@ export async function prepareIntegrationDb(): Promise<void> {
   await seedFixtureDataset();
 }
 
+/** Headers for integration requests when API auth is enabled. */
+export function integrationApiHeaders(): Record<string, string> {
+  const env = loadEnv();
+  if (!env.API_AUTH_ENABLED) return {};
+  return { 'x-api-key': getIntegrationApiKey() };
+}
+
 /** API key from runtime config store (auto-generated on first boot; not from IMPORT_API_KEY env). */
 export function getIntegrationApiKey(): string {
   return loadEnv().API_KEY;

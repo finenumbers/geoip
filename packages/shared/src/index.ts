@@ -5,3 +5,4 @@ export * from './csv-schemas/index.js';
 export * from './filters/index.js';
 export * from './constants.js';
 export * from './table-profiles.js';
+export * from './setup-checklist-utils.js';

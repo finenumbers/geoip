@@ -1,5 +1,9 @@
 # FAQ
 
+## Экспорт CSV на странице «Таблица»
+
+Кнопка **Экспорт CSV** на `/browse/city` и `/browse/country` выгружает **всю** отфильтрованную выборку (до лимита в Admin → Export → Max rows). Worker формирует CSV (UTF-8 BOM, `;`) и упаковывает его в **ZIP**; браузер скачивает архив. Внутри архива — `geoip-city-export.csv` или `geoip-country-export.csv`.
+
 ## `/ready` возвращает `not_ready` после установки
 
 Ожидаемо на пустой БД. Выполните checklist: Admin → ГРЧЦ → «Импортировать датасет» → дождитесь завершения и refresh MV.

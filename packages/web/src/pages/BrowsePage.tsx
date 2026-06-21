@@ -29,6 +29,7 @@ import {
   setTextFilter,
   type TableFilter,
 } from '@/lib/browse-filters';
+import { useTableExport, formatExportRowLimitBlocked, isExportOverRowLimit } from '@/lib/use-table-export';
 
 const INFINITE_PAGE_SIZE = 100;
 const MAX_LOADED_ROWS = 5000;
@@ -160,6 +161,32 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
 
   const activeFilterChips = useMemo(() => expandFilterChips(activeFilters), [activeFilters]);
 
+  const browseValidation = useMemo(
+    () => validateBrowseQuery(tableType, sortJson, filtersJson),
+    [tableType, sortJson, filtersJson],
+  );
+
+  const { state: exportState, errorMessage: exportError, estimatedRows: exportEstimatedRows, startExport, isBusy: exportBusy } =
+    useTableExport();
+
+  const handleExportCsv = useCallback(() => {
+    if (!browseValidation.ok) return;
+    void startExport(tableType, activeFilters, activeSort);
+  }, [activeFilters, activeSort, browseValidation.ok, startExport, tableType]);
+
+  const exportStatusText = useMemo(() => {
+    if (exportState === 'submitting' || exportState === 'polling') {
+      if (exportEstimatedRows != null) {
+        return `${ui.browse.exportInProgress} (~${exportEstimatedRows.toLocaleString('ru-RU')} строк)`;
+      }
+      return ui.browse.exportInProgress;
+    }
+    if (exportState === 'downloading') {
+      return ui.browse.exportDownloading;
+    }
+    return null;
+  }, [exportEstimatedRows, exportState]);
+
   const sorting: SortingState = useMemo(() => {
     try {
       const parsed = JSON.parse(sortJson) as Array<{ field: string; dir: string }>;
@@ -222,6 +249,17 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   const rowCapReached = rows.length >= MAX_LOADED_ROWS;
   const effectiveHasMore = Boolean(hasNextPage) && !rowCapReached;
   const totalRows = data?.pages[0]?.pagination.totalRows ?? 0;
+  const exportMaxRows = dataset?.exportMaxRows ?? 5_000_000;
+  const exportOverLimit = isExportOverRowLimit(totalRows, exportMaxRows);
+  const exportLimitMessage = exportOverLimit
+    ? formatExportRowLimitBlocked(totalRows, exportMaxRows)
+    : null;
+  const canExport =
+    browseSessionReady &&
+    browseValidation.ok &&
+    Object.keys(fieldErrors).length === 0 &&
+    !exportBusy &&
+    !exportOverLimit;
   const countSource =
     data?.pages && data.pages.length > 0
       ? (data.pages[data.pages.length - 1]?.meta.countSource ?? 'exact')
@@ -539,12 +577,39 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
             {ui.browse.countryTab}
           </Link>
         </div>
-        <button
-          onClick={resetAll}
-          className="rounded border border-border px-3 py-1 text-sm hover:bg-accent"
-        >
-          {ui.browse.resetFilters}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {exportStatusText && (
+            <span className="text-sm text-muted" data-testid="browse-export-status">
+              {exportStatusText}
+            </span>
+          )}
+          {exportLimitMessage && exportState !== 'error' && (
+            <span className="text-sm text-amber-800" data-testid="browse-export-limit-warning">
+              {exportLimitMessage}
+            </span>
+          )}
+          {exportState === 'error' && exportError && (
+            <span className="text-sm text-red-700" data-testid="browse-export-error">
+              {exportError}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!canExport}
+            title={exportLimitMessage ?? ui.browse.exportCsvHint}
+            data-testid="browse-export-csv"
+            className="rounded border border-border px-3 py-1 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {ui.browse.exportCsv}
+          </button>
+          <button
+            onClick={resetAll}
+            className="rounded border border-border px-3 py-1 text-sm hover:bg-accent"
+          >
+            {ui.browse.resetFilters}
+          </button>
+        </div>
       </div>
 
       {isError && (

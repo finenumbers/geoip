@@ -81,6 +81,34 @@ NPM получит сертификат автоматически. Сертиф
 
 ---
 
+## Шаг 4b. External IP Lookup API (опционально)
+
+Чтобы внешние интеграции вызывали lookup **без** доступа к UI:
+
+1. Основной Proxy Host → **Access** → `geoip-internal` (UI, таблица, admin)
+2. **Custom Locations** → Add Location:
+   - **Location:** `/api/v1/lookup`
+   - **Forward Hostname / IP:** тот же, что у основного host
+   - **Forward Port:** `8080`
+   - **Access List:** **None** (публичный endpoint)
+3. Вкладка **Advanced** custom location → Custom Nginx Configuration:
+
+```nginx
+proxy_set_header X-GeoIP-Client-Auth 1;
+```
+
+4. В Admin → API:
+   - **API auth enabled** — включено
+   - Скопируйте **API key** и передайте интеграторам
+
+Клиенты вызывают `POST /api/v1/lookup` с заголовком `X-API-Key`. Без ключа — **401**.
+
+Документация: [EXTERNAL-API.md](EXTERNAL-API.md), страница `/api-docs` в UI.
+
+> **Важно:** без `X-GeoIP-Client-Auth` nginx подставит internal key и публичный lookup будет доступен без ключа клиента.
+
+---
+
 ## Шаг 5. Custom headers (опционально)
 
 В **Advanced** → **Custom Nginx Configuration** для Proxy Host:
@@ -120,7 +148,8 @@ NPM получит сертификат автоматически. Сертиф
 | 502 Bad Gateway | `docker compose ps` — `geoip_web` и `geoip_api` healthy; проверьте Forward Port 8080 |
 | SSL не выпускается | DNS должен резолвиться на NPM; порт 80 открыт с интернета |
 | Admin 401 после NPM | Cookies: SameSite=Lax работает при same-origin через NPM |
-| API 401 в production | API auth включён; nginx injects key из `proxy.env` — не отключайте auth без причины |
+| API 401 в production | API auth включён; SPA: nginx injects key из `proxy.env`; external lookup: клиент передаёт `X-API-Key` |
+| External lookup 401 | Проверьте custom location + `X-GeoIP-Client-Auth: 1`; ключ из Admin → API |
 | `/ready` = not_ready | Нормально до первого import; см. [FAQ.md](FAQ.md) |
 
 ---
@@ -130,7 +159,8 @@ NPM получит сертификат автоматически. Сертиф
 ```
 Internet → NPM (443/TLS) → host:8080 → geoip_web (nginx)
                                               ├─ / → SPA
-                                              └─ /api → geoip_api:3000 (+ X-API-Key)
+                                              ├─ /api/v1/lookup → api (+ client or internal X-API-Key)
+                                              └─ /api/* → geoip_api:3000 (+ injected X-API-Key)
 ```
 
 ---
@@ -139,6 +169,7 @@ Internet → NPM (443/TLS) → host:8080 → geoip_web (nginx)
 
 - [УСТАНОВКА.md](УСТАНОВКА.md) — полная установка
 - [БЕЗОПАСНОСТЬ.md](БЕЗОПАСНОСТЬ.md) — секреты и perimeter
+- [EXTERNAL-API.md](EXTERNAL-API.md) — внешний IP Lookup API
 - [FAQ.md](FAQ.md) — типичные проблемы
 
 **Контакты:** [finenumbers.com](https://finenumbers.com) · apps@finenumbers.com

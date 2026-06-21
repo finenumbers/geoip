@@ -29,7 +29,12 @@ describe('query-limits', () => {
     expect(validateTableQueryLimits(500, 50, true)).toEqual({ ok: true });
   });
 
-  it('rejects export above row cap', () => {
-    expect(validateExportRowLimit(50_001)).toMatchObject({ ok: false });
+  it('rejects export above row cap with structured error', () => {
+    expect(validateExportRowLimit(50_001)).toMatchObject({
+      ok: false,
+      code: 'export_row_limit_exceeded',
+      estimatedRows: 50_001,
+      maxRows: 50_000,
+    });
   });
 });
