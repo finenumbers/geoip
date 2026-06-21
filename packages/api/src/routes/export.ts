@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { exportRequestSchema, validateTableQueryProfile, profileValidationToFieldErrors, normalizeFiltersForQuery } from '@geoip/shared';
 import {
   createExportJob,
@@ -10,6 +11,10 @@ import {
 } from '../services/export-service.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
 import { validateExportRowLimit } from '../services/query-limits.js';
+
+const exportIdParamsSchema = z.object({
+  id: z.string().uuid(),
+});
 
 export async function registerExportRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -66,8 +71,11 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
   );
 
   app.get('/api/v1/exports/:id', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const job = await getExportJob(id);
+    const parsed = exportIdParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
+    }
+    const job = await getExportJob(parsed.data.id);
     if (!job) {
       return reply.status(404).send({ error: 'Not found' });
     }
@@ -84,8 +92,11 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
   });
 
   app.get('/api/v1/exports/:id/download', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const job = await getExportJob(id);
+    const parsed = exportIdParamsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
+    }
+    const job = await getExportJob(parsed.data.id);
     if (!job || job.status !== 'succeeded' || !job.downloadPath) {
       return reply.status(404).send({ error: 'Export not ready' });
     }
@@ -97,7 +108,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
     }
 
     const fileStat = await stat(job.downloadPath);
-    const { contentType, filename } = resolveExportDownloadHeaders(job.downloadPath, job.tableType, id);
+    const { contentType, filename } = resolveExportDownloadHeaders(job.downloadPath, job.tableType, parsed.data.id);
 
     return reply
       .header('Content-Type', contentType)

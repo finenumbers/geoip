@@ -53,6 +53,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Dead code check (knip)
+        run: pnpm knip
+
+      - name: Public release hygiene
+        run: ./scripts/check-public-ready.sh
+
       - name: Test
         run: pnpm test
 

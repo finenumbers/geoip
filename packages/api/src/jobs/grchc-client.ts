@@ -2,6 +2,14 @@ import { CookieJar } from 'tough-cookie';
 import { fetch as undiciFetch, Agent, type RequestInit as UndiciRequestInit } from 'undici';
 import { DEFAULT_GEOIP_LK_BASE_URL } from '@geoip/shared';
 
+function normalizeGrchcDatasetDate(filedate: string): string {
+  const compact = filedate.replace(/-/g, '');
+  if (!/^\d{8}$/.test(compact)) {
+    throw new Error(`Invalid dataset filedate from LK: ${filedate}`);
+  }
+  return compact;
+}
+
 export type DownloadType = 'city' | 'country' | 'asn';
 
 export interface DownloadLink {
@@ -114,7 +122,7 @@ export class GrchcClient {
 
     for (const { type, entry } of entries) {
       if (!entry?.filename) continue;
-      const date = entry.filedate.replace(/-/g, '');
+      const date = normalizeGrchcDatasetDate(entry.filedate);
       links.push({
         type,
         date,

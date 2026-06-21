@@ -22,8 +22,11 @@
 ```bash
 git clone https://github.com/finenumbers/geoip.git
 cd geoip
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
+
+Локальная сборка образов: добавьте `-f docker-compose.build.yml` и `build` вместо `pull` — см. [docs/УСТАНОВКА.md](docs/УСТАНОВКА.md).
 
 1. Откройте `http://<хост>:8080/admin/setup` — создайте admin
 2. Admin → **ГРЧЦ / Import** — укажите creds ЛК, сохраните, «Проверить ГРЧЦ»
@@ -51,6 +54,7 @@ Portainer: [docs/PORTAINER.md](docs/PORTAINER.md) · [infra/portainer/README.md]
 ```bash
 # Проверка перед push
 ./scripts/check-public-ready.sh
+pnpm knip
 pnpm lint && pnpm test
 
 # Первый push

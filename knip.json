@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignoreFiles": [
+    "infra/portainer/stack.compose.yml"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": ["e2e/tests/**/*.ts", "scripts/api-docker-healthcheck.mjs"],
+      "project": ["e2e/**/*.ts"]
+    },
+    "packages/api": {
+      "entry": ["src/jobs/import-worker.ts", "src/jobs/export-worker.ts", "src/scripts/*.ts"],
+      "project": ["src/**/*.ts", "drizzle.config.ts"]
+    },
+    "packages/web": {
+      "ignoreDependencies": ["tailwindcss"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/shared": {
+      "project": ["src/**/*.ts"]
+    }
+  }
+}

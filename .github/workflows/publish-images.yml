@@ -1,7 +1,9 @@
 name: Publish Docker images
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main, master]
   workflow_dispatch:
 
@@ -11,9 +13,12 @@ permissions:
 
 jobs:
   publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: docker/login-action@v3
         with:
@@ -29,7 +34,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/finenumbers/geoip-api:latest
-            ghcr.io/finenumbers/geoip-api:${{ github.sha }}
+            ghcr.io/finenumbers/geoip-api:${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Build and push Web image
         uses: docker/build-push-action@v6
@@ -39,4 +44,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/finenumbers/geoip-web:latest
-            ghcr.io/finenumbers/geoip-web:${{ github.sha }}
+            ghcr.io/finenumbers/geoip-web:${{ github.event.workflow_run.head_sha || github.sha }}

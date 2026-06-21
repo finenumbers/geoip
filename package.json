@@ -21,12 +21,14 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "db:migrate": "pnpm --filter @geoip/api db:migrate",
-    "e2e": "playwright test -c e2e/playwright.config.ts"
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "knip": "knip --include files,dependencies"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1"
+    "@playwright/test": "^1.51.1",
+    "knip": "5"
   }
 }

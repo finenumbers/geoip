@@ -50,9 +50,13 @@ export async function buildApp() {
 
   app.setErrorHandler((error, _request, reply) => {
     const err = error as { statusCode?: number; name?: string; message?: string };
-    reply.status(err.statusCode ?? 500).send({
+    const statusCode = err.statusCode ?? 500;
+    reply.status(statusCode).send({
       error: err.name ?? 'Error',
-      message: err.message ?? 'Internal server error',
+      message:
+        env.NODE_ENV === 'production' && statusCode >= 500
+          ? 'Internal server error'
+          : err.message ?? 'Internal server error',
     });
   });
 
