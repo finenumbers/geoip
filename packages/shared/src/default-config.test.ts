@@ -7,14 +7,14 @@ import {
 } from './default-config.js';
 
 describe('default-config', () => {
-  it('createFreshSecrets leaves personal fields empty and generates api keys', () => {
+  it('createFreshSecrets leaves personal fields empty and generates import key only', () => {
     const secrets = createFreshSecrets();
     expect(secrets.geoipLk.email).toBe('');
     expect(secrets.geoipLk.password).toBe('');
     expect(secrets.integrations.googleMapsApiKey).toBe('');
     expect(secrets.admin.username).toBe('');
     expect(secrets.api.importApiKey.length).toBeGreaterThanOrEqual(64);
-    expect(secrets.api.apiKey).toBe(secrets.api.importApiKey);
+    expect(secrets.api.apiKey).toBe('');
     expect(secrets.admin.sessionSecret.length).toBeGreaterThanOrEqual(64);
   });
 

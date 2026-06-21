@@ -63,6 +63,8 @@ export const datasetStateSchema = z.object({
   volumes: datasetVolumesSchema,
   databaseSizeBytes: z.number().nullable(),
   nextImportAt: z.string().datetime().nullable(),
+  displayTimezone: z.string(),
+  serverNow: z.string().datetime(),
   exportMaxRows: z.number().int().positive(),
 });
 
@@ -321,7 +323,7 @@ export const facetValuesResponseSchema = z.object({
 export type FacetValuesResponse = z.infer<typeof facetValuesResponseSchema>;
 
 export const setupChecklistStepSchema = z.object({
-  id: z.enum(['adminAccount', 'grchcCredentials', 'datasetImported', 'googleMapsKey']),
+  id: z.enum(['adminAccount', 'externalLookupApiKey', 'grchcCredentials', 'datasetImported', 'googleMapsKey']),
   label: z.string(),
   done: z.boolean(),
   optional: z.boolean().optional(),

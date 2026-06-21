@@ -2,17 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminConfigPatch, AdminConfigResponse } from '@geoip/shared';
+import { DISPLAY_TIMEZONE_OPTIONS } from '@geoip/shared';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
 import { HelpBox } from '@/components/HelpBox';
 import { SetupChecklistPanel } from '@/components/SetupChecklistBanner';
 import { type AdminSectionId } from '@/lib/admin-sections';
+import { formatDateTime } from '@/lib/format-datetime';
 
 type SectionId = AdminSectionId;
 
 const sections: Array<{ id: SectionId; label: string }> = [
   { id: 'overview', label: ui.admin.sections.overview },
+  { id: 'general', label: ui.admin.sections.general },
   { id: 'grchc', label: ui.admin.sections.grchc },
   { id: 'api', label: ui.admin.sections.api },
   { id: 'adminAccess', label: ui.admin.sections.adminAccess },
@@ -22,21 +25,6 @@ const sections: Array<{ id: SectionId; label: string }> = [
   { id: 'logging', label: ui.admin.sections.logging },
   { id: 'infra', label: ui.admin.sections.infra },
 ];
-
-function cronToTime(cron: string): string {
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    const minute = parts[0] ?? '0';
-    const hour = parts[1] ?? '10';
-    return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-  }
-  return '10:00';
-}
-
-function timeToCron(time: string): string {
-  const [hour, minute] = time.split(':');
-  return `${Number(minute) || 0} ${Number(hour) || 10} * * *`;
-}
 
 function randomKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -81,6 +69,12 @@ export function AdminPage() {
     }
   }, [sectionFromUrl]);
 
+  useEffect(() => {
+    if (config && !config.secrets.api.apiKey.hasValue) {
+      void navigate({ to: '/admin/setup-api-key' });
+    }
+  }, [config, navigate]);
+
   const openSection = (id: SectionId) => {
     setSection(id);
     void navigate({
@@ -121,6 +115,10 @@ export function AdminPage() {
   const logout = useMutation({
     mutationFn: adminApi.logout,
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['admin-me'] });
+      queryClient.removeQueries({ queryKey: ['admin-config'] });
+      queryClient.removeQueries({ queryKey: ['admin-reload-status'] });
+      queryClient.removeQueries({ queryKey: ['setup-checklist'] });
       void navigate({ to: '/admin/login' });
     },
   });
@@ -160,13 +158,11 @@ export function AdminPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold">{ui.admin.title}</h1>
-            <p className="text-sm text-muted">
-              {ui.admin.sessionUser}: {me?.username}
-            </p>
           </div>
           {config.meta.updatedAt && (
             <p className="text-xs text-muted">
-              {ui.admin.updatedAt}: {new Date(config.meta.updatedAt).toLocaleString('ru')}
+              {ui.admin.updatedAt}:{' '}
+              {formatDateTime(config.meta.updatedAt, config.settings.general.displayTimezone)}
             </p>
           )}
         </div>
@@ -193,6 +189,38 @@ export function AdminPage() {
                 <ReloadList label="Web reload" items={reloadStatus.pendingReload.requiresWebReload} />
               </div>
             )}
+          </Section>
+        )}
+
+        {section === 'general' && (
+          <Section title={ui.admin.sections.general}>
+            <Field label={ui.admin.displayTimezone}>
+              <p className="text-xs text-muted">{ui.admin.displayTimezoneHint}</p>
+              <select
+                className="field-input mt-1"
+                value={form.displayTimezone}
+                onChange={(e) => form.setDisplayTimezone(e.target.value)}
+              >
+                {!DISPLAY_TIMEZONE_OPTIONS.some((option) => option.value === form.displayTimezone) && (
+                  <option value={form.displayTimezone}>{form.displayTimezone}</option>
+                )}
+                {DISPLAY_TIMEZONE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <SaveButton
+              loading={save.isPending}
+              onClick={() =>
+                save.mutate({
+                  settings: {
+                    general: { displayTimezone: form.displayTimezone.trim() || 'Europe/Moscow' },
+                  },
+                })
+              }
+            />
           </Section>
         )}
 
@@ -224,21 +252,7 @@ export function AdminPage() {
                 onChange={(e) => form.setGeoipLkBaseUrl(e.target.value)}
               />
             </Field>
-            <Field label={ui.admin.importTime}>
-              <input
-                type="time"
-                className="field-input"
-                value={form.importTime}
-                onChange={(e) => form.setImportTime(e.target.value)}
-              />
-            </Field>
-            <Field label="Timezone">
-              <input
-                className="field-input"
-                value={form.importTimezone}
-                onChange={(e) => form.setImportTimezone(e.target.value)}
-              />
-            </Field>
+            <p className="text-sm text-muted">{ui.admin.importScheduleFixed}</p>
             <Toggle
               label="ZIP cache"
               checked={form.zipCacheEnabled}
@@ -261,8 +275,6 @@ export function AdminPage() {
                   settings: {
                     geoipLk: { baseUrl: form.geoipLkBaseUrl },
                     import: {
-                      cron: timeToCron(form.importTime),
-                      cronTimezone: form.importTimezone,
                       zipCacheEnabled: form.zipCacheEnabled,
                       skipUnchangedDataset: form.skipUnchanged,
                       stagingSnapshotEnabled: form.stagingSnapshot,
@@ -515,18 +527,12 @@ export function AdminPage() {
               </select>
             </Field>
             <Toggle label="Access log" checked={form.accessLogEnabled} onChange={form.setAccessLogEnabled} />
-            <NumberField label="Backup interval sec" value={form.backupInterval} onChange={form.setBackupInterval} />
-            <NumberField label="Backup retention days" value={form.backupRetentionDays} onChange={form.setBackupRetentionDays} />
             <SaveButton
               loading={save.isPending}
               onClick={() =>
                 save.mutate({
                   settings: {
                     logging: { level: form.logLevel, accessLogEnabled: form.accessLogEnabled },
-                    backup: {
-                      intervalSeconds: form.backupInterval,
-                      retentionDays: form.backupRetentionDays,
-                    },
                   },
                 })
               }
@@ -553,8 +559,7 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
   const [geoipLkEmail, setGeoipLkEmail] = useState('');
   const [geoipLkPassword, setGeoipLkPassword] = useState('');
   const [geoipLkBaseUrl, setGeoipLkBaseUrl] = useState('');
-  const [importTime, setImportTime] = useState('10:00');
-  const [importTimezone, setImportTimezone] = useState('Europe/Moscow');
+  const [displayTimezone, setDisplayTimezone] = useState('Europe/Moscow');
   const [zipCacheEnabled, setZipCacheEnabled] = useState(true);
   const [skipUnchanged, setSkipUnchanged] = useState(false);
   const [stagingSnapshot, setStagingSnapshot] = useState(true);
@@ -580,15 +585,12 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
   const [googleMapsKey, setGoogleMapsKey] = useState('');
   const [logLevel, setLogLevel] = useState<AdminConfigResponse['settings']['logging']['level']>('info');
   const [accessLogEnabled, setAccessLogEnabled] = useState(true);
-  const [backupInterval, setBackupInterval] = useState(86_400);
-  const [backupRetentionDays, setBackupRetentionDays] = useState(14);
 
   useEffect(() => {
     if (!config) return;
     setGeoipLkEmail(config.secrets.geoipLk.email);
     setGeoipLkBaseUrl(config.settings.geoipLk.baseUrl);
-    setImportTime(cronToTime(config.settings.import.cron));
-    setImportTimezone(config.settings.import.cronTimezone);
+    setDisplayTimezone(config.settings.general.displayTimezone);
     setZipCacheEnabled(config.settings.import.zipCacheEnabled);
     setSkipUnchanged(config.settings.import.skipUnchangedDataset);
     setStagingSnapshot(config.settings.import.stagingSnapshotEnabled);
@@ -609,8 +611,6 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
     setAsnWorkers(config.settings.asnMap.workers);
     setLogLevel(config.settings.logging.level);
     setAccessLogEnabled(config.settings.logging.accessLogEnabled);
-    setBackupInterval(config.settings.backup.intervalSeconds);
-    setBackupRetentionDays(config.settings.backup.retentionDays);
   }, [config]);
 
   return useMemo(
@@ -621,10 +621,8 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
       setGeoipLkPassword,
       geoipLkBaseUrl,
       setGeoipLkBaseUrl,
-      importTime,
-      setImportTime,
-      importTimezone,
-      setImportTimezone,
+      displayTimezone,
+      setDisplayTimezone,
       zipCacheEnabled,
       setZipCacheEnabled,
       skipUnchanged,
@@ -675,17 +673,12 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
       setLogLevel,
       accessLogEnabled,
       setAccessLogEnabled,
-      backupInterval,
-      setBackupInterval,
-      backupRetentionDays,
-      setBackupRetentionDays,
     }),
     [
       geoipLkEmail,
       geoipLkPassword,
       geoipLkBaseUrl,
-      importTime,
-      importTimezone,
+      displayTimezone,
       zipCacheEnabled,
       skipUnchanged,
       stagingSnapshot,
@@ -711,8 +704,6 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
       googleMapsKey,
       logLevel,
       accessLogEnabled,
-      backupInterval,
-      backupRetentionDays,
     ],
   );
 }

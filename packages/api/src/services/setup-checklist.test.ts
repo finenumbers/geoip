@@ -31,7 +31,10 @@ function configureAdminAndGrchc(): void {
       passwordHash: hashAdminPassword('password'),
       sessionSecret: config.secrets.admin.sessionSecret,
     },
-    api: config.secrets.api,
+    api: {
+      ...config.secrets.api,
+      apiKey: 'external-lookup-key-0123456789',
+    },
     integrations: config.secrets.integrations,
   });
 }
@@ -69,6 +72,7 @@ describe('setup-checklist', () => {
     const checklist = await buildSetupChecklist();
     expect(checklist.blockingReady).toBe(false);
     expect(checklist.steps.find((s) => s.id === 'adminAccount')?.done).toBe(false);
+    expect(checklist.steps.find((s) => s.id === 'externalLookupApiKey')?.done).toBe(false);
     expect(checklist.steps.find((s) => s.id === 'grchcCredentials')?.done).toBe(false);
     expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(false);
   });
@@ -78,6 +82,7 @@ describe('setup-checklist', () => {
 
     const checklist = await buildSetupChecklist();
     expect(checklist.steps.find((s) => s.id === 'adminAccount')?.done).toBe(true);
+    expect(checklist.steps.find((s) => s.id === 'externalLookupApiKey')?.done).toBe(true);
     expect(checklist.steps.find((s) => s.id === 'grchcCredentials')?.done).toBe(true);
     expect(checklist.blockingReady).toBe(false);
   });

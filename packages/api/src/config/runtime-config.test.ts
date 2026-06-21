@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,7 +36,7 @@ describe('runtime-config', () => {
     expect(config.secrets.geoipLk.email).toBe('');
     expect(config.secrets.geoipLk.password).toBe('');
     expect(config.secrets.api.importApiKey.length).toBeGreaterThanOrEqual(64);
-    expect(config.secrets.api.apiKey).toBe(config.secrets.api.importApiKey);
+    expect(config.secrets.api.apiKey).toBe('');
     expect(config.meta.migratedFromEnv).toBe(false);
 
     const response = toAdminConfigResponse(config);
@@ -53,7 +53,7 @@ describe('runtime-config', () => {
     expect(config.settings.logging.accessLogEnabled).toBe(true);
   });
 
-  it('persists patches', () => {
+  it('persists patches and enforces fixed import schedule', () => {
     loadRuntimeConfig();
     const updated = persistRuntimeConfig(
       {
@@ -62,8 +62,22 @@ describe('runtime-config', () => {
       },
       loadRuntimeConfig().secrets,
     );
-    expect(updated.settings.import.cron).toBe('0 8 * * *');
+    expect(updated.settings.import.cron).toBe('0 10 * * *');
     resetRuntimeConfigCache();
-    expect(loadRuntimeConfig().settings.import.cron).toBe('0 8 * * *');
+    expect(loadRuntimeConfig().settings.import.cron).toBe('0 10 * * *');
+  });
+
+  it('rejects partial config store', () => {
+    writeFileSync(join(configDir, 'settings.json'), '{}');
+    expect(() => loadRuntimeConfig()).toThrow(/Config store incomplete/);
+  });
+
+  it('persists ensureApiKeys backfill after restart', () => {
+    const config = loadRuntimeConfig();
+    const importKey = config.secrets.api.importApiKey;
+    expect(importKey.length).toBeGreaterThanOrEqual(64);
+    resetRuntimeConfigCache();
+    const reloaded = loadRuntimeConfig();
+    expect(reloaded.secrets.api.importApiKey).toBe(importKey);
   });
 });

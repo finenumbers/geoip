@@ -22,6 +22,7 @@ export async function buildApp() {
   const app = Fastify({
     logger: createFastifyLoggerConfig(),
     requestIdHeader: 'x-request-id',
+    trustProxy: true,
   });
 
   await app.register(cors, { origin: env.CORS_ORIGIN, credentials: true });

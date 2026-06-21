@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { fetchClientPublicIp } from '@/lib/client-public-ip';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
@@ -66,6 +67,14 @@ export function AppLayout() {
     queryFn: api.setupChecklist,
     refetchInterval: 30_000,
   });
+  const { data: clientIpData, isFetching: clientIpLoading } = useQuery({
+    queryKey: ['client-public-ip'],
+    queryFn: async () => {
+      const ip = await fetchClientPublicIp();
+      return ip ? { ip } : null;
+    },
+    staleTime: 5 * 60_000,
+  });
   const showAdminBadge = checklist != null && !isSetupComplete(checklist);
 
   return (
@@ -103,6 +112,21 @@ export function AppLayout() {
         <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-border bg-card/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <span className="text-lg font-bold text-black">{ui.appTitle}</span>
           <div className="flex items-center gap-3 text-sm">
+            {clientIpLoading && (
+              <span className="text-muted">
+                {ui.header.yourIp}: …
+              </span>
+            )}
+            {!clientIpLoading && clientIpData?.ip && (
+              <Link
+                to="/lookup"
+                search={{ ip: clientIpData.ip }}
+                className="hover:underline"
+              >
+                {ui.header.yourIp}:{' '}
+                <span className="font-bold text-foreground">{clientIpData.ip}</span>
+              </Link>
+            )}
             {dataset?.datasetDate && (
               <span>
                 {ui.datasetBadge}:{' '}

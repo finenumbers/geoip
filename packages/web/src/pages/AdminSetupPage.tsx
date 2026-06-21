@@ -21,7 +21,7 @@ export function AdminSetupPage() {
     mutationFn: () => adminApi.setup(username, password, confirmPassword),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
-      void navigate({ to: '/admin' });
+      void navigate({ to: '/admin/setup-api-key' });
     },
     onError: (err: Error) => setError(err.message),
   });

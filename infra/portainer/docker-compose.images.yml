@@ -2,14 +2,14 @@
 # Published by .github/workflows/publish-images.yml on push to main.
 services:
   api:
-    image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/geoip-api:latest
     build: !reset null
   import:
-    image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/geoip-api:latest
     build: !reset null
   export:
-    image: ghcr.io/finenumbers/geoip-api:${GEOIP_IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/geoip-api:latest
     build: !reset null
   web:
-    image: ghcr.io/finenumbers/geoip-web:${GEOIP_IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/geoip-web:latest
     build: !reset null

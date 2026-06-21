@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { LookupMapCard } from '@/components/LookupMapCard';
@@ -18,9 +19,17 @@ const LOOKUP_SECTION_LABELS: Record<LookupUiSection, string> = {
 };
 
 export function LookupPage() {
+  const { ip: queryIp } = useSearch({ from: '/lookup' });
   const [ip, setIp] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [include, setInclude] = useState<LookupUiSection[]>([...LOOKUP_UI_SECTIONS]);
+
+  useEffect(() => {
+    if (queryIp) {
+      setIp(queryIp);
+      setSubmitted(queryIp);
+    }
+  }, [queryIp]);
 
   const apiInclude = useMemo(() => resolveLookupApiInclude(include), [include]);
   const includeKey = useMemo(

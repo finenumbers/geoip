@@ -85,95 +85,21 @@ function resolveDatabaseUrls(input: z.infer<typeof rawBootstrapSchema>): {
 
 let cachedBootstrap: BootstrapEnv | null = null;
 
-function agentDebugLog(
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-  hypothesisId: string,
-): void {
-  const payload = {
-    sessionId: '5fd4d1',
-    location,
-    message,
-    data,
-    timestamp: Date.now(),
-    hypothesisId,
-    runId: process.env.DEBUG_RUN_ID ?? 'pre-fix',
-  };
-  // #region agent log
-  fetch('http://127.0.0.1:7902/ingest/02332259-3549-48bf-a861-1deae571b22d', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '5fd4d1' },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-  console.error('[agent-debug]', JSON.stringify(payload));
-  // #endregion
-}
-
 export function loadBootstrapEnv(): BootstrapEnv {
   if (cachedBootstrap) return cachedBootstrap;
   const parsed = rawBootstrapSchema.safeParse(process.env);
   if (!parsed.success) {
-    // #region agent log
-    agentDebugLog(
-      'bootstrap-env.ts:parse-fail',
-      'Bootstrap schema validation failed',
-      { fieldErrors: parsed.error.flatten().fieldErrors },
-      'A',
-    );
-    // #endregion
     console.error('Invalid bootstrap environment:', parsed.error.flatten().fieldErrors);
     process.exit(1);
   }
-
-  const hasComponents =
-    parsed.data.POSTGRES_USER != null &&
-    parsed.data.POSTGRES_PASSWORD != null &&
-    parsed.data.POSTGRES_DB != null;
-
-  // #region agent log
-  agentDebugLog(
-    'bootstrap-env.ts:resolve',
-    'Resolving database connection',
-    {
-      hasComponents,
-      hasDatabaseUrl: Boolean(parsed.data.DATABASE_URL),
-      databaseHost: parsed.data.DATABASE_HOST,
-      nodeEnv: parsed.data.NODE_ENV,
-    },
-    hasComponents ? 'A-fix' : parsed.data.DATABASE_URL ? 'A-legacy' : 'E',
-  );
-  // #endregion
 
   let urls: { DATABASE_URL: string; DATABASE_DIRECT_URL?: string };
   try {
     urls = resolveDatabaseUrls(parsed.data);
   } catch (err) {
-    // #region agent log
-    agentDebugLog(
-      'bootstrap-env.ts:resolve-fail',
-      'Database URL resolution failed',
-      { error: err instanceof Error ? err.message : String(err) },
-      'E',
-    );
-    // #endregion
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
   }
-
-  // #region agent log
-  agentDebugLog(
-    'bootstrap-env.ts:ok',
-    'Bootstrap env loaded',
-    {
-      databaseHost: parsed.data.DATABASE_HOST,
-      databasePort: parsed.data.DATABASE_PORT,
-      directHost: parsed.data.DATABASE_DIRECT_HOST,
-      passwordHasSpecialChars: /[^a-zA-Z0-9]/.test(parsed.data.POSTGRES_PASSWORD ?? ''),
-    },
-    'A-fix',
-  );
-  // #endregion
 
   cachedBootstrap = {
     DATABASE_URL: urls.DATABASE_URL,

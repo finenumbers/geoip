@@ -11,10 +11,11 @@ import {
   applyEnvironmentProfile,
   createFreshSecrets,
   generateRandomKey,
+  FIXED_IMPORT_CRON,
+  FIXED_IMPORT_TIMEZONE,
 } from '@geoip/shared';
 import { loadBootstrapEnv } from './bootstrap-env.js';
 import {
-  configStoreExists,
   readConfigMeta,
   readSecrets,
   readSettings,
@@ -25,7 +26,10 @@ import {
   writeSettings,
   writeProxyEnv,
   withConfigLock,
+  settingsFileExists,
+  secretsFileExists,
   type ConfigMeta,
+  type ConfigStorePaths,
 } from './config-store.js';
 import { generateMasterKeyHex } from './config-crypto.js';
 
@@ -72,8 +76,6 @@ export type EnvCompat = {
   API_RATE_LIMIT_WINDOW_MS: number;
   LOG_LEVEL: RuntimeSettings['logging']['level'];
   ACCESS_LOG_ENABLED: boolean;
-  BACKUP_INTERVAL_SECONDS: number;
-  BACKUP_RETENTION_DAYS: number;
   GOOGLE_MAPS_API_KEY: string;
 };
 
@@ -85,9 +87,6 @@ function ensureApiKeys(secrets: RuntimeSecrets): RuntimeSecrets {
   if (!next.api.importApiKey) {
     next.api.importApiKey = generateRandomKey(32);
   }
-  if (!next.api.apiKey) {
-    next.api.apiKey = next.api.importApiKey;
-  }
   if (!next.admin.sessionSecret) {
     next.admin = { ...next.admin, sessionSecret: generateRandomKey(32) };
   }
@@ -98,17 +97,66 @@ function enforceProductionSettings(
   settings: RuntimeSettings,
   nodeEnv: 'development' | 'production' | 'test',
 ): RuntimeSettings {
-  if (nodeEnv !== 'production') return settings;
-  return runtimeSettingsSchema.parse({
+  const withFixedImport = runtimeSettingsSchema.parse({
     ...settings,
-    api: { ...settings.api, authEnabled: true },
-    logging: { ...settings.logging, accessLogEnabled: true },
+    import: {
+      ...settings.import,
+      cron: FIXED_IMPORT_CRON,
+      cronTimezone: FIXED_IMPORT_TIMEZONE,
+    },
+  });
+  if (nodeEnv !== 'production') return withFixedImport;
+  return runtimeSettingsSchema.parse({
+    ...withFixedImport,
+    api: { ...withFixedImport.api, authEnabled: true },
+    logging: { ...withFixedImport.logging, accessLogEnabled: true },
   });
 }
 
-function loadFromDisk(): RuntimeConfig {
+function assertConfigStoreComplete(paths: ConfigStorePaths): void {
+  const hasSettings = settingsFileExists(paths);
+  const hasSecrets = secretsFileExists(paths);
+  if (hasSettings === hasSecrets) return;
+  const present = hasSettings ? 'settings.json' : 'secrets.enc';
+  const missing = hasSettings ? 'secrets.enc' : 'settings.json';
+  throw new Error(
+    `Config store incomplete: ${present} exists without ${missing}. ` +
+      'Restore both files or remove the config_data volume for a fresh start.',
+  );
+}
+
+function persistRuntimeConfigUnlocked(
+  paths: ConfigStorePaths,
+  masterKey: string,
+  settings: RuntimeSettings,
+  secrets: RuntimeSecrets,
+  meta: ConfigMeta,
+): RuntimeConfig {
+  const bootstrap = loadBootstrapEnv();
+  const normalizedSettings = enforceProductionSettings(settings, bootstrap.NODE_ENV);
+  const normalizedSecrets = ensureApiKeys(secrets);
+
+  writeSettings(paths, normalizedSettings);
+  writeSecrets(paths, normalizedSecrets, masterKey);
+  if (normalizedSecrets.api.apiKey) {
+    writeProxyEnv(paths, normalizedSecrets.api.apiKey);
+  }
+  const updatedMeta = { ...meta, updatedAt: new Date().toISOString() };
+  writeConfigMeta(paths, updatedMeta);
+
+  return {
+    settings: normalizedSettings,
+    secrets: normalizedSecrets,
+    meta: updatedMeta,
+    masterKey,
+  };
+}
+
+function loadFromDiskUnlocked(): RuntimeConfig {
   const bootstrap = loadBootstrapEnv();
   const paths = resolveConfigPaths(bootstrap.CONFIG_DATA_DIR);
+  assertConfigStoreComplete(paths);
+
   let meta = readConfigMeta(paths);
   const { key: masterKey, metaUpdated } = resolveMasterKey(
     bootstrap.CONFIG_MASTER_KEY,
@@ -117,47 +165,62 @@ function loadFromDisk(): RuntimeConfig {
   );
   meta = metaUpdated;
 
-  let settings: RuntimeSettings;
-  let secrets: RuntimeSecrets;
+  const hasStore = settingsFileExists(paths) && secretsFileExists(paths);
   let migratedFromEnv = meta.migratedFromEnv;
 
-  if (configStoreExists(paths)) {
-    settings = readSettings(paths) ?? applyEnvironmentProfile(DEFAULT_RUNTIME_SETTINGS, bootstrap.NODE_ENV);
-    try {
-      secrets = readSecrets(paths, masterKey) ?? createFreshSecrets();
-    } catch (err) {
-      throw new Error(
-        'Failed to decrypt config secrets.enc — CONFIG_MASTER_KEY does not match this volume. ' +
-          'Use the original key or remove the config_data volume for a fresh start.',
-        { cause: err },
-      );
-    }
-  } else {
-    settings = applyEnvironmentProfile(DEFAULT_RUNTIME_SETTINGS, bootstrap.NODE_ENV);
-    secrets = createFreshSecrets();
-
-    withConfigLock(paths, () => {
-      writeSettings(paths, settings);
-      writeSecrets(paths, secrets, masterKey);
-      writeProxyEnv(paths, secrets.api.apiKey);
-      meta = {
-        ...meta,
-        updatedAt: new Date().toISOString(),
-        migratedFromEnv: false,
-      };
-      writeConfigMeta(paths, meta);
-    });
+  if (!hasStore) {
+    const settings = applyEnvironmentProfile(DEFAULT_RUNTIME_SETTINGS, bootstrap.NODE_ENV);
+    const secrets = createFreshSecrets();
+    writeSettings(paths, settings);
+    writeSecrets(paths, secrets, masterKey);
+    meta = {
+      ...meta,
+      updatedAt: new Date().toISOString(),
+      migratedFromEnv: false,
+    };
+    writeConfigMeta(paths, meta);
     migratedFromEnv = false;
   }
 
-  settings = enforceProductionSettings(settings, bootstrap.NODE_ENV);
-  secrets = ensureApiKeys(secrets);
+  const diskSettings = readSettings(paths);
+  if (!diskSettings) {
+    throw new Error('Config store incomplete: settings.json could not be read.');
+  }
 
-  if (!secrets.admin.sessionSecret || !existsSync(join(paths.dir, 'proxy.env'))) {
-    withConfigLock(paths, () => {
-      writeSecrets(paths, secrets, masterKey);
+  let diskSecrets: RuntimeSecrets;
+  try {
+    const loaded = readSecrets(paths, masterKey);
+    if (!loaded) {
+      throw new Error('Config store incomplete: secrets.enc could not be read.');
+    }
+    diskSecrets = loaded;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Config store incomplete')) {
+      throw err;
+    }
+    throw new Error(
+      'Failed to decrypt config secrets.enc — CONFIG_MASTER_KEY does not match this volume. ' +
+        'Use the original key or remove the config_data volume for a fresh start.',
+      { cause: err },
+    );
+  }
+
+  const settings = enforceProductionSettings(diskSettings, bootstrap.NODE_ENV);
+  const secrets = ensureApiKeys(diskSecrets);
+
+  const settingsChanged = JSON.stringify(settings) !== JSON.stringify(diskSettings);
+  const secretsChanged = JSON.stringify(secrets) !== JSON.stringify(diskSecrets);
+  const proxyPath = join(paths.dir, 'proxy.env');
+  const needsProxyEnv = Boolean(secrets.api.apiKey) && !existsSync(proxyPath);
+
+  if (settingsChanged || secretsChanged || needsProxyEnv) {
+    writeSettings(paths, settings);
+    writeSecrets(paths, secrets, masterKey);
+    if (secrets.api.apiKey) {
       writeProxyEnv(paths, secrets.api.apiKey);
-    });
+    }
+    meta = { ...meta, updatedAt: new Date().toISOString() };
+    writeConfigMeta(paths, meta);
   }
 
   return {
@@ -166,6 +229,12 @@ function loadFromDisk(): RuntimeConfig {
     meta: { ...meta, migratedFromEnv },
     masterKey,
   };
+}
+
+function loadFromDisk(): RuntimeConfig {
+  const bootstrap = loadBootstrapEnv();
+  const paths = resolveConfigPaths(bootstrap.CONFIG_DATA_DIR);
+  return withConfigLock(paths, () => loadFromDiskUnlocked());
 }
 
 export function loadRuntimeConfig(): RuntimeConfig {
@@ -190,7 +259,7 @@ export function toEnvCompat(config: RuntimeConfig): EnvCompat {
   const bootstrap = loadBootstrapEnv();
   const { settings: s, secrets: sec } = config;
   const importApiKey = sec.api.importApiKey;
-  const apiKey = sec.api.apiKey || importApiKey;
+  const apiKey = sec.api.apiKey;
 
   return {
     DATABASE_URL: bootstrap.DATABASE_URL,
@@ -228,8 +297,6 @@ export function toEnvCompat(config: RuntimeConfig): EnvCompat {
     API_RATE_LIMIT_WINDOW_MS: s.api.rateLimitWindowMs,
     LOG_LEVEL: s.logging.level,
     ACCESS_LOG_ENABLED: s.logging.accessLogEnabled,
-    BACKUP_INTERVAL_SECONDS: s.backup.intervalSeconds,
-    BACKUP_RETENTION_DAYS: s.backup.retentionDays,
     GOOGLE_MAPS_API_KEY: sec.integrations.googleMapsApiKey,
   };
 }
@@ -247,7 +314,6 @@ export function getReloadHints(): AdminConfigResponse['reloadHints'] {
     requiresImportWorkerRestart: [],
     requiresExportWorkerRestart: [],
     requiresWebReload: ['api.apiKey'],
-    requiresBackupRestart: ['backup.intervalSeconds', 'backup.retentionDays'],
   };
 }
 
@@ -290,19 +356,32 @@ export function persistRuntimeConfig(
 ): RuntimeConfig {
   const bootstrap = loadBootstrapEnv();
   const paths = resolveConfigPaths(bootstrap.CONFIG_DATA_DIR);
-  let meta = readConfigMeta(paths);
-  const { key: masterKey } = resolveMasterKey(bootstrap.CONFIG_MASTER_KEY, meta, paths);
-  const normalizedSettings = enforceProductionSettings(settings, bootstrap.NODE_ENV);
 
   withConfigLock(paths, () => {
-    writeSettings(paths, normalizedSettings);
-    writeSecrets(paths, secrets, masterKey);
-    writeProxyEnv(paths, secrets.api.apiKey || secrets.api.importApiKey);
-    meta = {
-      ...meta,
-      updatedAt: new Date().toISOString(),
-    };
-    writeConfigMeta(paths, meta);
+    let meta = readConfigMeta(paths);
+    const { key: masterKey } = resolveMasterKey(bootstrap.CONFIG_MASTER_KEY, meta, paths);
+    persistRuntimeConfigUnlocked(paths, masterKey, settings, secrets, meta);
+  });
+
+  resetRuntimeConfigCache();
+  return loadRuntimeConfig();
+}
+
+export function completeAdminSetupUnderLock(
+  settings: RuntimeSettings,
+  secrets: RuntimeSecrets,
+): RuntimeConfig {
+  const bootstrap = loadBootstrapEnv();
+  const paths = resolveConfigPaths(bootstrap.CONFIG_DATA_DIR);
+
+  withConfigLock(paths, () => {
+    const current = loadFromDiskUnlocked();
+    if (current.secrets.admin.username && current.secrets.admin.passwordHash) {
+      throw new Error('ALREADY_SETUP');
+    }
+    let meta = readConfigMeta(paths);
+    const { key: masterKey } = resolveMasterKey(bootstrap.CONFIG_MASTER_KEY, meta, paths);
+    persistRuntimeConfigUnlocked(paths, masterKey, settings, secrets, meta);
   });
 
   resetRuntimeConfigCache();

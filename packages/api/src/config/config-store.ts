@@ -8,6 +8,7 @@ import {
   openSync,
   closeSync,
   unlinkSync,
+  statSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -61,9 +62,26 @@ function ensureConfigDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o750 });
 }
 
+const STALE_LOCK_MS = 120_000;
+
+function acquireFileLock(lockPath: string): number {
+  try {
+    return openSync(lockPath, 'wx');
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+    if (code !== 'EEXIST') throw err;
+    const ageMs = Date.now() - statSync(lockPath).mtimeMs;
+    if (ageMs <= STALE_LOCK_MS) {
+      throw new Error('Config store is locked by another process');
+    }
+    unlinkSync(lockPath);
+    return openSync(lockPath, 'wx');
+  }
+}
+
 function withFileLock<T>(lockPath: string, fn: () => T): T {
   ensureConfigDir(join(lockPath, '..'));
-  const fd = openSync(lockPath, 'wx');
+  const fd = acquireFileLock(lockPath);
   try {
     return fn();
   } finally {
@@ -128,8 +146,16 @@ export function writeSecrets(
   atomicWriteFile(paths.secretsPath, encrypted, 0o600);
 }
 
+export function settingsFileExists(paths: ConfigStorePaths): boolean {
+  return existsSync(paths.settingsPath);
+}
+
+export function secretsFileExists(paths: ConfigStorePaths): boolean {
+  return existsSync(paths.secretsPath);
+}
+
 export function configStoreExists(paths: ConfigStorePaths): boolean {
-  return existsSync(paths.settingsPath) || existsSync(paths.secretsPath);
+  return settingsFileExists(paths) || secretsFileExists(paths);
 }
 
 export function resolveMasterKey(

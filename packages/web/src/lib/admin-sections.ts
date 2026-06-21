@@ -1,5 +1,6 @@
 export const ADMIN_SECTIONS = [
   'overview',
+  'general',
   'grchc',
   'api',
   'adminAccess',
@@ -30,6 +31,8 @@ export function adminLinkForSetupStep(stepId: string, href?: string) {
   switch (stepId) {
     case 'adminAccount':
       return { to: '/admin/setup' as const };
+    case 'externalLookupApiKey':
+      return { to: '/admin/setup-api-key' as const };
     case 'grchcCredentials':
       return { to: '/admin' as const, search: { section: 'grchc' as const } };
     case 'googleMapsKey':

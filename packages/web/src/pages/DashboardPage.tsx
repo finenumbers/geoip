@@ -10,11 +10,11 @@ import { isDatasetInitializing } from '@geoip/shared';
 import {
   formatSystemCheckLabel,
   formatSystemCheckStatus,
-  formatMaterializedViewsStatus,
   systemCheckStatusClass,
   type SystemCheckId,
 } from '@/lib/system-status-labels';
 import { cn } from '@/lib/utils';
+import { formatDateTime } from '@/lib/format-datetime';
 
 function formatMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return '—';
@@ -154,12 +154,7 @@ export function DashboardPage() {
   const mvStatus = metrics?.mvStatus ?? dataset?.mvStatus;
   const isInitializing = isDatasetInitializing(datasetDate, mvStatus);
   const volumes = dataset?.volumes;
-
-  const mvDisplay = formatMaterializedViewsStatus({
-    checks: ready?.checks,
-    initializing: isInitializing,
-    mvStatus,
-  });
+  const displayTimezone = dataset?.displayTimezone ?? 'Europe/Moscow';
 
   const toggleImportDetail = (runId: string) => {
     setSelectedImportId((current) => (current === runId ? null : runId));
@@ -191,14 +186,7 @@ export function DashboardPage() {
           <SummaryDetails>
             <DetailItem
               label={ui.dashboard.activated}
-              value={
-                dataset?.activatedAt ? new Date(dataset.activatedAt).toLocaleString('ru') : '—'
-              }
-            />
-            <DetailItem
-              label={formatSystemCheckLabel('materializedViews')}
-              value={mvDisplay.text}
-              valueClassName={systemCheckStatusClass(mvDisplay.state)}
+              value={formatDateTime(dataset?.activatedAt, displayTimezone)}
             />
             <DetailItem
               label={ui.dashboard.fingerprint}
@@ -211,11 +199,11 @@ export function DashboardPage() {
             />
             <DetailItem
               label={ui.dashboard.nextImport}
-              value={
-                dataset?.nextImportAt
-                  ? new Date(dataset.nextImportAt).toLocaleString('ru')
-                  : '—'
-              }
+              value={formatDateTime(dataset?.nextImportAt, displayTimezone)}
+            />
+            <DetailItem
+              label={ui.dashboard.serverTime}
+              value={formatDateTime(dataset?.serverNow, displayTimezone)}
             />
           </SummaryDetails>
         </Card>
@@ -255,7 +243,7 @@ export function DashboardPage() {
                 <td>{importStatusLabel(run.status)}</td>
                 <td>{importTriggerLabel(run.triggeredBy)}</td>
                 <td>{formatDuration(run.startedAt, run.finishedAt)}</td>
-                <td>{run.startedAt ? new Date(run.startedAt).toLocaleString('ru') : '—'}</td>
+                <td>{formatDateTime(run.startedAt, displayTimezone)}</td>
                 <td className="text-right">
                   <button
                     type="button"

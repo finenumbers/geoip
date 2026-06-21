@@ -1,6 +1,8 @@
 # External IP Lookup API
 
-Внешний доступ к IP Lookup через единый API-ключ проекта (`Admin → API и безопасность → API-ключ External IP Lookup`).
+Внешний доступ к IP Lookup через единый API-ключ проекта.
+
+**Первичная настройка:** ключ создаётся на обязательном шаге `/admin/setup-api-key` (или позже в `Admin → API и безопасность → API-ключ External IP Lookup`).
 
 **UI-документация:** страница `/api-docs` в приложении (за NPM Access List).
 

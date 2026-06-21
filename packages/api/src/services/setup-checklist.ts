@@ -1,5 +1,6 @@
 import {
   isAdminAccountConfigured,
+  isExternalLookupApiKeyConfigured,
   isGoogleMapsConfigured,
   isGrchcConfigured,
   hasPendingSetupSteps,
@@ -21,6 +22,7 @@ export async function buildSetupChecklist(): Promise<SetupChecklistResponse> {
   }
 
   const adminDone = isAdminAccountConfigured(secrets);
+  const externalApiKeyDone = isExternalLookupApiKeyConfigured(secrets);
   const grchcDone = isGrchcConfigured(secrets);
   const mapsDone = isGoogleMapsConfigured(secrets);
 
@@ -30,6 +32,12 @@ export async function buildSetupChecklist(): Promise<SetupChecklistResponse> {
       label: 'Создать учётную запись администратора',
       done: adminDone,
       href: '/admin/setup',
+    },
+    {
+      id: 'externalLookupApiKey',
+      label: 'Сгенерировать API-ключ External IP Lookup',
+      done: externalApiKeyDone,
+      href: '/admin/setup-api-key',
     },
     {
       id: 'grchcCredentials',

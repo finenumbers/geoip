@@ -49,15 +49,19 @@ export function applyEnvironmentProfile(
   return settings;
 }
 
-/** Fresh install: system keys generated; personal GRChC / Google Maps left empty. */
+/** Fresh install: import key generated; external lookup key set during onboarding. */
 export function createFreshSecrets(): RuntimeSecrets {
-  const apiKey = generateRandomKey(32);
+  const importApiKey = generateRandomKey(32);
   return runtimeSecretsSchema.parse({
     geoipLk: { email: '', password: '' },
-    api: { importApiKey: apiKey, apiKey },
+    api: { importApiKey, apiKey: '' },
     admin: { username: '', passwordHash: '', sessionSecret: generateRandomKey(32) },
     integrations: { googleMapsApiKey: '' },
   });
+}
+
+export function isExternalLookupApiKeyConfigured(secrets: RuntimeSecrets): boolean {
+  return secrets.api.apiKey.trim().length >= 8;
 }
 
 export function isGrchcConfigured(secrets: RuntimeSecrets): boolean {

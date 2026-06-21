@@ -3,11 +3,13 @@ import {
   adminSetupSchema,
   runtimeSecretsSchema,
   runtimeSettingsSchema,
+  FIXED_IMPORT_CRON,
+  FIXED_IMPORT_TIMEZONE,
   type AdminConfigPatch,
   type RuntimeSecrets,
   type RuntimeSettings,
 } from '@geoip/shared';
-import { persistRuntimeConfig, resetRuntimeConfigCache, loadRuntimeConfig } from '../config/runtime-config.js';
+import { persistRuntimeConfig, resetRuntimeConfigCache, loadRuntimeConfig, completeAdminSetupUnderLock } from '../config/runtime-config.js';
 import { resetEnvCache } from '../config/env.js';
 import { hashAdminPassword, verifyAdminPassword } from './admin-password.js';
 
@@ -15,9 +17,10 @@ function deepMergeSettings(
   base: RuntimeSettings,
   patch: Partial<RuntimeSettings>,
 ): RuntimeSettings {
-  return runtimeSettingsSchema.parse({
+  const merged = runtimeSettingsSchema.parse({
     ...base,
     ...patch,
+    general: { ...base.general, ...patch.general },
     geoipLk: { ...base.geoipLk, ...patch.geoipLk },
     import: { ...base.import, ...patch.import },
     export: { ...base.export, ...patch.export },
@@ -26,7 +29,14 @@ function deepMergeSettings(
     database: { ...base.database, ...patch.database },
     asnMap: { ...base.asnMap, ...patch.asnMap },
     logging: { ...base.logging, ...patch.logging },
-    backup: { ...base.backup, ...patch.backup },
+  });
+  return runtimeSettingsSchema.parse({
+    ...merged,
+    import: {
+      ...merged.import,
+      cron: FIXED_IMPORT_CRON,
+      cronTimezone: FIXED_IMPORT_TIMEZONE,
+    },
   });
 }
 
@@ -108,10 +118,6 @@ export function completeAdminSetup(input: unknown) {
   }
 
   const current = loadRuntimeConfig();
-  if (current.secrets.admin.username && current.secrets.admin.passwordHash) {
-    throw new AdminConfigError('ALREADY_SETUP', 'Admin уже настроен');
-  }
-
   const secrets: RuntimeSecrets = {
     ...current.secrets,
     admin: {
@@ -121,7 +127,14 @@ export function completeAdminSetup(input: unknown) {
     },
   };
 
-  return persistRuntimeConfig(current.settings, secrets);
+  try {
+    return completeAdminSetupUnderLock(current.settings, secrets);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'ALREADY_SETUP') {
+      throw new AdminConfigError('ALREADY_SETUP', 'Admin уже настроен');
+    }
+    throw err;
+  }
 }
 
 export function verifyAdminCredentials(username: string, password: string): boolean {

@@ -1,6 +1,9 @@
 /** Russian UI copy — single source for user-facing strings. */
 export const ui = {
   appTitle: 'GeoIP Analytics (данные Главного радиочастотного центра России)',
+  header: {
+    yourIp: 'Ваш IP',
+  },
   nav: {
     dashboard: 'Панель',
     table: 'Таблица',
@@ -128,6 +131,7 @@ export const ui = {
     fingerprint: 'Fingerprint',
     activeImport: 'Активный import',
     nextImport: 'Следующий import',
+    serverTime: 'Время на сервере',
     cityBlocks: 'City blocks',
     cityLocations: 'City locations',
     ruCityBlocks: 'RU city blocks',
@@ -168,10 +172,15 @@ export const ui = {
   admin: {
     title: 'Администрирование',
     loginTitle: 'Вход в Admin',
-    setupTitle: 'Первичная настройка Admin',
-    setupHint: 'Задайте локальный логин и пароль администратора. Доступ дополнительно защищён NPM Access List.',
+    setupTitle: 'Первичная настройка',
+    setupHint: 'Задайте локальный логин и пароль администратора.',
     loginAction: 'Войти',
     setupAction: 'Создать admin',
+    setupApiKeyTitle: 'API-ключ External IP Lookup',
+    setupApiKeyHint:
+      'Обязательный шаг первичной настройки. Ключ используется для External IP Lookup API и внутренних запросов SPA. Скопируйте ключ сейчас — после сохранения он будет скрыт.',
+    setupApiKeyAction: 'Сохранить ключ',
+    setupApiKeySaved: 'Ключ сохранён. Перезапустите geoip_web после деплоя, если proxy.env не обновился автоматически.',
     logout: 'Выйти',
     loading: 'Загрузка настроек…',
     saved: 'Настройки сохранены',
@@ -184,9 +193,12 @@ export const ui = {
     newPassword: 'Новый пароль',
     currentPassword: 'Текущий пароль',
     confirmPassword: 'Подтверждение пароля',
-    sessionUser: 'Admin',
     updatedAt: 'Обновлено',
     importTime: 'Время ежедневного import',
+    importScheduleFixed: 'Import: ежедневно в 10:00 (Europe/Moscow) — расписание фиксировано.',
+    displayTimezone: 'Часовой пояс отображения',
+    displayTimezoneHint:
+      'Все даты и время в интерфейсе (дашборд, история import) показываются в этом часовом поясе (IANA, например Europe/Moscow).',
     overviewHint: 'Статус локального config store и быстрые операции.',
     reloadHints: 'Поля, требующие перезапуска сервисов',
     infraHint: 'Параметры инфраструктуры (Postgres, compose) меняются через Portainer и не хранятся в admin store.',
@@ -196,13 +208,14 @@ export const ui = {
     importApiKey: 'Import API key',
     sections: {
       overview: 'Обзор',
+      general: 'Общие',
       grchc: 'ГРЧЦ / Import',
       api: 'API и безопасность',
       adminAccess: 'Admin доступ',
       export: 'Export',
       performance: 'Производительность',
       integrations: 'Интеграции',
-      logging: 'Логирование и backup',
+      logging: 'Логирование',
       infra: 'Инфраструктура',
     },
   },

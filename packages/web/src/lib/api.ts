@@ -87,6 +87,8 @@ export const api = {
     return body;
   },
   setupChecklist: () => request<SetupChecklistResponse>('/public/setup-checklist'),
+  clientIp: () => request<{ ip: string | null }>('/public/client-ip'),
+  externalIp: () => request<{ ip: string | null }>('/public/external-ip'),
   dataset: () => request<DatasetState>('/dataset/active'),
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
   importById: (id: string) => request<ImportRun>(`/imports/${id}`),

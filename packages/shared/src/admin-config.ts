@@ -3,6 +3,11 @@ import { z } from 'zod';
 export const DEFAULT_GEOIP_LK_BASE_URL = 'https://geoip.noc.gov.ru';
 
 export const runtimeSettingsSchema = z.object({
+  general: z
+    .object({
+      displayTimezone: z.string().default('Europe/Moscow'),
+    })
+    .default({}),
   geoipLk: z
     .object({
       baseUrl: z.string().url().default(DEFAULT_GEOIP_LK_BASE_URL),
@@ -61,12 +66,6 @@ export const runtimeSettingsSchema = z.object({
     .object({
       level: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
       accessLogEnabled: z.boolean().default(true),
-    })
-    .default({}),
-  backup: z
-    .object({
-      intervalSeconds: z.number().int().positive().default(86_400),
-      retentionDays: z.number().int().min(0).default(14),
     })
     .default({}),
 });
@@ -170,12 +169,12 @@ export type AdminConfigResponse = {
     requiresImportWorkerRestart: string[];
     requiresExportWorkerRestart: string[];
     requiresWebReload: string[];
-    requiresBackupRestart: string[];
   };
 };
 
 export type PublicRuntimeConfig = {
   googleMapsApiKey: string;
+  displayTimezone: string;
 };
 
 export type AdminSessionInfo = {

@@ -1,22 +1,26 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { FIXED_IMPORT_CRON, FIXED_IMPORT_TIMEZONE } from '@geoip/shared';
 import { getDatasetState, listImportRuns, getImportRunById } from '../repositories/dataset-repository.js';
 import { getImportHistoryLimit } from '../jobs/import-history-retention.js';
 import { loadEnv } from '../config/env.js';
+import { loadRuntimeConfig } from '../config/runtime-config.js';
 import { query } from '../db/client.js';
 import { getNextDailyCronRun } from '../utils/next-cron-run.js';
 
 export async function registerDatasetRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/dataset/active', { preHandler: [app.verifyApiKeyIfEnabled] }, async () => {
     const state = await getDatasetState();
-    const env = loadEnv();
+    const config = loadRuntimeConfig();
+    const displayTimezone = config.settings.general.displayTimezone.trim() || 'Europe/Moscow';
 
     const sizeResult = await query<{ size: string }>(
       'SELECT pg_database_size(current_database()) AS size',
     );
     const databaseSizeBytes = Number(sizeResult.rows[0]?.size ?? 0) || null;
-    const cronExpression = env.IMPORT_CRON_CRON.trim() || '0 10 * * *';
-    const nextImportAt = getNextDailyCronRun(cronExpression)?.toISOString() ?? null;
+    const nextImportAt =
+      getNextDailyCronRun(FIXED_IMPORT_CRON, new Date(), FIXED_IMPORT_TIMEZONE)?.toISOString() ??
+      null;
 
     return {
       datasetDate: state.datasetDate,
@@ -27,7 +31,9 @@ export async function registerDatasetRoutes(app: FastifyInstance): Promise<void>
       volumes: state.volumes,
       databaseSizeBytes,
       nextImportAt,
-      exportMaxRows: env.EXPORT_MAX_ROWS,
+      displayTimezone,
+      serverNow: new Date().toISOString(),
+      exportMaxRows: loadEnv().EXPORT_MAX_ROWS,
     };
   });
 

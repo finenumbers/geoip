@@ -14,18 +14,12 @@ import {
   SESSION_COOKIE,
   sessionCookieOptions,
 } from '../services/admin-session.js';
+import { clientIp, publicClientIp } from '../utils/client-ip.js';
+import { lookupServerPublicIp } from '../utils/external-ip-lookup.js';
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-
-function clientIp(request: FastifyRequest): string {
-  const forwarded = request.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.length > 0) {
-    return forwarded.split(',')[0]?.trim() ?? request.ip;
-  }
-  return request.ip;
-}
 
 function checkLoginRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -195,15 +189,26 @@ export async function registerAdminOpsRoutes(app: FastifyInstance): Promise<void
 export async function registerPublicConfigRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/public/runtime', async () => {
     const { loadEnv } = await import('../config/env.js');
+    const { loadRuntimeConfig } = await import('../config/runtime-config.js');
     const env = loadEnv();
+    const config = loadRuntimeConfig();
     return {
       googleMapsApiKey: env.GOOGLE_MAPS_API_KEY,
+      displayTimezone: config.settings.general.displayTimezone.trim() || 'Europe/Moscow',
     };
   });
 
   app.get('/api/v1/public/setup-checklist', async () => {
     const { buildSetupChecklist } = await import('../services/setup-checklist.js');
     return buildSetupChecklist();
+  });
+
+  app.get('/api/v1/public/client-ip', async (request) => {
+    return { ip: publicClientIp(request) };
+  });
+
+  app.get('/api/v1/public/external-ip', async () => {
+    return { ip: await lookupServerPublicIp() };
   });
 }
 

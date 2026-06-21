@@ -4,15 +4,16 @@
 
 - `settings.json` — обычные параметры
 - `secrets.enc` — зашифрованные секреты (AES-256-GCM)
-- `proxy.env` — API key для nginx → API (обновляется автоматически)
+- `proxy.env` — API key для nginx → API (обновляется при сохранении External IP Lookup key)
 
 Доступ к `/admin` — отдельный логин (session cookie) **поверх** NPM Access List.
 
 ## Первичная настройка
 
-1. Откройте `/admin/setup`
-2. Задайте логин и пароль администратора
-3. После сохранения вы попадёте в Admin → Обзор с checklist
+1. `/admin/setup` — учётная запись администратора
+2. `/admin/setup-api-key` — **обязательно** сгенерировать API-ключ External IP Lookup (скопируйте до сохранения)
+3. Admin → ГРЧЦ — учётные данные ЛК ГРЧЦ
+4. Admin → Обзор — импорт датасета
 
 ## Обзор
 
@@ -20,6 +21,12 @@
 - «Проверить ГРЧЦ» — probe ЛК без запуска import
 - «Импортировать датасет» — ручная постановка импорта в очередь
 - Подсказки о полях, требующих перезапуска сервисов
+
+## Общие
+
+| Поле | Описание |
+|------|----------|
+| Часовой пояс отображения | IANA timezone (default `Europe/Moscow`). Все даты/время в UI и на дашборде показываются в этом поясе |
 
 ## ГРЧЦ / Import
 
@@ -29,8 +36,7 @@
 |------|----------|
 | Email / Пароль | Доступ к личному кабинету GeoIP на сайте ГРЧЦ |
 | Base URL | URL ЛК (default уже задан) |
-| Время import | Cron в формате UI (по умолчанию 10:00) |
-| Timezone | `Europe/Moscow` |
+| Расписание import | **Фиксировано:** ежедневно **10:00 Europe/Moscow** (не редактируется) |
 | ZIP cache / Skip unchanged / Staging snapshot | Оптимизации import (defaults включены) |
 
 После save: «Проверить ГРЧЦ» → «Импортировать датасет» на Обзоре.
@@ -39,13 +45,14 @@ Cron **не запускает** import, пока не указаны creds ГР
 
 ## API и безопасность
 
-**Defaults при первом boot (production):**
+**Production defaults:**
 
 - `authEnabled=true` — table, lookup, exports требуют `X-API-Key`
-- API keys **генерируются автоматически** (не placeholder)
+- **External IP Lookup key** задаётся на шаге `/admin/setup-api-key` (не генерируется автоматически вместе с admin)
+- Import API key генерируется системой для внутренних операций
 - Rate limits — project defaults
 
-Nginx читает `proxy.env` и подставляет ключ в proxied `/api/` — SPA работает без ключа в браузере.
+Nginx читает `proxy.env` и подставляет External IP Lookup key в proxied `/api/` — SPA работает без ключа в браузере.
 
 ## Admin доступ
 
@@ -61,20 +68,24 @@ Pool size, statement timeout, ASN map batch/workers — defaults для типи
 
 ## Интеграции
 
-**Google Maps (опционально).** Ключ Maps Embed API — в Google Cloud Console, ограничение по HTTP referrer. Подхватывается runtime без пересборки web.
+**Google Maps (опционально).** Ключ Maps Embed API — в Google Cloud Console, ограничение по HTTP referrer. Подхватывается runtime без переборки web.
 
-## Логирование и backup
+## Логирование
 
-Уровень логов, access log, интервал и retention бэкапов Postgres.
+Уровень логов и access log.
 
 ## Инфраструктура
 
-Postgres, compose, NPM — настраиваются вне Admin store (Portainer / `.env` bootstrap).
+Postgres, compose, NPM — настраиваются вне Admin store (Portainer / правка compose).
+
+## Восстановление данных
+
+Автобэкап PostgreSQL **не используется**. При проблеме с данными выполните повторный import датасета из ГРЧЦ.
 
 ## Что не хранится в Admin
 
-- `DATABASE_URL`, `POSTGRES_*` — bootstrap / compose
-- `CONFIG_MASTER_KEY` — env / Portainer (ключ шифрования volume)
+- `POSTGRES_*` — заданы в `docker-compose*.yml` (можно заменить при деплое)
+- `CONFIG_MASTER_KEY` — env / compose (пусто = автогенерация в `meta.json` на volume)
 
 См. [БЕЗОПАСНОСТЬ.md](БЕЗОПАСНОСТЬ.md).
 

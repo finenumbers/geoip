@@ -7,6 +7,7 @@ import { BrowsePage } from '@/pages/BrowsePage';
 import { AdminPage } from '@/pages/AdminPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
 import { AdminSetupPage } from '@/pages/AdminSetupPage';
+import { AdminSetupApiKeyPage } from '@/pages/AdminSetupApiKeyPage';
 import { DEFAULT_BROWSE_SEARCH, coerceBrowseSearchJsonParam } from '@/lib/table-query-state';
 import { parseAdminSearch } from '@/lib/admin-sections';
 
@@ -24,6 +25,9 @@ const lookupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/lookup',
   component: LookupPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    ip: typeof search.ip === 'string' && search.ip.trim() ? search.ip.trim() : undefined,
+  }),
 });
 
 const apiDocsRoute = createRoute({
@@ -70,6 +74,12 @@ const adminSetupRoute = createRoute({
   component: AdminSetupPage,
 });
 
+const adminSetupApiKeyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/setup-api-key',
+  component: AdminSetupApiKeyPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   lookupRoute,
@@ -79,6 +89,7 @@ const routeTree = rootRoute.addChildren([
   adminRoute,
   adminLoginRoute,
   adminSetupRoute,
+  adminSetupApiKeyRoute,
 ]);
 
 export const router = createRouter({ routeTree });
