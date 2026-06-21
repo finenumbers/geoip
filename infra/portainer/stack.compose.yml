@@ -1,5 +1,5 @@
 # Legacy Portainer stack — include + build on host (requires full monorepo clone).
-# For Portainer production use docker-compose.portainer.yml instead (see docs/PORTAINER.md).
+# For Portainer production use docker-compose.portainer.yml instead (see docs/РАЗВЁРТЫВАНИЕ.md).
 
 include:
   - path: ../../docker-compose.yml

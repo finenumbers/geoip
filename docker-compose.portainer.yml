@@ -3,7 +3,7 @@
 # Portainer → Stacks → Repository → Compose path:
 #   docker-compose.portainer.yml
 #
-# POSTGRES_* / image tag заданы в compose (docs/УСТАНОВКА.md).
+# POSTGRES_* / image tag заданы в compose (docs/РАЗВЁРТЫВАНИЕ.md).
 # CONFIG_MASTER_KEY — опционально в Portainer → Stack → Environment variables.
 # Uses Docker configs (inline content) instead of ./infra/ and ./scripts/ bind mounts,
 # because Portainer often deploys only the compose file without the full git tree.

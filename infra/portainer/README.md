@@ -8,7 +8,7 @@ docker-compose.portainer.yml
 
 **Только** `docker-compose.portainer.yml` — без bind mounts, GHCR images. После push: **Pull and redeploy** (работает только при **Control: Total**).
 
-> **Control: Limited?** Stack создан вне Portainer — обновить нельзя. [Инструкция по пересозданию](../../docs/PORTAINER.md#stack-limited--created-outside-of-portainer-нельзя-обновить)
+> **Control: Limited?** Stack создан вне Portainer — обновить нельзя. [Инструкция по пересозданию](../../docs/РАЗВЁРТЫВАНИЕ.md#stack-limited-created-outside-of-portainer)
 
 ## Быстрый старт
 
@@ -19,7 +19,7 @@ docker-compose.portainer.yml
 | **Compose path** | **`docker-compose.portainer.yml`** ← обязательно (не `docker-compose.yml`) |
 | Environment | [`stack.env.example`](stack.env.example) |
 
-Полная инструкция: **[docs/PORTAINER.md](../../docs/PORTAINER.md)**
+Полная инструкция: **[docs/РАЗВЁРТЫВАНИЕ.md](../../docs/РАЗВЁРТЫВАНИЕ.md)** · onboarding: **[docs/БЫСТРЫЙ-СТАРТ.md](../../docs/БЫСТРЫЙ-СТАРТ.md)**
 
 ---
 

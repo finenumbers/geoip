@@ -1,5 +1,5 @@
 # Dev-friendly defaults — .env не обязателен для Docker.
-# POSTGRES_* / image tag можно заменить при production deploy (docs/УСТАНОВКА.md).
+# POSTGRES_* / image tag можно заменить при production deploy (docs/РАЗВЁРТЫВАНИЕ.md).
 # CONFIG_MASTER_KEY — только через Portainer env или .env (не задавайте пустую строку в compose).
 # Локальная сборка образов: docker compose -f docker-compose.yml -f docker-compose.build.yml build
 
