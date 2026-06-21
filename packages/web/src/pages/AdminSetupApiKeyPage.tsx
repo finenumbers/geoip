@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AdminAuthShell } from '@/components/AdminAuthShell';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 
@@ -16,10 +17,16 @@ export function AdminSetupApiKeyPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const { data: authStatus, isLoading: authLoading } = useQuery({
+    queryKey: ['admin-auth-status'],
+    queryFn: adminApi.authStatus,
+  });
+
   const { data: me, isLoading: meLoading, isError: meError } = useQuery({
     queryKey: ['admin-me'],
     queryFn: adminApi.me,
     retry: false,
+    enabled: authStatus?.setupComplete === true,
   });
 
   const { data: config, isLoading: configLoading } = useQuery({
@@ -27,6 +34,12 @@ export function AdminSetupApiKeyPage() {
     queryFn: adminApi.getConfig,
     enabled: Boolean(me),
   });
+
+  useEffect(() => {
+    if (authStatus && !authStatus.setupComplete) {
+      void navigate({ to: '/admin/setup' });
+    }
+  }, [authStatus, navigate]);
 
   useEffect(() => {
     if (meError) {
@@ -51,20 +64,21 @@ export function AdminSetupApiKeyPage() {
     onError: (err: Error) => setError(err.message),
   });
 
-  if (meLoading || configLoading) {
+  const loading = authLoading || meLoading || configLoading || !authStatus?.setupComplete;
+
+  if (loading) {
     return (
-      <div className="mx-auto max-w-md px-6 py-10">
+      <AdminAuthShell title={ui.admin.setupApiKeyTitle}>
         <p>{ui.admin.loading}</p>
-      </div>
+      </AdminAuthShell>
     );
   }
 
   return (
-    <div className="mx-auto max-w-md px-6 py-10">
-      <h1 className="mb-2 text-2xl font-bold">{ui.admin.setupApiKeyTitle}</h1>
-      <p className="mb-6 text-sm text-muted">{ui.admin.setupApiKeyHint}</p>
+    <AdminAuthShell title={ui.admin.setupApiKeyTitle}>
+      <p className="mb-6 max-w-md text-sm text-muted">{ui.admin.setupApiKeyHint}</p>
       <form
-        className="space-y-4"
+        className="mx-auto w-full max-w-md space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -108,6 +122,6 @@ export function AdminSetupApiKeyPage() {
           {save.isPending ? 'Сохранение…' : ui.admin.setupApiKeyAction}
         </button>
       </form>
-    </div>
+    </AdminAuthShell>
   );
 }

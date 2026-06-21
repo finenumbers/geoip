@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { AdminAuthShell } from '@/components/AdminAuthShell';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 
@@ -15,6 +16,12 @@ export function AdminLoginPage() {
     queryFn: adminApi.authStatus,
   });
 
+  useEffect(() => {
+    if (status && !status.setupComplete) {
+      void navigate({ to: '/admin/setup' });
+    }
+  }, [status, navigate]);
+
   const login = useMutation({
     mutationFn: () => adminApi.login(username, password),
     onSuccess: () => {
@@ -23,17 +30,16 @@ export function AdminLoginPage() {
     onError: (err: Error) => setError(err.message),
   });
 
-  if (isLoading) {
-    return <AdminShell title={ui.admin.loginTitle}>Загрузка…</AdminShell>;
-  }
-
-  if (!status?.setupComplete) {
-    void navigate({ to: '/admin/setup' });
-    return null;
+  if (isLoading || (status && !status.setupComplete)) {
+    return (
+      <AdminAuthShell title={ui.admin.loginTitle}>
+        <p>{ui.admin.loading}</p>
+      </AdminAuthShell>
+    );
   }
 
   return (
-    <AdminShell title={ui.admin.loginTitle}>
+    <AdminAuthShell title={ui.admin.loginTitle}>
       <form
         className="mx-auto w-full max-w-md space-y-4"
         onSubmit={(e) => {
@@ -70,15 +76,6 @@ export function AdminLoginPage() {
           {login.isPending ? 'Вход…' : ui.admin.loginAction}
         </button>
       </form>
-    </AdminShell>
-  );
-}
-
-function AdminShell({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mx-auto flex min-h-[60vh] max-w-5xl flex-col justify-center px-6 py-10">
-      <h1 className="mb-6 text-2xl font-bold">{title}</h1>
-      {children}
-    </div>
+    </AdminAuthShell>
   );
 }

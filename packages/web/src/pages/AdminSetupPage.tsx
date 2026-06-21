@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AdminAuthShell } from '@/components/AdminAuthShell';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 
@@ -17,34 +18,35 @@ export function AdminSetupPage() {
     queryFn: adminApi.authStatus,
   });
 
+  useEffect(() => {
+    if (status?.setupComplete) {
+      void navigate({ to: '/admin/login' });
+    }
+  }, [status, navigate]);
+
   const setup = useMutation({
     mutationFn: () => adminApi.setup(username, password, confirmPassword),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-auth-status'] });
       void navigate({ to: '/admin/setup-api-key' });
     },
     onError: (err: Error) => setError(err.message),
   });
 
-  if (isLoading) {
+  if (isLoading || status?.setupComplete) {
     return (
-      <div className="mx-auto max-w-md px-6 py-10">
-        <p>Загрузка…</p>
-      </div>
+      <AdminAuthShell title={ui.admin.setupTitle}>
+        <p>{ui.admin.loading}</p>
+      </AdminAuthShell>
     );
   }
 
-  if (status?.setupComplete) {
-    void navigate({ to: '/admin/login' });
-    return null;
-  }
-
   return (
-    <div className="mx-auto max-w-md px-6 py-10">
-      <h1 className="mb-2 text-2xl font-bold">{ui.admin.setupTitle}</h1>
+    <AdminAuthShell title={ui.admin.setupTitle}>
       <p className="mb-6 text-sm text-muted">{ui.admin.setupHint}</p>
       <form
-        className="space-y-4"
+        className="mx-auto w-full max-w-md space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -58,6 +60,7 @@ export function AdminSetupPage() {
             className="w-full rounded-md border border-border bg-background px-3 py-2"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
           />
         </label>
         <label className="block space-y-1 text-sm">
@@ -67,6 +70,7 @@ export function AdminSetupPage() {
             className="w-full rounded-md border border-border bg-background px-3 py-2"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
           />
         </label>
         <label className="block space-y-1 text-sm">
@@ -76,6 +80,7 @@ export function AdminSetupPage() {
             className="w-full rounded-md border border-border bg-background px-3 py-2"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
           />
         </label>
         <button
@@ -86,6 +91,6 @@ export function AdminSetupPage() {
           {setup.isPending ? 'Сохранение…' : ui.admin.setupAction}
         </button>
       </form>
-    </div>
+    </AdminAuthShell>
   );
 }
