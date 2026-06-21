@@ -14,7 +14,7 @@ import { validateExportRowLimit } from '../services/query-limits.js';
 export async function registerExportRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/api/v1/exports/table',
-    { preHandler: [app.verifyApiKey] },
+    { preHandler: [app.verifyApiKeyIfEnabled] },
     async (request, reply) => {
       const parsed = exportRequestSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -65,7 +65,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
     },
   );
 
-  app.get('/api/v1/exports/:id', { preHandler: [app.verifyApiKey] }, async (request, reply) => {
+  app.get('/api/v1/exports/:id', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const job = await getExportJob(id);
     if (!job) {
@@ -83,7 +83,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
     };
   });
 
-  app.get('/api/v1/exports/:id/download', { preHandler: [app.verifyApiKey] }, async (request, reply) => {
+  app.get('/api/v1/exports/:id/download', { preHandler: [app.verifyApiKeyIfEnabled] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const job = await getExportJob(id);
     if (!job || job.status !== 'succeeded' || !job.downloadPath) {

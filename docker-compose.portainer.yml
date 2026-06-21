@@ -3,7 +3,8 @@
 # Portainer → Stacks → Repository → Compose path:
 #   docker-compose.portainer.yml
 #
-# POSTGRES_* / CONFIG_MASTER_KEY / image tag заданы в compose (docs/УСТАНОВКА.md).
+# POSTGRES_* / image tag заданы в compose (docs/УСТАНОВКА.md).
+# CONFIG_MASTER_KEY — опционально в Portainer → Stack → Environment variables.
 # Uses Docker configs (inline content) instead of ./infra/ and ./scripts/ bind mounts,
 # because Portainer often deploys only the compose file without the full git tree.
 
@@ -78,7 +79,6 @@ services:
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
-      CONFIG_MASTER_KEY: ""
       NODE_ENV: production
     volumes:
       - export_data:/tmp/geoip-exports
@@ -107,7 +107,6 @@ services:
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
-      CONFIG_MASTER_KEY: ""
       NODE_ENV: production
     depends_on:
       pgbouncer:
@@ -132,7 +131,6 @@ services:
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
-      CONFIG_MASTER_KEY: ""
       NODE_ENV: production
     depends_on:
       pgbouncer:

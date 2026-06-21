@@ -36,4 +36,10 @@ describe('loadBootstrapEnv', () => {
     expect(env.DATABASE_URL).toBe('postgresql://geoip:Test%23Pass@pgbouncer:6432/geoip');
     expect(env.DATABASE_DIRECT_URL).toBe('postgresql://geoip:Test%23Pass@postgres:5432/geoip');
   });
+
+  it('treats blank CONFIG_MASTER_KEY as unset', () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://geoip:geoip@localhost:5432/geoip');
+    vi.stubEnv('CONFIG_MASTER_KEY', '   ');
+    expect(loadBootstrapEnv().CONFIG_MASTER_KEY).toBeUndefined();
+  });
 });

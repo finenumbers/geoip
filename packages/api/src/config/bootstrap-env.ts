@@ -105,7 +105,7 @@ export function loadBootstrapEnv(): BootstrapEnv {
     DATABASE_URL: urls.DATABASE_URL,
     DATABASE_DIRECT_URL: urls.DATABASE_DIRECT_URL,
     CONFIG_DATA_DIR: parsed.data.CONFIG_DATA_DIR,
-    CONFIG_MASTER_KEY: parsed.data.CONFIG_MASTER_KEY,
+    CONFIG_MASTER_KEY: parsed.data.CONFIG_MASTER_KEY?.trim() || undefined,
     NODE_ENV: parsed.data.NODE_ENV,
   };
   return cachedBootstrap;

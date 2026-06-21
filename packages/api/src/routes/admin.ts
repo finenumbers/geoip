@@ -16,22 +16,7 @@ import {
 } from '../services/admin-session.js';
 import { clientIp, publicClientIp } from '../utils/client-ip.js';
 import { lookupServerPublicIp } from '../utils/external-ip-lookup.js';
-
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-
-function checkLoginRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = loginAttempts.get(ip);
-  if (!entry || entry.resetAt <= now) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= MAX_LOGIN_ATTEMPTS) return false;
-  entry.count += 1;
-  return true;
-}
+import { checkAdminAuthRateLimit } from '../utils/admin-auth-rate-limit.js';
 
 function setSessionCookie(reply: FastifyReply, username: string): void {
   const config = loadRuntimeConfig();
@@ -52,6 +37,14 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
   });
 
   app.post('/api/v1/admin/auth/setup', async (request, reply) => {
+    const ip = clientIp(request);
+    if (!checkAdminAuthRateLimit(ip)) {
+      return reply.status(429).send({
+        error: 'TooManyRequests',
+        message: 'Слишком много попыток настройки. Попробуйте позже.',
+      });
+    }
+
     const parsed = adminSetupSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
@@ -71,7 +64,7 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
 
   app.post('/api/v1/admin/auth/login', async (request, reply) => {
     const ip = clientIp(request);
-    if (!checkLoginRateLimit(ip)) {
+    if (!checkAdminAuthRateLimit(ip)) {
       return reply.status(429).send({
         error: 'TooManyRequests',
         message: 'Слишком много попыток входа. Попробуйте позже.',

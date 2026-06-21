@@ -1,5 +1,6 @@
 # Dev-friendly defaults — .env не обязателен для Docker.
-# POSTGRES_* / CONFIG_MASTER_KEY / image tag можно заменить при production deploy (docs/УСТАНОВКА.md).
+# POSTGRES_* / image tag можно заменить при production deploy (docs/УСТАНОВКА.md).
+# CONFIG_MASTER_KEY — только через Portainer env или .env (не задавайте пустую строку в compose).
 # Локальная сборка образов: docker compose -f docker-compose.yml -f docker-compose.build.yml build
 
 x-api-database-env: &api-database-env
@@ -54,9 +55,6 @@ services:
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
-      # Пусто = автогенерация master key в config_data/meta.json при первом старте.
-      # Для стабильного ключа задайте 64 hex-символа:
-      CONFIG_MASTER_KEY: ""
     volumes:
       - export_data:/tmp/geoip-exports
       - config_data:/data/geoip/config
@@ -79,7 +77,6 @@ services:
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
-      CONFIG_MASTER_KEY: ""
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -96,7 +93,6 @@ services:
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
-      CONFIG_MASTER_KEY: ""
     depends_on:
       pgbouncer:
         condition: service_healthy

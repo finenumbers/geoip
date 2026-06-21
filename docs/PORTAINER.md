@@ -38,7 +38,7 @@
 
 **Первый запуск:** база данных **пустая**. Это нормально. Dashboard покажет checklist, `/api/v1/ready` вернёт `not_ready`, пока вы не импортируете датасет ГРЧЦ.
 
-**Файл `.env` на сервере не нужен.** `POSTGRES_*`, тег образов и прочие базовые значения уже заданы в `docker-compose.portainer.yml`. В Portainer → Stack → **Environment variables** нужен только опциональный override `CONFIG_MASTER_KEY`.
+**Файл `.env` на сервере не нужен.** `POSTGRES_*` и тег образов уже заданы в `docker-compose.portainer.yml`. В Portainer → Stack → **Environment variables** можно задать опциональный `CONFIG_MASTER_KEY` (64 hex).
 
 ---
 
