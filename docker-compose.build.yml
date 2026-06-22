@@ -20,4 +20,6 @@ services:
     build:
       context: .
       dockerfile: packages/web/Dockerfile
+      args:
+        APP_BUILD: local
     image: geoip-web:local

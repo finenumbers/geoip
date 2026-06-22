@@ -3,6 +3,7 @@ export const ui = {
   appTitle: 'GeoIP Analytics (данные Главного радиочастотного центра России)',
   header: {
     yourIp: 'Ваш IP',
+    build: 'Сборка',
   },
   nav: {
     dashboard: 'Панель',

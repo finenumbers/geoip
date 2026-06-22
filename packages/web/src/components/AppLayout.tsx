@@ -16,7 +16,7 @@ import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
 import { isSetupComplete } from '@geoip/shared';
 import { SystemStatusBanner } from '@/components/SystemStatusBanner';
 import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
-import { formatSystemStatusLabel, systemStatusColorClass } from '@/lib/system-status-labels';
+import { formatAppBuildLabel } from '@/lib/app-version';
 
 type NavItem = {
   to: string;
@@ -60,8 +60,7 @@ const nav: NavItem[] = [
 
 export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { status, datasetDate, mvStatus, datasetError, isReadyLoading, isInitializing } =
-    useSystemReadyStatus();
+  const { datasetDate, datasetError, status, isReadyError } = useSystemReadyStatus();
   const { data: checklist } = useQuery({
     queryKey: ['setup-checklist'],
     queryFn: api.setupChecklist,
@@ -76,13 +75,8 @@ export function AppLayout() {
     staleTime: 5 * 60_000,
   });
   const showAdminBadge = checklist != null && !isSetupComplete(checklist);
-  const systemStatusText = datasetError
-    ? ui.dashboard.statusNotReady
-    : isReadyLoading && !status
-      ? '…'
-      : isInitializing && status === 'not_ready'
-        ? ui.dashboard.statusInitializing
-        : formatSystemStatusLabel(status, datasetDate, mvStatus);
+  const buildLabel = formatAppBuildLabel();
+  const isBuildReady = !isReadyError && status === 'ready';
 
   return (
     <div className="min-h-screen">
@@ -119,18 +113,6 @@ export function AppLayout() {
         <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-border bg-card/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <span className="text-lg font-bold text-black">{ui.appTitle}</span>
           <div className="flex items-center gap-3 text-sm">
-            <span
-              className={cn(
-                'rounded-full border border-border px-2.5 py-0.5 text-xs font-medium',
-                datasetError || (status === 'not_ready' && !isInitializing)
-                  ? 'text-red-600'
-                  : isReadyLoading && !status
-                    ? 'text-muted'
-                    : systemStatusColorClass(status, datasetDate, mvStatus),
-              )}
-            >
-              {ui.systemBanner.headerStatus}: {systemStatusText}
-            </span>
             {clientIpLoading && (
               <span className="text-muted">
                 {ui.header.yourIp}: …
@@ -155,16 +137,17 @@ export function AppLayout() {
                 <span className="font-bold text-foreground">{datasetDate}</span>
               </span>
             )}
-            {!datasetError && mvStatus && (
+            <span className="text-muted">
+              {ui.header.build}:{' '}
               <span
                 className={cn(
                   'font-bold',
-                  mvStatus === 'ready' ? 'text-green-600' : 'text-amber-600',
+                  isBuildReady ? 'text-green-600' : 'text-red-600',
                 )}
               >
-                MV: {mvStatus}
+                {buildLabel}
               </span>
-            )}
+            </span>
           </div>
         </header>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
