@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ui } from '@/lib/ui-strings';
 import {
+  collectFailedSystemChecks,
   formatMaterializedViewsStatus,
   formatSystemCheckLabel,
   formatSystemCheckStatus,
@@ -55,5 +56,20 @@ describe('system-status-labels', () => {
         mvStatus: 'refreshing',
       }),
     ).toEqual({ text: ui.dashboard.checkMvPending, state: 'pending' });
+  });
+
+  it('collects failed checks and skips pending MV during initialization', () => {
+    expect(
+      collectFailedSystemChecks(
+        {
+          database: false,
+          dataset: true,
+          materializedViews: false,
+          productionIndexes: true,
+          asnMapping: true,
+        },
+        true,
+      ),
+    ).toEqual(['database']);
   });
 });

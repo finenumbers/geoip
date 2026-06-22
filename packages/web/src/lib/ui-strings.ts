@@ -153,6 +153,15 @@ export const ui = {
     wallTime: 'Wall',
     runId: 'run',
   },
+  systemBanner: {
+    headerStatus: 'Система',
+    titleUnavailable: 'Не удалось проверить состояние системы',
+    titleNotReady: 'Система не готова к работе',
+    titleDegraded: 'Система работает с ограничениями',
+    importRunning: 'Выполняется импорт датасета — часть функций может быть недоступна.',
+    detailsLink: 'Подробнее на Dashboard',
+    datasetError: 'Датасет: ошибка загрузки',
+  },
   setup: {
     title: 'Настройка системы',
     optional: 'опционально',

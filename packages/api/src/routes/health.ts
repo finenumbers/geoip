@@ -10,6 +10,14 @@ import {
   type ReadyResponse,
 } from '../services/ready-cache.js';
 
+async function safeCheck<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null;
+  }
+}
+
 export async function registerHealthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/health', async () => {
     return {
@@ -34,22 +42,21 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
     let asnMapping = false;
     let importRunning = false;
 
-    try {
-      await query('SELECT 1');
-      database = true;
-    } catch {
-      database = false;
+    database = (await safeCheck(() => query('SELECT 1'))) !== null;
+
+    const state = database ? await safeCheck(() => getDatasetState()) : null;
+    if (state) {
+      dataset = state.datasetDate !== null;
     }
 
-    if (database) {
-      const state = await getDatasetState();
-      dataset = state.datasetDate !== null;
-      const mvPresent = await materializedViewsExist();
+    if (state) {
+      const mvPresent = (await safeCheck(() => materializedViewsExist())) ?? false;
       materializedViews = state.mvStatus === 'ready' && mvPresent;
-      productionIndexes = await productionIndexesOk();
-      asnMapping = await isAsnMappingReady();
-      importRunning = (await getRunningImport()) !== null;
     }
+
+    productionIndexes = (await safeCheck(() => productionIndexesOk())) ?? false;
+    asnMapping = (await safeCheck(() => isAsnMappingReady())) ?? false;
+    importRunning = (await safeCheck(() => getRunningImport())) !== null;
 
     const coreReady =
       database && dataset && materializedViews && productionIndexes;

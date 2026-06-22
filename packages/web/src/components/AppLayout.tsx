@@ -14,6 +14,9 @@ import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
 import { isSetupComplete } from '@geoip/shared';
+import { SystemStatusBanner } from '@/components/SystemStatusBanner';
+import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
+import { formatSystemStatusLabel, systemStatusColorClass } from '@/lib/system-status-labels';
 
 type NavItem = {
   to: string;
@@ -57,11 +60,7 @@ const nav: NavItem[] = [
 
 export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { data: dataset } = useQuery({
-    queryKey: ['dataset'],
-    queryFn: api.dataset,
-    refetchInterval: 30_000,
-  });
+  const { status, datasetDate, mvStatus, datasetError, isReadyLoading } = useSystemReadyStatus();
   const { data: checklist } = useQuery({
     queryKey: ['setup-checklist'],
     queryFn: api.setupChecklist,
@@ -76,6 +75,11 @@ export function AppLayout() {
     staleTime: 5 * 60_000,
   });
   const showAdminBadge = checklist != null && !isSetupComplete(checklist);
+  const systemStatusText = datasetError
+    ? ui.dashboard.statusNotReady
+    : isReadyLoading && !status
+      ? '…'
+      : formatSystemStatusLabel(status, datasetDate, mvStatus);
 
   return (
     <div className="min-h-screen">
@@ -112,6 +116,18 @@ export function AppLayout() {
         <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-border bg-card/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <span className="text-lg font-bold text-black">{ui.appTitle}</span>
           <div className="flex items-center gap-3 text-sm">
+            <span
+              className={cn(
+                'rounded-full border border-border px-2.5 py-0.5 text-xs font-medium',
+                datasetError || status === 'not_ready'
+                  ? 'text-red-600'
+                  : isReadyLoading && !status
+                    ? 'text-muted'
+                    : systemStatusColorClass(status, datasetDate, mvStatus),
+              )}
+            >
+              {ui.systemBanner.headerStatus}: {systemStatusText}
+            </span>
             {clientIpLoading && (
               <span className="text-muted">
                 {ui.header.yourIp}: …
@@ -127,26 +143,30 @@ export function AppLayout() {
                 <span className="font-bold text-foreground">{clientIpData.ip}</span>
               </Link>
             )}
-            {dataset?.datasetDate && (
+            {datasetError && (
+              <span className="font-bold text-red-600">{ui.systemBanner.datasetError}</span>
+            )}
+            {!datasetError && datasetDate && (
               <span>
                 {ui.datasetBadge}:{' '}
-                <span className="font-bold text-foreground">{dataset.datasetDate}</span>
+                <span className="font-bold text-foreground">{datasetDate}</span>
               </span>
             )}
-            {dataset?.mvStatus && (
+            {!datasetError && mvStatus && (
               <span
                 className={cn(
                   'font-bold',
-                  dataset.mvStatus === 'ready' ? 'text-green-600' : 'text-amber-600',
+                  mvStatus === 'ready' ? 'text-green-600' : 'text-amber-600',
                 )}
               >
-                MV: {dataset.mvStatus}
+                MV: {mvStatus}
               </span>
             )}
           </div>
         </header>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
-          <div className="flex min-h-0 flex-1 flex-col">
+          <SystemStatusBanner />
+          <div className="mt-4 flex min-h-0 flex-1 flex-col">
             <Outlet />
           </div>
         </main>

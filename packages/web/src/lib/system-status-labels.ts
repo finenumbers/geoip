@@ -1,4 +1,5 @@
 import { ui } from '@/lib/ui-strings';
+import { isDatasetInitializing } from '@geoip/shared';
 
 export type SystemCheckId =
   | 'database'
@@ -90,4 +91,53 @@ export function formatMaterializedViewsStatus(input: {
   const pending =
     mvStatus === 'refreshing' || (initializing && mvStatus != null && mvStatus !== 'ready');
   return formatSystemCheckStatus('materializedViews', ok, pending && !ok);
+}
+
+const CORE_CHECK_IDS: SystemCheckId[] = [
+  'database',
+  'dataset',
+  'materializedViews',
+  'productionIndexes',
+  'asnMapping',
+];
+
+export function collectFailedSystemChecks(
+  checks: Record<string, boolean> | undefined,
+  initializing = false,
+): SystemCheckId[] {
+  if (!checks) return [];
+  return CORE_CHECK_IDS.filter((checkId) => {
+    const pending =
+      checkId === 'materializedViews' &&
+      initializing &&
+      Boolean(checks.dataset) &&
+      !checks.materializedViews;
+    return resolveSystemCheckState(checkId, Boolean(checks[checkId]), pending) === 'fail';
+  });
+}
+
+export function formatSystemStatusLabel(
+  status: string | undefined,
+  datasetDate: string | null | undefined,
+  mvStatus: string | null | undefined,
+): string {
+  if (isDatasetInitializing(datasetDate, mvStatus as 'ready' | 'refreshing' | 'unavailable' | undefined)) {
+    return ui.dashboard.statusInitializing;
+  }
+  if (status === 'ready') return ui.dashboard.statusReady;
+  if (status === 'degraded') return ui.dashboard.statusDegraded;
+  return ui.dashboard.statusNotReady;
+}
+
+export function systemStatusColorClass(
+  status: string | undefined,
+  datasetDate: string | null | undefined,
+  mvStatus: string | null | undefined,
+): string {
+  if (isDatasetInitializing(datasetDate, mvStatus as 'ready' | 'refreshing' | 'unavailable' | undefined)) {
+    return 'text-amber-600';
+  }
+  if (status === 'ready') return 'text-green-600';
+  if (status === 'degraded') return 'text-amber-600';
+  return 'text-red-600';
 }

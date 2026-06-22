@@ -5,14 +5,16 @@ import { api } from '@/lib/api';
 import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
 import { SetupChecklistBanner } from '@/components/SetupChecklistBanner';
-import { SystemInitializingBanner } from '@/components/SystemInitializingBanner';
-import { isDatasetInitializing, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
+import { DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
 import {
   formatSystemCheckLabel,
   formatSystemCheckStatus,
+  formatSystemStatusLabel,
   systemCheckStatusClass,
+  systemStatusColorClass,
   type SystemCheckId,
 } from '@/lib/system-status-labels';
+import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/format-datetime';
 
@@ -55,61 +57,23 @@ function formatBytes(bytes: number | null | undefined): string {
   })} ${units[unitIndex]}`;
 }
 
-function systemStatusLabel(
-  status: string | undefined,
-  datasetDate: string | null,
-  mvStatus: string | undefined,
-): string {
-  if (isDatasetInitializing(datasetDate, mvStatus as 'ready' | 'refreshing' | 'unavailable' | undefined)) {
-    return ui.dashboard.statusInitializing;
-  }
-  if (status === 'ready') return ui.dashboard.statusReady;
-  if (status === 'degraded') return ui.dashboard.statusDegraded;
-  return ui.dashboard.statusNotReady;
-}
-
-function systemStatusClass(
-  status: string | undefined,
-  datasetDate: string | null,
-  mvStatus: string | undefined,
-): string {
-  if (isDatasetInitializing(datasetDate, mvStatus as 'ready' | 'refreshing' | 'unavailable' | undefined)) {
-    return 'text-amber-600';
-  }
-  if (status === 'ready') return 'text-green-600';
-  if (status === 'degraded') return 'text-amber-600';
-  return 'text-red-600';
-}
-
 export function DashboardPage() {
   const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const {
-    data: dataset,
-    isError: datasetError,
-    error: datasetErr,
-  } = useQuery({
-    queryKey: ['dataset'],
-    queryFn: api.dataset,
-    refetchInterval: (query) =>
-      isDatasetInitializing(query.state.data?.datasetDate, query.state.data?.mvStatus) ? 10_000 : 30_000,
-  });
-  const {
-    data: ready,
-    isError: readyError,
-    error: readyErr,
-  } = useQuery({
-    queryKey: ['ready'],
-    queryFn: api.ready,
-    refetchInterval: (query) => {
-      if (query.state.data?.status === 'ready') return false;
-      if (isDatasetInitializing(dataset?.datasetDate, dataset?.mvStatus)) return 10_000;
-      const checks = query.state.data?.checks;
-      if (checks?.dataset && !checks.materializedViews) return 10_000;
-      return false;
-    },
-  });
+    ready,
+    status: systemStatus,
+    dataset,
+    datasetDate: hookDatasetDate,
+    mvStatus: hookMvStatus,
+    datasetError,
+    datasetErr,
+    isInitializing,
+    isReadyError: readyError,
+    readyError: readyErr,
+  } = useSystemReadyStatus();
+
   const {
     data: metrics,
     isError: metricsError,
@@ -147,12 +111,10 @@ export function DashboardPage() {
 
   const benchmark = metrics?.import.latestBenchmark;
   const benchmarkDate = benchmark?.datasetDate ?? dataset?.datasetDate ?? '—';
-  const datasetDate = dataset?.datasetDate ?? metrics?.activeDatasetDate ?? null;
+  const datasetDate = hookDatasetDate ?? metrics?.activeDatasetDate ?? null;
   const hasDataset = Boolean(datasetDate);
   const hasDatabaseVolume = Boolean(dataset?.databaseSizeBytes && dataset.databaseSizeBytes > 0);
-  const systemStatus = ready?.status;
-  const mvStatus = metrics?.mvStatus ?? dataset?.mvStatus;
-  const isInitializing = isDatasetInitializing(datasetDate, mvStatus);
+  const mvStatus = metrics?.mvStatus ?? hookMvStatus;
   const volumes = dataset?.volumes;
   const displayTimezone = dataset?.displayTimezone ?? DEFAULT_DISPLAY_TIMEZONE;
 
@@ -163,7 +125,6 @@ export function DashboardPage() {
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-auto">
       <SetupChecklistBanner />
-      <SystemInitializingBanner datasetDate={datasetDate} mvStatus={mvStatus} />
       {(datasetError || metricsError || importsError || importDetailError || (readyError && !isInitializing)) && (
         <QueryErrorNotice
           error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr ?? readyErr}
@@ -171,8 +132,8 @@ export function DashboardPage() {
       )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))] xl:grid-cols-[repeat(3,minmax(0,1fr))]">
         <Card title={ui.dashboard.systemStatus} summaryTitle>
-          <SummaryHeadline className={systemStatusClass(systemStatus, datasetDate, mvStatus)}>
-            {systemStatusLabel(systemStatus, datasetDate, mvStatus)}
+          <SummaryHeadline className={systemStatusColorClass(systemStatus, datasetDate, mvStatus)}>
+            {formatSystemStatusLabel(systemStatus, datasetDate, mvStatus)}
           </SummaryHeadline>
           {ready?.checks && (
             <StatusSummaryDetails checks={ready.checks} initializing={isInitializing} />

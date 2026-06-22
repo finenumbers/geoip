@@ -75,4 +75,18 @@ describe('GET /api/v1/ready', () => {
     expect(res.json()).toMatchObject({ status: 'degraded' });
     await app.close();
   });
+
+  it('returns 503 not_ready when getDatasetState throws instead of 500', async () => {
+    vi.mocked(getDatasetState).mockRejectedValue(new Error('connection lost'));
+
+    const app = Fastify();
+    await registerHealthRoutes(app);
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ready' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({
+      status: 'not_ready',
+      checks: { database: true, dataset: false },
+    });
+    await app.close();
+  });
 });
