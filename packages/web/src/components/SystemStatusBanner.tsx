@@ -17,6 +17,7 @@ export function SystemStatusBanner() {
     status,
     checks,
     isReadyError,
+    isReadyLoading,
     isInitializing,
     failedChecks,
   } = useSystemReadyStatus();
@@ -40,6 +41,10 @@ export function SystemStatusBanner() {
         testId="system-status-banner"
       />
     );
+  }
+
+  if (isReadyLoading && !status) {
+    return null;
   }
 
   if (isInitializing) {

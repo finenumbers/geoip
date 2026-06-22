@@ -142,6 +142,20 @@ export function systemStatusColorClass(
   return 'text-red-600';
 }
 
+/** True while MV is warming up — from dataset mvStatus or /ready arriving before /dataset. */
+export function isMaterializedViewsWarmup(
+  checks: Record<string, boolean> | undefined,
+  mvStatus: 'ready' | 'refreshing' | 'unavailable' | null | undefined,
+  isDatasetLoading: boolean,
+): boolean {
+  if (!checks?.database || !checks?.dataset || checks.materializedViews) return false;
+  if (mvStatus === 'unavailable') return false;
+  if (mvStatus === 'refreshing') return true;
+  // /ready can report dataset+!mv before /dataset/active returns mvStatus
+  if (isDatasetLoading || mvStatus == null) return true;
+  return false;
+}
+
 /** Hide global status banner when onboarding checklist already covers the same state. */
 export function shouldHideSystemBannerForSetupPage(
   pathname: string,

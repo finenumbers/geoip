@@ -106,12 +106,29 @@ describe('SystemStatusBanner', () => {
     expect(screen.getByText(/Инициализация/i)).toBeInTheDocument();
   });
 
+  it('shows initializing instead of red not_ready while dataset is still loading', () => {
+    mockUseSystemReadyStatus.mockReturnValue({
+      status: 'not_ready',
+      checks: { database: true, dataset: true, materializedViews: false, productionIndexes: true, asnMapping: true, importRunning: false },
+      isReadyError: false,
+      isReadyLoading: false,
+      isInitializing: true,
+      failedChecks: [],
+    });
+
+    renderBanner();
+    expect(screen.getByTestId('system-status-banner')).toBeInTheDocument();
+    expect(screen.getByText(/Инициализация/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Система не готова/i)).not.toBeInTheDocument();
+  });
+
   it('hides expected not_ready banner on dashboard during onboarding', () => {
     mockPathname.mockReturnValue('/');
     mockUseSystemReadyStatus.mockReturnValue({
       status: 'not_ready',
       checks: { database: true, dataset: false, materializedViews: false, productionIndexes: false, asnMapping: false, importRunning: false },
       isReadyError: false,
+      isReadyLoading: false,
       isInitializing: false,
       failedChecks: ['dataset', 'materializedViews', 'productionIndexes', 'asnMapping'],
     });

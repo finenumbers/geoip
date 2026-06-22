@@ -5,6 +5,7 @@ import {
   formatMaterializedViewsStatus,
   formatSystemCheckLabel,
   formatSystemCheckStatus,
+  isMaterializedViewsWarmup,
   resolveSystemCheckState,
   shouldHideSystemBannerForSetupPage,
   systemCheckStatusClass,
@@ -92,6 +93,23 @@ describe('system-status-labels', () => {
         database: false,
         dataset: false,
       }),
+    ).toBe(false);
+  });
+
+  it('detects MV warmup before dataset mvStatus is known', () => {
+    expect(
+      isMaterializedViewsWarmup(
+        { database: true, dataset: true, materializedViews: false },
+        undefined,
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      isMaterializedViewsWarmup(
+        { database: true, dataset: true, materializedViews: false },
+        'unavailable',
+        false,
+      ),
     ).toBe(false);
   });
 });

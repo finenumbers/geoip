@@ -60,7 +60,8 @@ const nav: NavItem[] = [
 
 export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { status, datasetDate, mvStatus, datasetError, isReadyLoading } = useSystemReadyStatus();
+  const { status, datasetDate, mvStatus, datasetError, isReadyLoading, isInitializing } =
+    useSystemReadyStatus();
   const { data: checklist } = useQuery({
     queryKey: ['setup-checklist'],
     queryFn: api.setupChecklist,
@@ -79,7 +80,9 @@ export function AppLayout() {
     ? ui.dashboard.statusNotReady
     : isReadyLoading && !status
       ? '…'
-      : formatSystemStatusLabel(status, datasetDate, mvStatus);
+      : isInitializing && status === 'not_ready'
+        ? ui.dashboard.statusInitializing
+        : formatSystemStatusLabel(status, datasetDate, mvStatus);
 
   return (
     <div className="min-h-screen">
@@ -119,7 +122,7 @@ export function AppLayout() {
             <span
               className={cn(
                 'rounded-full border border-border px-2.5 py-0.5 text-xs font-medium',
-                datasetError || status === 'not_ready'
+                datasetError || (status === 'not_ready' && !isInitializing)
                   ? 'text-red-600'
                   : isReadyLoading && !status
                     ? 'text-muted'

@@ -2,14 +2,10 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { isDatasetInitializing } from '@geoip/shared';
 import { api } from '@/lib/api';
-import { collectFailedSystemChecks } from '@/lib/system-status-labels';
+import { collectFailedSystemChecks, isMaterializedViewsWarmup } from '@/lib/system-status-labels';
 
 export function useSystemReadyStatus() {
-  const {
-    data: dataset,
-    isError: datasetError,
-    error: datasetErr,
-  } = useQuery({
+  const datasetQuery = useQuery({
     queryKey: ['dataset'],
     queryFn: api.dataset,
     refetchInterval: (query) =>
@@ -17,6 +13,13 @@ export function useSystemReadyStatus() {
         ? 10_000
         : 30_000,
   });
+  const {
+    data: dataset,
+    isError: datasetError,
+    error: datasetErr,
+    isLoading: isDatasetLoading,
+    isFetching: isDatasetFetching,
+  } = datasetQuery;
 
   const datasetDate = dataset?.datasetDate ?? null;
   const mvStatus = dataset?.mvStatus;
@@ -33,20 +36,25 @@ export function useSystemReadyStatus() {
     },
   });
 
-  const isInitializing = isDatasetInitializing(datasetDate, mvStatus);
+  const checks = readyQuery.data?.checks;
+  const datasetPending = (isDatasetLoading || isDatasetFetching) && !dataset;
+  const isMvWarmup = isMaterializedViewsWarmup(checks, mvStatus, datasetPending);
+  const isInitializing =
+    isDatasetInitializing(datasetDate, mvStatus) || isMvWarmup;
 
   const failedChecks = useMemo(
-    () => collectFailedSystemChecks(readyQuery.data?.checks, isInitializing),
-    [readyQuery.data?.checks, isInitializing],
+    () => collectFailedSystemChecks(checks, isInitializing),
+    [checks, isInitializing],
   );
 
   return {
     ready: readyQuery.data,
     status: readyQuery.data?.status,
-    checks: readyQuery.data?.checks,
+    checks,
     isReadyLoading: readyQuery.isLoading,
     isReadyError: readyQuery.isError,
     readyError: readyQuery.error,
+    isDatasetLoading: datasetPending,
     dataset,
     datasetDate,
     mvStatus,
