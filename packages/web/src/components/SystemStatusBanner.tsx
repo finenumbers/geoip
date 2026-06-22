@@ -1,13 +1,18 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useRouterState } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
+import { isSetupComplete } from '@geoip/shared';
 import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
+import { api } from '@/lib/api';
 import {
   formatSystemCheckLabel,
   formatSystemCheckStatus,
+  shouldHideSystemBannerForSetupPage,
 } from '@/lib/system-status-labels';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
 
 export function SystemStatusBanner() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const {
     status,
     checks,
@@ -15,6 +20,17 @@ export function SystemStatusBanner() {
     isInitializing,
     failedChecks,
   } = useSystemReadyStatus();
+  const { data: checklist } = useQuery({
+    queryKey: ['setup-checklist'],
+    queryFn: api.setupChecklist,
+  });
+  const setupPending = checklist != null && !isSetupComplete(checklist);
+
+  if (
+    shouldHideSystemBannerForSetupPage(pathname, setupPending, isReadyError, checks)
+  ) {
+    return null;
+  }
 
   if (isReadyError) {
     return (

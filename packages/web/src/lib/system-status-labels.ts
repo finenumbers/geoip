@@ -141,3 +141,18 @@ export function systemStatusColorClass(
   if (status === 'degraded') return 'text-amber-600';
   return 'text-red-600';
 }
+
+/** Hide global status banner when onboarding checklist already covers the same state. */
+export function shouldHideSystemBannerForSetupPage(
+  pathname: string,
+  setupPending: boolean,
+  isReadyError: boolean,
+  checks: Record<string, boolean> | undefined,
+): boolean {
+  if (!setupPending) return false;
+  const hasSetupChecklistUi = pathname === '/' || pathname.startsWith('/admin');
+  if (!hasSetupChecklistUi) return false;
+  if (isReadyError) return false;
+  if (checks?.database === false) return false;
+  return true;
+}

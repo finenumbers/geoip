@@ -6,6 +6,7 @@ import {
   formatSystemCheckLabel,
   formatSystemCheckStatus,
   resolveSystemCheckState,
+  shouldHideSystemBannerForSetupPage,
   systemCheckStatusClass,
 } from '@/lib/system-status-labels';
 
@@ -71,5 +72,26 @@ describe('system-status-labels', () => {
         true,
       ),
     ).toEqual(['database']);
+  });
+
+  it('hides system banner on setup pages when onboarding covers expected not_ready', () => {
+    expect(
+      shouldHideSystemBannerForSetupPage('/', true, false, {
+        database: true,
+        dataset: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldHideSystemBannerForSetupPage('/browse/city', true, false, {
+        database: true,
+        dataset: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldHideSystemBannerForSetupPage('/', true, false, {
+        database: false,
+        dataset: false,
+      }),
+    ).toBe(false);
   });
 });

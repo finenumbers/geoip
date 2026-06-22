@@ -165,8 +165,10 @@ export function AppLayout() {
           </div>
         </header>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
-          <SystemStatusBanner />
-          <div className="mt-4 flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0">
+            <SystemStatusBanner />
+          </div>
+          <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet />
           </div>
         </main>

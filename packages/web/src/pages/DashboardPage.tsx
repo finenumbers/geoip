@@ -70,8 +70,6 @@ export function DashboardPage() {
     datasetError,
     datasetErr,
     isInitializing,
-    isReadyError: readyError,
-    readyError: readyErr,
   } = useSystemReadyStatus();
 
   const {
@@ -125,9 +123,9 @@ export function DashboardPage() {
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-auto">
       <SetupChecklistBanner />
-      {(datasetError || metricsError || importsError || importDetailError || (readyError && !isInitializing)) && (
+      {(datasetError || metricsError || importsError || importDetailError) && (
         <QueryErrorNotice
-          error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr ?? readyErr}
+          error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr}
         />
       )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))] xl:grid-cols-[repeat(3,minmax(0,1fr))]">
