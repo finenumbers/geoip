@@ -1,0 +1,31 @@
+name: Dependabot smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/dependabot.yml
+      - .npmrc
+      - pnpm-lock.yaml
+      - "**/package.json"
+
+jobs:
+  lockfile-resolution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Lockfile-only install (Dependabot path)
+        run: pnpm install --lockfile-only
+
+      - name: Production dependency bump dry-run
+        run: pnpm up fastify --latest --filter @geoip/api --lockfile-only
