@@ -12,6 +12,7 @@ updates:
       - npmjs
     allow:
       - dependency-type: production
+    open-pull-requests-limit: 5
     groups:
       production-dependencies:
         dependency-type: production
