@@ -28,7 +28,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.1",
-    "knip": "5"
+    "@playwright/test": "^1.61.1",
+    "knip": "6"
   }
 }
