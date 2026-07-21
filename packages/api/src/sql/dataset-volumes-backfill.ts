@@ -4,6 +4,10 @@ import { datasetState, importRunSteps } from '../db/schema.js';
 import { invalidateDatasetStateCache } from '../repositories/dataset-repository.js';
 import { logger } from '../config/logger.js';
 import { parseFilterCountCache } from './filter-count-cache.js';
+import {
+  ADDRESS_SPACE_COUNT_SQL,
+  ipv4CountLooksInflated,
+} from './unique-ipv4-coverage.js';
 
 export type DatasetVolumeSnapshot = {
   asnBlocks: number;
@@ -15,18 +19,7 @@ export type DatasetVolumeSnapshot = {
   ipv6Addresses: string;
 };
 
-export const ADDRESS_SPACE_COUNT_SQL = `
-  WITH all_networks AS (
-    SELECT network::inet AS n FROM geo_city_blocks
-    UNION
-    SELECT network::inet FROM geo_country_blocks
-    UNION
-    SELECT network::inet FROM geo_asn_blocks
-  )
-  SELECT
-    COALESCE(SUM(POWER(2::numeric, 32 - masklen(n))) FILTER (WHERE family(n) = 4), 0)::text AS ipv4_addresses,
-    COALESCE(SUM(POWER(2::numeric, 128 - masklen(n))) FILTER (WHERE family(n) = 6), 0)::text AS ipv6_addresses
-  FROM all_networks`;
+export { ADDRESS_SPACE_COUNT_SQL };
 
 let backfillRunning = false;
 
@@ -58,7 +51,8 @@ export function datasetVolumesNeedBackfill(state: {
     state.countryLocationsCount === 0 ||
     state.ruCityBlocksCount === 0 ||
     state.datasetFingerprint == null ||
-    ipv4 === '0'
+    ipv4 === '0' ||
+    ipv4CountLooksInflated(ipv4)
   );
 }
 

@@ -167,7 +167,7 @@ export const ui = {
     cityLocations: 'City locations',
     ruCityBlocks: 'RU city blocks',
     asnBlocks: 'ASN blocks',
-    ipv4Addresses: 'IPv4 addresses',
+    ipv4Addresses: 'Уникальные IPv4',
     activated: 'Активирован',
     colId: 'ID',
     colDate: 'Дата',

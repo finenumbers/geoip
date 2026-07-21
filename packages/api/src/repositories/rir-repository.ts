@@ -1,6 +1,10 @@
 import { desc, eq } from 'drizzle-orm';
 import { getDb, query } from '../db/client.js';
 import { rirImportRunSteps, rirImportRuns } from '../db/schema.js';
+import {
+  ipv4CountLooksInflated,
+  RIR_UNIQUE_IPV4_SQL,
+} from '../sql/unique-ipv4-coverage.js';
 
 export type RirDatasetState = {
   status: 'ready' | 'importing' | 'failed' | 'unavailable';
@@ -57,9 +61,21 @@ function asStringRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v === 'string' && v.length > 0) out[k] = v;
+    const date = asDateOnly(v);
+    if (date) out[k] = date;
+    else if (typeof v === 'string' && v.length > 0) out[k] = v;
   }
   return out;
+}
+
+/** PG DATE / ISO timestamp → YYYY-MM-DD (same display shape as GRChC datasetDate). */
+export function asDateOnly(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? null;
 }
 
 async function loadSnapshotsByRegistry(stored: unknown): Promise<Record<string, string>> {
@@ -86,23 +102,19 @@ async function loadSnapshotsByRegistry(stored: unknown): Promise<Record<string, 
   return out;
 }
 
-/** Compute IPv4 address total and table size for rir_delegations. */
+/** Compute unique IPv4 coverage and table size for rir_delegations. */
 export async function computeRirDatasetVolumes(): Promise<{
   ipv4Addresses: string;
   tableSizeBytes: number;
 }> {
   const [ipv4Result, sizeResult] = await Promise.all([
-    query<{ total: string }>(
-      `SELECT COALESCE(SUM(host_count), 0)::text AS total
-       FROM rir_delegations
-       WHERE resource_type = 'ipv4'`,
-    ),
+    query<{ ipv4_addresses: string }>(RIR_UNIQUE_IPV4_SQL),
     query<{ size: string }>(
       `SELECT pg_total_relation_size('rir_delegations')::text AS size`,
     ),
   ]);
   return {
-    ipv4Addresses: ipv4Result.rows[0]?.total ?? '0',
+    ipv4Addresses: ipv4Result.rows[0]?.ipv4_addresses ?? '0',
     tableSizeBytes: Number(sizeResult.rows[0]?.size ?? 0) || 0,
   };
 }
@@ -136,7 +148,18 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
     active_import_run_id: string | null;
     ipv4_address_count: string | null;
     table_size_bytes: string | number | null;
-  }>('SELECT * FROM rir_dataset_state WHERE id = 1');
+  }>(`SELECT status,
+            last_success_at,
+            last_snapshot_date::text AS last_snapshot_date,
+            row_count,
+            rows_by_registry,
+            rows_by_status,
+            snapshots_by_registry,
+            last_error,
+            active_import_run_id,
+            ipv4_address_count::text AS ipv4_address_count,
+            table_size_bytes
+     FROM rir_dataset_state WHERE id = 1`);
 
   const row = result.rows[0];
   if (!row) {
@@ -160,7 +183,10 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
     row.table_size_bytes != null ? Number(row.table_size_bytes) : null;
   let ipv4Addresses = row.ipv4_address_count ?? '0';
 
-  if (rowCount > 0 && tableSizeBytes == null) {
+  if (
+    rowCount > 0 &&
+    (tableSizeBytes == null || ipv4CountLooksInflated(ipv4Addresses))
+  ) {
     const filled = await backfillRirVolumesIfNeeded();
     ipv4Addresses = filled.ipv4Addresses;
     tableSizeBytes = filled.tableSizeBytes;
@@ -169,7 +195,7 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
   return {
     status: row.status,
     lastSuccessAt: row.last_success_at ? new Date(row.last_success_at).toISOString() : null,
-    lastSnapshotDate: row.last_snapshot_date,
+    lastSnapshotDate: asDateOnly(row.last_snapshot_date),
     rowCount,
     rowsByRegistry: asRecord(row.rows_by_registry),
     rowsByStatus: asRecord(row.rows_by_status),
@@ -201,7 +227,7 @@ export async function listRirImportRuns(limit = 10): Promise<{ items: RirImportR
   return {
     items: items.map((run) => ({
       id: run.id,
-      datasetDate: run.snapshotDate ?? null,
+      datasetDate: asDateOnly(run.snapshotDate),
       status: run.status,
       triggeredBy: run.triggeredBy,
       startedAt: run.startedAt?.toISOString() ?? null,
@@ -226,7 +252,7 @@ export async function getRirImportRunById(id: string): Promise<RirImportRun | nu
 
   return {
     id: run.id,
-    datasetDate: run.snapshotDate ?? null,
+    datasetDate: asDateOnly(run.snapshotDate),
     status: run.status,
     triggeredBy: run.triggeredBy,
     startedAt: run.startedAt?.toISOString() ?? null,

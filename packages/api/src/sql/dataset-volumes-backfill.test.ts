@@ -48,4 +48,14 @@ describe('datasetVolumesNeedBackfill', () => {
   it('returns false when all volume fields are populated', () => {
     expect(datasetVolumesNeedBackfill(readyState)).toBe(false);
   });
+
+  it('returns true when stored ipv4 count exceeds the IPv4 space', () => {
+    expect(
+      datasetVolumesNeedBackfill({
+        ...readyState,
+        ipv4AddressCount: '8613488471',
+      }),
+    ).toBe(true);
+  });
 });
+
