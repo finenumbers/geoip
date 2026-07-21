@@ -108,14 +108,14 @@ export function mapBrowseIssuesToFilterFields(
   return fieldErrors;
 }
 
-/** Keeps browse URL aligned with the active table profile (city / country / rir). */
+/** Keeps browse URL aligned with the active table profile (city / country / rir / asn). */
 export function useNormalizeBrowseSearch(
   tableType: TableType,
-  browsePath: '/browse/city' | '/browse/country' | '/browse/rir',
+  browsePath: '/browse/city' | '/browse/country' | '/browse/rir' | '/browse/asn',
   sortJson: string,
   filtersJson: string,
   navigate: (opts: {
-    to: '/browse/city' | '/browse/country' | '/browse/rir';
+    to: '/browse/city' | '/browse/country' | '/browse/rir' | '/browse/asn';
     search: { sort: string; filters: string };
     replace?: boolean;
   }) => void,

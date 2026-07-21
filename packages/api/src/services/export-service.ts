@@ -12,6 +12,7 @@ import { enrichBlockRowsWithAsn } from '../sql/asn-enrichment.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
 import { isRirDatasetReady } from '../repositories/rir-repository.js';
 import { buildRirTableQuery } from '../sql/rir-table-query.js';
+import { buildAsnTableQuery } from '../sql/asn-table-query.js';
 import { loadEnv } from '../config/env.js';
 import { createChildLogger } from '../config/logger.js';
 import { resolveFilteredRowCount } from './filter-row-count.js';
@@ -25,11 +26,13 @@ import {
 const SYNC_EXPORT_LIMIT = 10_000;
 const EXPORT_BATCH_SIZE = 10_000;
 
+type ExportTableType = 'city' | 'country' | 'rir' | 'asn';
+
 /** Excel (RU/EU locales) opens CSV correctly with UTF-8 BOM and semicolon delimiter. */
 export const CSV_DELIMITER = ';';
 export const CSV_UTF8_BOM = '\uFEFF';
 
-const CSV_COLUMNS: Record<'city' | 'country' | 'rir', string[]> = {
+const CSV_COLUMNS: Record<ExportTableType, string[]> = {
   city: [
     'id',
     'network',
@@ -64,6 +67,14 @@ const CSV_COLUMNS: Record<'city' | 'country' | 'rir', string[]> = {
     'ip_family',
     'source_file',
     'snapshot_date',
+  ],
+  asn: [
+    'id',
+    'network',
+    'prefix_len',
+    'ip_family',
+    'asn',
+    'asn_org',
   ],
 };
 
@@ -123,12 +134,14 @@ export function resolveExportUseKeyset(
   );
 }
 
-async function streamRirExportToFile(
+async function streamBaseTableExportToFile(
+  columns: string[],
+  buildQuery: typeof buildRirTableQuery,
   filters: FilterClause[],
   sort: SortClause[],
   filePath: string,
+  defaultSortField: string,
 ): Promise<number> {
-  const columns = CSV_COLUMNS.rir;
   const stream = createWriteStream(filePath, { encoding: 'utf-8' });
   stream.write(`${CSV_UTF8_BOM}${formatCsvHeader(columns)}\n`);
 
@@ -139,7 +152,7 @@ async function streamRirExportToFile(
   const useKeyset = supportsKeysetPagination(sort);
 
   while (true) {
-    const { sql, params } = buildRirTableQuery({
+    const { sql, params } = buildQuery({
       filters,
       sort,
       limit: EXPORT_BATCH_SIZE,
@@ -160,8 +173,9 @@ async function streamRirExportToFile(
     const last = result.rows[result.rows.length - 1]!;
     if (useKeyset && last.id != null) {
       afterId = Number(last.id);
-      const primary = sort[0]?.field ?? 'range_text';
-      afterSortValue = last[primary] != null ? String(last[primary]) : String(last.range_text ?? '');
+      const primary = sort[0]?.field ?? defaultSortField;
+      afterSortValue =
+        last[primary] != null ? String(last[primary]) : String(last[defaultSortField] ?? '');
     } else {
       offset += EXPORT_BATCH_SIZE;
     }
@@ -175,13 +189,30 @@ async function streamRirExportToFile(
 }
 
 export async function streamTableExportToFile(
-  tableType: 'city' | 'country' | 'rir',
+  tableType: ExportTableType,
   filters: FilterClause[],
   sort: SortClause[],
   filePath: string,
 ): Promise<number> {
   if (tableType === 'rir') {
-    return streamRirExportToFile(filters, sort, filePath);
+    return streamBaseTableExportToFile(
+      CSV_COLUMNS.rir,
+      buildRirTableQuery,
+      filters,
+      sort,
+      filePath,
+      'range_text',
+    );
+  }
+  if (tableType === 'asn') {
+    return streamBaseTableExportToFile(
+      CSV_COLUMNS.asn,
+      buildAsnTableQuery,
+      filters,
+      sort,
+      filePath,
+      'network',
+    );
   }
 
   const columns = CSV_COLUMNS[tableType];
@@ -236,12 +267,17 @@ export async function streamTableExportToFile(
 }
 
 export async function estimateExportRows(
-  tableType: 'city' | 'country' | 'rir',
+  tableType: ExportTableType,
   filters: FilterClause[],
   sort: SortClause[],
 ): Promise<number | null> {
   if (tableType === 'rir') {
     const built = buildRirTableQuery({ filters, sort, limit: 1, offset: 0 });
+    const result = await query<{ count: string }>(built.countSql, built.countParams);
+    return Number(result.rows[0]?.count ?? 0);
+  }
+  if (tableType === 'asn') {
+    const built = buildAsnTableQuery({ filters, sort, limit: 1, offset: 0 });
     const result = await query<{ count: string }>(built.countSql, built.countParams);
     return Number(result.rows[0]?.count ?? 0);
   }
@@ -399,7 +435,7 @@ export function shouldUseSyncExport(estimatedRows: number): boolean {
 
 export function resolveExportDownloadHeaders(
   downloadPath: string,
-  tableType: 'city' | 'country' | 'rir',
+  tableType: ExportTableType,
   jobId: string,
 ): { contentType: string; filename: string } {
   if (downloadPath.endsWith('.zip')) {

@@ -4,6 +4,7 @@ import { validateTableQueryProfile, profileValidationToFieldErrors, isAllowedFac
 import { queryTable } from '../services/table-service.js';
 import { getFacetValues } from '../services/facet-service.js';
 import { queryRirTable, getRirFacetValues } from '../services/rir-table-service.js';
+import { queryAsnTable, getAsnFacetValues } from '../services/asn-table-service.js';
 import { recordTableQueryMetric } from '../routes/metrics.js';
 import {
   defaultFacetField,
@@ -30,7 +31,7 @@ const rirPreHandlers = (app: FastifyInstance) =>
   [app.verifyApiKeyIfEnabled, app.ensureRirDatasetReady] as const;
 
 function parseTableType(raw: string | undefined): TableType {
-  if (raw === 'country' || raw === 'rir') return raw;
+  if (raw === 'country' || raw === 'rir' || raw === 'asn') return raw;
   return 'city';
 }
 
@@ -85,6 +86,22 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
         message: 'RIR delegated snapshot is not ready yet. Retry shortly.',
       });
     }
+    if ('error' in result) {
+      return reply.status(422).send({ error: 'Validation error', details: result.error });
+    }
+    recordTableQueryStats(result, parsed.filters);
+    return result;
+  });
+
+  app.get('/api/v1/table/asn', guards, async (request, reply) => {
+    const parsed = parseTableQueryInput(request.query as Record<string, unknown>);
+    if (!parsed.ok) {
+      return reply.status(422).send({
+        error: 'Validation error',
+        details: { formErrors: [], fieldErrors: { [parsed.path]: [parsed.error] } },
+      });
+    }
+    const result = await queryAsnTable(parsed);
     if ('error' in result) {
       return reply.status(422).send({ error: 'Validation error', details: result.error });
     }
@@ -160,6 +177,14 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
           message: 'RIR delegated snapshot is not ready yet. Retry shortly.',
         });
       }
+      if ('error' in result) {
+        return reply.status(422).send({ error: 'Validation error', details: result.error });
+      }
+      return result;
+    }
+
+    if (tableType === 'asn') {
+      const result = await getAsnFacetValues(field, search, limit, contextFilters);
       if ('error' in result) {
         return reply.status(422).send({ error: 'Validation error', details: result.error });
       }

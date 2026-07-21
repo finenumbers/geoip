@@ -14,7 +14,7 @@ interface FacetItem {
 interface ColumnFacetFilterProps {
   label: string;
   field: string;
-  tableType?: 'city' | 'country' | 'rir';
+  tableType?: 'city' | 'country' | 'rir' | 'asn';
   selectedValues: string[];
   onChange: (values: string[]) => void;
   onClear: () => void;

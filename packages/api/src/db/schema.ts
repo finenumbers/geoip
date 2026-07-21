@@ -42,7 +42,7 @@ export const exportStatusEnum = pgEnum('export_status', [
   'failed',
 ]);
 
-export const exportTableTypeEnum = pgEnum('export_table_type', ['city', 'country', 'rir']);
+export const exportTableTypeEnum = pgEnum('export_table_type', ['city', 'country', 'rir', 'asn']);
 
 export const rirImportStatusEnum = pgEnum('rir_import_status', [
   'queued',

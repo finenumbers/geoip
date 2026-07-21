@@ -59,6 +59,7 @@ export const ui = {
   browse: {
     cityTab: 'City blocks',
     countryTab: 'Country blocks',
+    asnTab: 'ASN blocks',
     rirTab: 'RIR registry',
     resetFilters: 'Сбросить фильтры',
     slowSortBanner:

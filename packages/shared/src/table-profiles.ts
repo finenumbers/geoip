@@ -3,10 +3,11 @@ import {
   CITY_TABLE_SORT_FIELDS,
   COUNTRY_TABLE_SORT_FIELDS,
   RIR_TABLE_SORT_FIELDS,
+  ASN_TABLE_SORT_FIELDS,
   FILTER_OPERATORS,
 } from './constants.js';
 
-export type TableType = 'city' | 'country' | 'rir';
+export type TableType = 'city' | 'country' | 'rir' | 'asn';
 
 export type TableProfile = {
   filterFields: readonly string[];
@@ -76,10 +77,18 @@ const RIR_TABLE_PROFILE: TableProfile = {
   ],
 };
 
+const ASN_TABLE_PROFILE: TableProfile = {
+  filterFields: ['network', 'prefix_len', 'ip_family', 'asn', 'asn_org'],
+  facetFields: ['asn_org', 'ip_family'],
+  sortFields: ASN_TABLE_SORT_FIELDS,
+  uiSortFields: ['network', 'asn', 'asn_org', 'ip_family'],
+};
+
 const TABLE_PROFILES: Record<TableType, TableProfile> = {
   city: CITY_TABLE_PROFILE,
   country: COUNTRY_TABLE_PROFILE,
   rir: RIR_TABLE_PROFILE,
+  asn: ASN_TABLE_PROFILE,
 };
 
 export function getTableProfile(tableType: TableType): TableProfile {

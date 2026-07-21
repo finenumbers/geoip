@@ -6,7 +6,7 @@ export function resolveExportZipPath(exportDir: string, jobId: string): string {
   return `${exportDir.replace(/\/$/, '')}/${jobId}.zip`;
 }
 
-export function exportCsvEntryName(tableType: 'city' | 'country' | 'rir'): string {
+export function exportCsvEntryName(tableType: 'city' | 'country' | 'rir' | 'asn'): string {
   return `geoip-${tableType}-export.csv`;
 }
 

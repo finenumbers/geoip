@@ -203,7 +203,7 @@ export const tableResponseSchema = z.object({
 });
 
 export const exportRequestSchema = z.object({
-  tableType: z.enum(['city', 'country', 'rir']),
+  tableType: z.enum(['city', 'country', 'rir', 'asn']),
   filters: z.array(filterClauseSchema).default([]),
   sort: z.array(sortClauseSchema).default([]),
 });
@@ -211,7 +211,7 @@ export const exportRequestSchema = z.object({
 export const exportCreateResponseSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
-  tableType: z.enum(['city', 'country', 'rir']),
+  tableType: z.enum(['city', 'country', 'rir', 'asn']),
   createdAt: z.string().datetime(),
   estimatedRows: z.number().nullable(),
 });
@@ -219,7 +219,7 @@ export const exportCreateResponseSchema = z.object({
 export const exportStatusResponseSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
-  tableType: z.enum(['city', 'country', 'rir']),
+  tableType: z.enum(['city', 'country', 'rir', 'asn']),
   createdAt: z.string().datetime(),
   finishedAt: z.string().datetime().nullable(),
   errorMessage: z.string().nullable(),

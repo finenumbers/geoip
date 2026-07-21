@@ -57,6 +57,7 @@ const COLUMN_API_FIELDS: Record<string, string> = {
   status: 'status',
   allocatedAt: 'allocated_at',
   opaqueId: 'opaque_id',
+  ipFamily: 'ip_family',
 };
 
 const API_TO_COLUMN: Record<string, string> = Object.fromEntries(
@@ -71,7 +72,7 @@ type TablePageParam = {
 };
 
 async function fetchTableChunk(
-  tableType: 'city' | 'country' | 'rir',
+  tableType: 'city' | 'country' | 'rir' | 'asn',
   pageParam: TablePageParam | undefined,
   sortJson: string,
   filtersJson: string,
@@ -89,14 +90,15 @@ async function fetchTableChunk(
 }
 
 interface BrowsePageProps {
-  tableType: 'city' | 'country' | 'rir';
+  tableType: 'city' | 'country' | 'rir' | 'asn';
 }
 
 function browsePathFor(
   tableType: BrowsePageProps['tableType'],
-): '/browse/city' | '/browse/country' | '/browse/rir' {
+): '/browse/city' | '/browse/country' | '/browse/rir' | '/browse/asn' {
   if (tableType === 'country') return '/browse/country';
   if (tableType === 'rir') return '/browse/rir';
+  if (tableType === 'asn') return '/browse/asn';
   return '/browse/city';
 }
 
@@ -409,6 +411,90 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   );
 
   const columns = useMemo<ColumnDef<TableBrowseRow>[]>(() => {
+    if (tableType === 'asn') {
+      return [
+        {
+          accessorKey: 'network',
+          header: ui.filters.network,
+          meta: columnMeta(
+            'network',
+            <ColumnTextFilter
+              placeholder={ui.filters.network}
+              value={getTextFilterValue(activeFilters, 'network')}
+              onApply={(value) => applyTextFilter('network', value)}
+              onClear={() => clearTextFilter('network')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'prefixLen',
+          header: ui.filters.prefix_len,
+          meta: columnMeta('prefix_len', () => (
+            <ColumnTextFilter
+              placeholder={ui.filters.prefix_len}
+              value={getTextFilterValue(activeFilters, 'prefix_len')}
+              error={fieldErrors.prefix_len}
+              validate={(v) => validateTextFilterValue('prefix_len', v)}
+              onValidationError={(msg) => setFieldError('prefix_len', msg)}
+              onApply={(value) => applyTextFilter('prefix_len', value)}
+              onClear={() => clearTextFilter('prefix_len')}
+            />
+          )),
+        },
+        {
+          accessorKey: 'ipFamily',
+          header: ui.filters.ip_family,
+          meta: columnMeta(
+            'ip_family',
+            <ColumnFacetFilter
+              label={ui.filters.ip_family}
+              field="ip_family"
+              tableType="asn"
+              selectedValues={getMultiFilterValues(activeFilters, 'ip_family')}
+              contextFilters={facetContext('ip_family')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'ip_family', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'ip_family', []))}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'asn',
+          header: ui.filters.asn,
+          meta: columnMeta('asn', () => (
+            <ColumnTextFilter
+              placeholder={ui.filters.asn}
+              inputMode="numeric"
+              value={getTextFilterValue(activeFilters, 'asn')}
+              error={fieldErrors.asn}
+              validate={(v) => validateTextFilterValue('asn', v)}
+              onValidationError={(msg) => setFieldError('asn', msg)}
+              onApply={(value) => applyTextFilter('asn', value)}
+              onClear={() => clearTextFilter('asn')}
+            />
+          )),
+        },
+        {
+          accessorKey: 'asnOrg',
+          header: ui.filters.asn_org,
+          meta: columnMeta(
+            'asn_org',
+            <ColumnFacetFilter
+              label={ui.filters.asn_org}
+              field="asn_org"
+              tableType="asn"
+              selectedValues={getMultiFilterValues(activeFilters, 'asn_org')}
+              contextFilters={facetContext('asn_org')}
+              compact
+              resultLimit={200}
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'asn_org', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'asn_org', []))}
+            />,
+          ),
+        },
+      ];
+    }
+
     if (tableType === 'rir') {
       return [
         {
@@ -723,6 +809,17 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
             )}
           >
             {ui.browse.countryTab}
+          </Link>
+          <Link
+            to="/browse/asn"
+            data-testid="browse-asn-tab"
+            search={DEFAULT_BROWSE_SEARCH}
+            className={cn(
+              'rounded px-3 py-1 transition-colors',
+              tableType === 'asn' ? 'bg-accent font-medium' : 'text-muted hover:text-foreground',
+            )}
+          >
+            {ui.browse.asnTab}
           </Link>
           <Link
             to="/browse/rir"

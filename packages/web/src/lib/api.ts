@@ -103,10 +103,10 @@ export const api = {
       body: JSON.stringify({ ip, include: options?.include }),
       signal: options?.signal,
     }),
-  table: (tableType: 'city' | 'country' | 'rir', params: URLSearchParams, signal?: AbortSignal) =>
+  table: (tableType: 'city' | 'country' | 'rir' | 'asn', params: URLSearchParams, signal?: AbortSignal) =>
     request<TableResponse>(`/table/${tableType}?${params.toString()}`, { signal }),
   facetValues: (
-    tableType: 'city' | 'country' | 'rir',
+    tableType: 'city' | 'country' | 'rir' | 'asn',
     field: string,
     search = '',
     limit = 50,
@@ -133,7 +133,7 @@ export const api = {
     }),
   getExportStatus: (id: string, signal?: AbortSignal) =>
     request<ExportStatusResponse>(`/exports/${id}`, { signal }),
-  downloadExport: (id: string, tableType: 'city' | 'country' | 'rir'): void => {
+  downloadExport: (id: string, tableType: 'city' | 'country' | 'rir' | 'asn'): void => {
     const anchor = document.createElement('a');
     anchor.href = `${API_BASE}/exports/${id}/download`;
     anchor.download = `geoip-${tableType}-export-${id}.zip`;

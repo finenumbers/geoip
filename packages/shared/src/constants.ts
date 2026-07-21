@@ -113,6 +113,14 @@ export const RIR_TABLE_SORT_FIELDS = [
   'opaque_id',
 ] as const;
 
+export const ASN_TABLE_SORT_FIELDS = [
+  'network',
+  'prefix_len',
+  'ip_family',
+  'asn',
+  'asn_org',
+] as const;
+
 export const FILTER_OPERATORS = [
   'eq',
   'neq',

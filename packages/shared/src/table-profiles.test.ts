@@ -75,6 +75,30 @@ describe('table-profiles', () => {
     ).toBe(false);
   });
 
+  it('allows asn table filters and rejects geo/rir-only fields', () => {
+    expect(
+      validateTableQueryProfile(
+        'asn',
+        [{ field: 'asn', dir: 'asc' }],
+        [
+          { field: 'asn', op: 'eq', value: '15169' },
+          { field: 'asn_org', op: 'in', value: ['Google'] },
+          { field: 'ip_family', op: 'in', value: ['4'] },
+        ],
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateTableQueryProfile('asn', [], [{ field: 'city_name', op: 'eq', value: 'x' }]).ok,
+    ).toBe(false);
+    expect(
+      validateTableQueryProfile('asn', [], [{ field: 'registry', op: 'eq', value: 'ripe' }]).ok,
+    ).toBe(false);
+    expect(sanitizeFiltersForTableType('asn', [
+      { field: 'asn', op: 'eq', value: '1' },
+      { field: 'country_name', op: 'eq', value: 'x' },
+    ])).toEqual([{ field: 'asn', op: 'eq', value: '1' }]);
+  });
+
   it('validates prefix and asn text filters', () => {
     expect(validateTextFilterValue('prefix_len', 'abc')).toMatch(/Prefix/);
     expect(validateTextFilterValue('asn', '12a')).toMatch(/ASN/);
