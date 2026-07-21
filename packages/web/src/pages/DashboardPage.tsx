@@ -293,20 +293,22 @@ export function DashboardPage() {
             <SummaryHeadline className={rirImportStatusClass(rirStatus?.status, rirLoaded)}>
               {rirLoaded ? formatCount(rirStatus?.rowCount) : ui.dashboard.rirNotLoaded}
             </SummaryHeadline>
-            <SummaryDetails>
+            <div className="mt-2 grid grid-cols-[minmax(6.5rem,8rem)_minmax(5rem,1fr)_auto] items-baseline gap-x-3 gap-y-1 text-sm">
               {registryDetails.map((reg) => (
-                <DetailItem
-                  key={reg.id}
-                  label={reg.label}
-                  value={`${formatCount(reg.rowCount)}${reg.snapshotDate ? ` · ${reg.snapshotDate}` : ''}`}
-                  title={
-                    reg.snapshotDate
-                      ? `${reg.label}: ${formatCount(reg.rowCount)} строк, снимок ${reg.snapshotDate}`
-                      : undefined
-                  }
-                />
+                <div key={reg.id} className="contents">
+                  <span className="text-muted">{reg.label}:</span>
+                  <span
+                    className="min-w-0 tabular-nums text-right text-foreground"
+                    title={`${reg.label}: ${formatCount(reg.rowCount)}`}
+                  >
+                    {formatCount(reg.rowCount)}
+                  </span>
+                  <span className="whitespace-nowrap tabular-nums text-muted">
+                    - {reg.snapshotDate ?? '—'}
+                  </span>
+                </div>
               ))}
-            </SummaryDetails>
+            </div>
             <Link
               to="/browse/rir"
               search={{

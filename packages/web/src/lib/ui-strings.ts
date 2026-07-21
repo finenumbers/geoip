@@ -119,7 +119,7 @@ export const ui = {
     rirRegistriesCard: 'Реестры RIR / IANA',
     rirActiveDataset: 'Активный датасет RIR / IANA',
     rirDataVolume: 'Объем данных датасета RIR / IANA',
-    rirTotalRows: 'Всего строк',
+    rirTotalRows: 'Всего диапазонов',
     rirRegistryRipencc: 'RIPE NCC',
     rirRegistryArin: 'ARIN',
     rirRegistryApnic: 'APNIC',
