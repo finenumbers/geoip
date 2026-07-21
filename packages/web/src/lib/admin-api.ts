@@ -97,9 +97,14 @@ export const adminApi = {
       rowsByRegistry: Record<string, number>;
       rowsByStatus: Record<string, number>;
       lastError: string | null;
+      activeImport: { id: string; status: string } | null;
     }>('/rir/status'),
   triggerRirImport: () =>
     adminRequest<{ importRunId: string; status: string }>('/rir/imports/trigger', {
+      method: 'POST',
+    }),
+  resetRirImport: () =>
+    adminRequest<{ ok: boolean; clearedRuns: number }>('/rir/imports/reset', {
       method: 'POST',
     }),
 };

@@ -227,6 +227,7 @@ export const rirImportRuns = pgTable('rir_import_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   status: rirImportStatusEnum('status').notNull().default('queued'),
   triggeredBy: rirImportTriggerEnum('triggered_by').notNull().default('api'),
+  queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   errorCode: text('error_code'),

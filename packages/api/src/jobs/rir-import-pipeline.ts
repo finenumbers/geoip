@@ -1,13 +1,27 @@
+import { createInterface } from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { from as copyFrom } from 'pg-copy-streams';
 import type { Logger } from 'pino';
+import type pg from 'pg';
+import { RIR_DELEGATED_SOURCES } from '@geoip/shared';
 import { withDirectPoolClient, query } from '../db/client.js';
-import { downloadAndParseAllRirSources } from './rir-delegated-client.js';
+import { fetchRirSourceResponse } from './rir-delegated-client.js';
 import { tryAcquireRirImportLock, releaseRirImportLock } from './rir-import-lock.js';
-import type { ParsedRirRecord } from './rir-delegated-parse.js';
+import {
+  createDelegatedParseState,
+  processDelegatedLine,
+  type ParsedRirRecord,
+} from './rir-delegated-parse.js';
 
-function escapeCopyValue(value: string | null | undefined): string {
+const COPY_SQL = `COPY stg_rir_delegations (
+  registry, cc, resource_type, start_ip, end_ip, network, prefix_len, host_count,
+  start_asn, asn_count, allocated_at, status, opaque_id, range_text, ip_family,
+  source_file, snapshot_date
+) FROM STDIN WITH (FORMAT text, NULL '\\N')`;
+
+export function escapeCopyValue(value: string | null | undefined): string {
   if (value == null) return '\\N';
   return String(value)
     .replace(/\\/g, '\\\\')
@@ -16,7 +30,7 @@ function escapeCopyValue(value: string | null | undefined): string {
     .replace(/\t/g, '\\t');
 }
 
-function recordToCopyLine(rec: ParsedRirRecord): string {
+export function recordToCopyLine(rec: ParsedRirRecord): string {
   return [
     escapeCopyValue(rec.registry),
     escapeCopyValue(rec.cc),
@@ -38,26 +52,89 @@ function recordToCopyLine(rec: ParsedRirRecord): string {
   ].join('\t');
 }
 
-async function copyRecordsToStaging(records: ParsedRirRecord[], log: Logger): Promise<void> {
-  await withDirectPoolClient(async (client) => {
-    await client.query('TRUNCATE stg_rir_delegations RESTART IDENTITY');
-    const copySql = `COPY stg_rir_delegations (
-      registry, cc, resource_type, start_ip, end_ip, network, prefix_len, host_count,
-      start_asn, asn_count, allocated_at, status, opaque_id, range_text, ip_family,
-      source_file, snapshot_date
-    ) FROM STDIN WITH (FORMAT text, NULL '\\N')`;
+async function* linesFromResponse(res: Response): AsyncGenerator<string> {
+  if (!res.body) {
+    const text = await res.text();
+    for (const line of text.split(/\r?\n/)) yield line;
+    return;
+  }
+  const nodeStream = Readable.fromWeb(res.body as WebReadableStream<Uint8Array>);
+  const rl = createInterface({ input: nodeStream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    yield line;
+  }
+}
 
-    const stream = client.query(copyFrom(copySql));
-    const readable = Readable.from(
-      (async function* () {
-        for (const rec of records) {
-          yield `${recordToCopyLine(rec)}\n`;
+/** Stream one source's records into an open COPY sink (does not buffer all rows). */
+export async function* iterateRecordsFromResponse(
+  res: Response,
+  sourceFile: string,
+): AsyncGenerator<ParsedRirRecord, { snapshotDate: string; recordCount: number }> {
+  const state = createDelegatedParseState();
+  for await (const line of linesFromResponse(res)) {
+    const rec = processDelegatedLine(line, sourceFile, state);
+    if (rec) yield rec;
+  }
+  return { snapshotDate: state.snapshotDate, recordCount: state.recordCount };
+}
+
+async function copySourceToStaging(
+  client: pg.PoolClient,
+  source: (typeof RIR_DELEGATED_SOURCES)[number],
+  log: Logger,
+  fetchImpl: typeof fetch,
+): Promise<{ recordCount: number; snapshotDate: string }> {
+  const res = await fetchRirSourceResponse(source, fetchImpl);
+  if (!res.ok) {
+    throw new Error(`Failed to download ${source.sourceFile}: HTTP ${res.status}`);
+  }
+
+  const copyStream = client.query(copyFrom(COPY_SQL));
+  let recordCount = 0;
+  let snapshotDate = new Date().toISOString().slice(0, 10);
+
+  const readable = Readable.from(
+    (async function* () {
+      const iter = iterateRecordsFromResponse(res, source.sourceFile);
+      while (true) {
+        const next = await iter.next();
+        if (next.done) {
+          recordCount = next.value.recordCount;
+          snapshotDate = next.value.snapshotDate;
+          break;
         }
-      })(),
-    );
-    await pipeline(readable, stream);
+        yield `${recordToCopyLine(next.value)}\n`;
+      }
+    })(),
+  );
+
+  await pipeline(readable, copyStream);
+
+  if (recordCount === 0) {
+    throw new Error(`No records parsed from ${source.sourceFile}`);
+  }
+
+  log.info(
+    { registry: source.registry, rows: recordCount, snapshotDate },
+    'Copied RIR source to staging',
+  );
+  return { recordCount, snapshotDate };
+}
+
+async function loadAllSourcesToStaging(
+  log: Logger,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Record<string, number>> {
+  return withDirectPoolClient(async (client) => {
+    await client.query('TRUNCATE stg_rir_delegations RESTART IDENTITY');
+    const rowsByFile: Record<string, number> = {};
+    for (const source of RIR_DELEGATED_SOURCES) {
+      log.info({ registry: source.registry, url: source.url }, 'Downloading RIR delegated file');
+      const { recordCount } = await copySourceToStaging(client, source, log, fetchImpl);
+      rowsByFile[source.sourceFile] = recordCount;
+    }
+    return rowsByFile;
   });
-  log.info({ rows: records.length }, 'Copied RIR records to staging');
 }
 
 async function swapStagingToProduction(log: Logger): Promise<{
@@ -116,10 +193,14 @@ async function swapStagingToProduction(log: Logger): Promise<{
   });
 }
 
-export async function runRirImportPipeline(importRunId: string, log: Logger): Promise<void> {
+export async function runRirImportPipeline(
+  importRunId: string,
+  log: Logger,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
   const acquired = await tryAcquireRirImportLock();
   if (!acquired) {
-    log.warn({ importRunId }, 'RIR import lock busy — leaving run queued');
+    log.warn({ importRunId }, 'RIR import lock busy — leaving run queued for next poll');
     return;
   }
 
@@ -137,14 +218,7 @@ export async function runRirImportPipeline(importRunId: string, log: Logger): Pr
       [importRunId],
     );
 
-    const files = await downloadAndParseAllRirSources();
-    const allRecords = files.flatMap((f) => f.parse.records);
-    const rowsByFile: Record<string, number> = {};
-    for (const f of files) {
-      rowsByFile[f.sourceFile] = f.parse.records.length;
-    }
-
-    await copyRecordsToStaging(allRecords, log);
+    const rowsByFile = await loadAllSourcesToStaging(log, fetchImpl);
     const swapped = await swapStagingToProduction(log);
 
     await query(

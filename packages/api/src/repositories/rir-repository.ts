@@ -11,6 +11,11 @@ export type RirDatasetState = {
   activeImportRunId: string | null;
 };
 
+export type RirImportRunRef = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+};
+
 function asRecord(value: unknown): Record<string, number> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const out: Record<string, number> = {};
@@ -64,14 +69,19 @@ export async function isRirDatasetReady(): Promise<boolean> {
   return state.status === 'ready' && state.rowCount > 0;
 }
 
-export async function getRunningRirImport(): Promise<{ id: string } | null> {
-  const result = await query<{ id: string }>(
-    `SELECT id FROM rir_import_runs
+export async function getBlockingRirImport(): Promise<RirImportRunRef | null> {
+  const result = await query<{ id: string; status: RirImportRunRef['status'] }>(
+    `SELECT id, status FROM rir_import_runs
      WHERE status IN ('queued', 'running')
      ORDER BY started_at NULLS LAST, id
      LIMIT 1`,
   );
   return result.rows[0] ?? null;
+}
+
+export async function getRunningRirImport(): Promise<{ id: string } | null> {
+  const blocking = await getBlockingRirImport();
+  return blocking ? { id: blocking.id } : null;
 }
 
 export async function getQueuedRirImports(): Promise<{ id: string }[]> {
@@ -85,10 +95,10 @@ export async function getQueuedRirImports(): Promise<{ id: string }[]> {
 
 export async function createRirImportRun(
   triggeredBy: 'manual' | 'cron' | 'api',
-): Promise<{ importRunId: string; conflict: boolean }> {
-  const running = await getRunningRirImport();
-  if (running) {
-    return { importRunId: running.id, conflict: true };
+): Promise<{ importRunId: string; conflict: boolean; status?: RirImportRunRef['status'] }> {
+  const blocking = await getBlockingRirImport();
+  if (blocking) {
+    return { importRunId: blocking.id, conflict: true, status: blocking.status };
   }
 
   const result = await query<{ id: string }>(
@@ -100,22 +110,83 @@ export async function createRirImportRun(
   return { importRunId: result.rows[0]!.id, conflict: false };
 }
 
-export async function recoverStaleRirImportRuns(staleMinutes = 120): Promise<void> {
-  await query(
+/** Fail stale queued/running runs. Call on every poll (default 30 minutes). */
+export async function recoverStaleRirImportRuns(staleMinutes = 30): Promise<number> {
+  const result = await query(
     `UPDATE rir_import_runs
      SET status = 'failed',
          finished_at = NOW(),
          error_code = 'stale',
          error_message = $2
      WHERE status IN ('queued', 'running')
-       AND COALESCE(started_at, NOW() - INTERVAL '1 day') < NOW() - ($1 || ' minutes')::interval`,
+       AND COALESCE(started_at, queued_at) < NOW() - ($1 || ' minutes')::interval`,
     [String(staleMinutes), `RIR import abandoned after ${staleMinutes}m without progress`],
   );
+
   await query(
     `UPDATE rir_dataset_state
      SET status = CASE WHEN row_count > 0 THEN 'ready'::rir_dataset_status ELSE 'failed'::rir_dataset_status END,
          active_import_run_id = NULL,
          updated_at = NOW()
+     WHERE status = 'importing'
+       AND (
+         active_import_run_id IS NULL
+         OR NOT EXISTS (
+           SELECT 1 FROM rir_import_runs r
+           WHERE r.id = rir_dataset_state.active_import_run_id
+             AND r.status IN ('queued', 'running')
+         )
+       )`,
+  );
+
+  return result.rowCount ?? 0;
+}
+
+/**
+ * Caller must hold the RIR advisory lock. Any DB `running` row is orphaned
+ * (no live worker owns the lock).
+ */
+export async function failOrphanedRunningRirImports(): Promise<number> {
+  const result = await query(
+    `UPDATE rir_import_runs
+     SET status = 'failed',
+         finished_at = NOW(),
+         error_code = 'orphan',
+         error_message = 'RIR import marked failed: worker lost ownership (orphan after crash)'
+     WHERE status = 'running'`,
+  );
+
+  await query(
+    `UPDATE rir_dataset_state
+     SET status = CASE WHEN row_count > 0 THEN 'ready'::rir_dataset_status ELSE 'failed'::rir_dataset_status END,
+         last_error = COALESCE(last_error, 'Previous RIR import was interrupted'),
+         active_import_run_id = NULL,
+         updated_at = NOW()
      WHERE status = 'importing'`,
   );
+
+  return result.rowCount ?? 0;
+}
+
+/** Admin/ops: fail all queued/running and clear dataset importing flag. */
+export async function resetStuckRirImports(): Promise<{ clearedRuns: number }> {
+  const result = await query(
+    `UPDATE rir_import_runs
+     SET status = 'failed',
+         finished_at = NOW(),
+         error_code = 'manual_reset',
+         error_message = 'Reset stuck RIR import from Admin'
+     WHERE status IN ('queued', 'running')`,
+  );
+
+  await query(
+    `UPDATE rir_dataset_state
+     SET status = CASE WHEN row_count > 0 THEN 'ready'::rir_dataset_status ELSE 'failed'::rir_dataset_status END,
+         last_error = 'Stuck RIR import was reset from Admin',
+         active_import_run_id = NULL,
+         updated_at = NOW()
+     WHERE id = 1`,
+  );
+
+  return { clearedRuns: result.rowCount ?? 0 };
 }

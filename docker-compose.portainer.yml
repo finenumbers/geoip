@@ -172,10 +172,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "1"
+          memory: 1G
         reservations:
-          memory: 128M
+          memory: 256M
 
   web:
     image: ghcr.io/finenumbers/geoip-web:latest

@@ -157,6 +157,17 @@ export function AdminPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const resetRirImport = useMutation({
+    mutationFn: adminApi.resetRirImport,
+    onSuccess: (data) => {
+      setMessage(`${ui.admin.resetRirImportDone} (${data.clearedRuns})`);
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-rir-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['rir-status'] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const logout = useMutation({
     mutationFn: adminApi.logout,
     onSuccess: () => {
@@ -301,6 +312,14 @@ export function AdminPage() {
                       )
                     : '—'}
                 </p>
+                {rirStatus.activeImport && (
+                  <p>
+                    {ui.admin.rirActiveImport}:{' '}
+                    <strong>
+                      {rirStatus.activeImport.status} ({rirStatus.activeImport.id.slice(0, 8)})
+                    </strong>
+                  </p>
+                )}
                 {rirStatus.lastError && (
                   <p className="text-red-700">Error: {rirStatus.lastError}</p>
                 )}
@@ -318,12 +337,20 @@ export function AdminPage() {
             ) : (
               <p className="mb-3 text-sm text-muted">{ui.rir.notReady}</p>
             )}
-            <ActionButton
-              onClick={() => triggerRirImport.mutate()}
-              loading={triggerRirImport.isPending}
-            >
-              {ui.admin.triggerRirImport}
-            </ActionButton>
+            <div className="flex flex-wrap gap-2">
+              <ActionButton
+                onClick={() => triggerRirImport.mutate()}
+                loading={triggerRirImport.isPending}
+              >
+                {ui.admin.triggerRirImport}
+              </ActionButton>
+              <ActionButton
+                onClick={() => resetRirImport.mutate()}
+                loading={resetRirImport.isPending}
+              >
+                {ui.admin.resetRirImport}
+              </ActionButton>
+            </div>
             <p className="mt-3 text-xs text-muted">
               Browse: <Link to="/browse/rir" search={{ sort: '[]', filters: '[]' }} className="underline">/browse/rir</Link>
             </p>

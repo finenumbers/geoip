@@ -369,6 +369,14 @@ function RirStatsCard({
             value={formatDateTime(state?.lastSuccessAt, displayTimezone)}
           />
           <DetailItem label={ui.dashboard.rirRows} value={formatCount(headlineRows)} />
+          {state?.lastError && (
+            <DetailItem
+              label={ui.dashboard.rirLastError}
+              value={state.lastError}
+              title={state.lastError}
+              valueClassName="text-red-600"
+            />
+          )}
         </SummaryDetails>
         <div className="mt-3 space-y-1 text-sm">
           <p className="text-muted">{ui.dashboard.rirByRegistry}</p>
@@ -382,11 +390,6 @@ function RirStatsCard({
             ))}
           </div>
         </div>
-        {state?.lastError && (
-          <p className="mt-2 text-xs text-red-600" title={state.lastError}>
-            {state.lastError}
-          </p>
-        )}
         <Link
           to="/browse/rir"
           search={browseSearch}

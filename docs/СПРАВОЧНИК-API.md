@@ -247,7 +247,15 @@ Probe доступности 6 delegated latest-файлов (5 RIR + IANA) бе
 | HTTP | Описание |
 |------|----------|
 | 200 | `{ "importRunId": "uuid", "status": "queued" }` |
-| 409 | `RirImportAlreadyRunning` |
+| 409 | `RirImportAlreadyRunning` — в теле `importRunId`, `status`, подсказка про reset |
+
+### POST `/admin/rir/imports/reset`
+
+Сброс зависших `queued`/`running` runs и флага `importing` (ops без SQL).
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ "ok": true, "clearedRuns": N }` |
 
 ---
 

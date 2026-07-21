@@ -38,14 +38,21 @@ export type RirProbeResult = {
   sources: RirProbeSourceResult[];
 };
 
+export async function fetchRirSourceResponse(
+  source: (typeof RIR_DELEGATED_SOURCES)[number],
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  return fetchImpl(source.url, {
+    headers: FETCH_HEADERS,
+    redirect: 'follow',
+  });
+}
+
 async function fetchDelegatedSourceFull(
   source: (typeof RIR_DELEGATED_SOURCES)[number],
   fetchImpl: typeof fetch,
 ): Promise<{ httpStatus: number; content: string }> {
-  const res = await fetchImpl(source.url, {
-    headers: FETCH_HEADERS,
-    redirect: 'follow',
-  });
+  const res = await fetchRirSourceResponse(source, fetchImpl);
   const content = res.ok ? await res.text() : '';
   return { httpStatus: res.status, content };
 }

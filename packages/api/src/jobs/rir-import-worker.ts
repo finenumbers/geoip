@@ -6,18 +6,40 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { loadEnv } from '../config/env.js';
 import { logger, createChildLogger } from '../config/logger.js';
 import { migrate } from '../db/migrate.js';
+import { query } from '../db/client.js';
 import {
   createRirImportRun,
+  failOrphanedRunningRirImports,
   getQueuedRirImports,
-  getRunningRirImport,
+  getRirDatasetState,
   recoverStaleRirImportRuns,
 } from '../repositories/rir-repository.js';
-import { releaseOrphanedRirImportLock } from './rir-import-lock.js';
+import {
+  releaseOrphanedRirImportLock,
+  releaseRirImportLock,
+  tryAcquireRirImportLock,
+} from './rir-import-lock.js';
 import { runRirImportPipeline } from './rir-import-pipeline.js';
 import { registerWorkerShutdown, startWorkerPoll } from './worker-lifecycle.js';
 
+const STALE_MINUTES = 30;
+
 let pollInProgress = false;
 let cronTask: ScheduledTask | null = null;
+
+/** Clear orphaned running rows when we can take the advisory lock (no live owner). */
+async function recoverOrphanedImportsIfLockFree(): Promise<void> {
+  const acquired = await tryAcquireRirImportLock();
+  if (!acquired) return;
+  try {
+    const n = await failOrphanedRunningRirImports();
+    if (n > 0) {
+      logger.warn({ cleared: n }, 'Failed orphaned RIR import runs (lock was free)');
+    }
+  } finally {
+    await releaseRirImportLock();
+  }
+}
 
 async function pollQueuedRirImports(): Promise<void> {
   if (pollInProgress) {
@@ -26,6 +48,12 @@ async function pollQueuedRirImports(): Promise<void> {
   }
   pollInProgress = true;
   try {
+    const stale = await recoverStaleRirImportRuns(STALE_MINUTES);
+    if (stale > 0) {
+      logger.warn({ stale }, 'Marked stale RIR import runs as failed');
+    }
+    await recoverOrphanedImportsIfLockFree();
+
     const queued = await getQueuedRirImports();
     for (const job of queued) {
       const childLogger = createChildLogger({ rirImportRunId: job.id });
@@ -68,9 +96,13 @@ async function main(): Promise<void> {
   logger.info('RIR import worker starting');
 
   await migrate();
-  await recoverStaleRirImportRuns();
-  const running = await getRunningRirImport();
-  if (!running) {
+  await recoverStaleRirImportRuns(STALE_MINUTES);
+  await recoverOrphanedImportsIfLockFree();
+
+  const running = await query<{ id: string }>(
+    `SELECT id FROM rir_import_runs WHERE status = 'running' LIMIT 1`,
+  );
+  if (running.rows.length === 0) {
     await releaseOrphanedRirImportLock();
     logger.info('Released orphaned RIR import advisory lock on startup');
   }
@@ -90,8 +122,6 @@ async function main(): Promise<void> {
 
   scheduleRirImportCron();
 
-  // Kick an initial import if dataset empty
-  const { getRirDatasetState } = await import('../repositories/rir-repository.js');
   const state = await getRirDatasetState();
   if (state.rowCount === 0 && state.status !== 'importing') {
     const result = await createRirImportRun('api');

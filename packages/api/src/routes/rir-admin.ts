@@ -1,8 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { probeAllRirSources } from '../jobs/rir-delegated-client.js';
+import { releaseOrphanedRirImportLock } from '../jobs/rir-import-lock.js';
 import {
   createRirImportRun,
+  getBlockingRirImport,
   getRirDatasetState,
+  resetStuckRirImports,
 } from '../repositories/rir-repository.js';
 
 export async function registerRirAdminRoutes(app: FastifyInstance): Promise<void> {
@@ -10,7 +13,9 @@ export async function registerRirAdminRoutes(app: FastifyInstance): Promise<void
     '/api/v1/admin/rir/status',
     { preHandler: [app.requireAdminSession] },
     async () => {
-      return getRirDatasetState();
+      const state = await getRirDatasetState();
+      const active = await getBlockingRirImport();
+      return { ...state, activeImport: active };
     },
   );
 
@@ -51,11 +56,22 @@ export async function registerRirAdminRoutes(app: FastifyInstance): Promise<void
       if (result.conflict) {
         return reply.status(409).send({
           error: 'RirImportAlreadyRunning',
-          message: 'RIR import is already queued or running',
+          message: `RIR import is already ${result.status ?? 'queued'} (${result.importRunId}). Wait for it to finish, or use «Сбросить зависший импорт» in Admin → RIR registry. Logs: docker compose logs rir`,
           importRunId: result.importRunId,
+          status: result.status ?? 'queued',
         });
       }
       return { importRunId: result.importRunId, status: 'queued' as const };
+    },
+  );
+
+  app.post(
+    '/api/v1/admin/rir/imports/reset',
+    { preHandler: [app.requireAdminSession] },
+    async () => {
+      const { clearedRuns } = await resetStuckRirImports();
+      await releaseOrphanedRirImportLock();
+      return { ok: true as const, clearedRuns };
     },
   );
 }

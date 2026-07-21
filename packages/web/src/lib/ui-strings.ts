@@ -185,6 +185,7 @@ export const ui = {
     rirByRegistry: 'По реестрам',
     rirByStatus: 'По status',
     rirNote: 'NRO delegated (не геолокация ГРЧЦ)',
+    rirLastError: 'Ошибка',
   },
   systemBanner: {
     headerStatus: 'Система',
@@ -236,6 +237,9 @@ export const ui = {
     rirProbeOk: 'RIR+IANA доступны',
     rirProbeFailed: 'Проверка RIR+IANA не прошла',
     rirProbeInProgress: 'Проверка RIR+IANA…',
+    resetRirImport: 'Сбросить зависший импорт',
+    resetRirImportDone: 'Зависший импорт RIR сброшен',
+    rirActiveImport: 'Активный run',
     username: 'Логин',
     password: 'Пароль',
     newPassword: 'Новый пароль',

@@ -190,45 +190,81 @@ export function parseDelegatedRecordLine(
   };
 }
 
+export type DelegatedParseState = {
+  snapshotDate: string;
+  skippedLines: number;
+  recordCount: number;
+};
+
+export function createDelegatedParseState(): DelegatedParseState {
+  return {
+    snapshotDate: new Date().toISOString().slice(0, 10),
+    skippedLines: 0,
+    recordCount: 0,
+  };
+}
+
+/** Process one delegated line; mutates state; returns a record or null. */
+export function processDelegatedLine(
+  line: string,
+  sourceFile: string,
+  state: DelegatedParseState,
+): ParsedRirRecord | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) return null;
+
+  const parts = trimmed.split('|');
+  // version|registry|serial|records|startdate|enddate|UTCoffset
+  if (
+    parts.length >= 6 &&
+    /^\d+(\.\d+)?$/.test(parts[0] ?? '') &&
+    parts[5] &&
+    /^\d{8}$/.test(parts[5])
+  ) {
+    const parsed = parseAllocatedAt(parts[5]);
+    if (parsed) state.snapshotDate = parsed;
+    return null;
+  }
+
+  if (parts[parts.length - 1] === 'summary') return null;
+
+  const rec = parseDelegatedRecordLine(trimmed, sourceFile, state.snapshotDate);
+  if (!rec) {
+    if (parts.length >= 7 && RESOURCE_TYPES.has((parts[2] ?? '').toLowerCase())) {
+      state.skippedLines += 1;
+    }
+    return null;
+  }
+  state.recordCount += 1;
+  return { ...rec, snapshotDate: state.snapshotDate };
+}
+
+/** Yield records without buffering the full result set (for streaming COPY). */
+export function* iterateDelegatedRecordsFromText(
+  content: string,
+  sourceFile: string,
+): Generator<ParsedRirRecord, DelegatedParseState> {
+  const state = createDelegatedParseState();
+  for (const line of content.split(/\r?\n/)) {
+    const rec = processDelegatedLine(line, sourceFile, state);
+    if (rec) yield rec;
+  }
+  return state;
+}
+
 export function parseDelegatedFileContent(
   content: string,
   sourceFile: string,
 ): DelegatedFileParseResult {
-  const lines = content.split(/\r?\n/);
-  let snapshotDate = new Date().toISOString().slice(0, 10);
-  let skippedLines = 0;
+  const state = createDelegatedParseState();
   const records: ParsedRirRecord[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const parts = trimmed.split('|');
-    // version|registry|serial|records|startdate|enddate|UTCoffset
-    if (parts.length >= 6 && /^\d+(\.\d+)?$/.test(parts[0] ?? '') && parts[5] && /^\d{8}$/.test(parts[5])) {
-      const parsed = parseAllocatedAt(parts[5]);
-      if (parsed) snapshotDate = parsed;
-      continue;
-    }
-
-    if (parts[parts.length - 1] === 'summary') continue;
-
-    const rec = parseDelegatedRecordLine(trimmed, sourceFile, snapshotDate);
-    if (!rec) {
-      // version/summary already skipped; count other non-records
-      if (parts.length >= 7 && RESOURCE_TYPES.has((parts[2] ?? '').toLowerCase())) {
-        skippedLines += 1;
-      }
-      continue;
-    }
-    // Fix snapshot_date on records if header came after (unlikely) — use header date
-    records.push({ ...rec, snapshotDate });
+  for (const line of content.split(/\r?\n/)) {
+    const rec = processDelegatedLine(line, sourceFile, state);
+    if (rec) records.push(rec);
   }
-
-  // Re-stamp snapshot date after full header parse
+  // Re-stamp after full header parse (header may appear after early lines)
   for (const rec of records) {
-    rec.snapshotDate = snapshotDate;
+    rec.snapshotDate = state.snapshotDate;
   }
-
-  return { snapshotDate, records, skippedLines };
+  return { snapshotDate: state.snapshotDate, records, skippedLines: state.skippedLines };
 }
