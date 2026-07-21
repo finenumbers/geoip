@@ -6,6 +6,7 @@ import {
   Table2,
   Settings,
   Code2,
+  ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -146,13 +147,11 @@ export function AppLayout() {
             )}
             {!datasetError && (
               <div className="group relative">
-                <span className="cursor-default">
+                <span className="inline-flex cursor-default items-center gap-1">
                   {ui.datasetBadge}
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
                   {datasetDate ? (
-                    <>
-                      :{' '}
-                      <span className="font-bold text-foreground">{datasetDate}</span>
-                    </>
+                    <span className="font-bold text-green-600">{datasetDate}</span>
                   ) : null}
                 </span>
                 <div
@@ -164,10 +163,18 @@ export function AppLayout() {
                       const value = row.registry
                         ? (rirStatus?.snapshotsByRegistry?.[row.registry] ?? '—')
                         : (datasetDate ?? '—');
+                      const hasDate = value !== '—';
                       return (
                         <div key={row.label} className="contents">
                           <dt className="text-muted">{row.label}:</dt>
-                          <dd className="text-right font-medium text-foreground">{value}</dd>
+                          <dd
+                            className={cn(
+                              'text-right font-medium',
+                              hasDate ? 'text-green-600' : 'text-foreground',
+                            )}
+                          >
+                            {value}
+                          </dd>
                         </div>
                       );
                     })}

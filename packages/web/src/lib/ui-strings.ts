@@ -102,9 +102,9 @@ export const ui = {
     registry: 'RIR',
     resource_type: 'Type',
     range_text: 'Range',
-    cc: 'CC',
+    cc: 'ISO',
     status: 'Status',
-    allocated_at: 'Allocated',
+    allocated_at: 'Date',
     opaque_id: 'Opaque ID',
     ip_family: 'Family',
   },
@@ -235,7 +235,7 @@ export const ui = {
     autoImportHelpBody:
       'После ручного импорта ГРЧЦ и RIR+IANA включите оба автоимпорта и задайте ежедневное время загрузки. По умолчанию автоимпорты выключены — без этого шага чеклист первичной настройки не завершится.',
   },
-  datasetBadge: 'Датасет',
+  datasetBadge: 'Датасеты диапазонов',
   datasetMenu: {
     grchc: 'Датасет ГРЧЦ',
     ripe: 'Датасет RIPE',

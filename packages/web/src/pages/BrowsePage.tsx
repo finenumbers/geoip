@@ -498,19 +498,15 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     if (tableType === 'rir') {
       return [
         {
-          accessorKey: 'registry',
-          header: ui.filters.registry,
+          accessorKey: 'rangeText',
+          header: ui.filters.range_text,
           meta: columnMeta(
-            'registry',
-            <ColumnFacetFilter
-              label={ui.filters.registry}
-              field="registry"
-              tableType="rir"
-              selectedValues={getMultiFilterValues(activeFilters, 'registry')}
-              contextFilters={facetContext('registry')}
-              compact
-              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'registry', values))}
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'registry', []))}
+            'range_text',
+            <ColumnTextFilter
+              placeholder={ui.filters.range_text}
+              value={getTextFilterValue(activeFilters, 'range_text')}
+              onApply={(value) => applyTextFilter('range_text', value)}
+              onClear={() => clearTextFilter('range_text')}
             />,
           ),
         },
@@ -534,15 +530,34 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           ),
         },
         {
-          accessorKey: 'rangeText',
-          header: ui.filters.range_text,
-          meta: columnMeta(
-            'range_text',
+          accessorKey: 'prefixLen',
+          header: ui.filters.prefix_len,
+          meta: columnMeta('prefix_len', () => (
             <ColumnTextFilter
-              placeholder={ui.filters.range_text}
-              value={getTextFilterValue(activeFilters, 'range_text')}
-              onApply={(value) => applyTextFilter('range_text', value)}
-              onClear={() => clearTextFilter('range_text')}
+              placeholder={ui.filters.prefix_len}
+              value={getTextFilterValue(activeFilters, 'prefix_len')}
+              error={fieldErrors.prefix_len}
+              validate={(v) => validateTextFilterValue('prefix_len', v)}
+              onValidationError={(msg) => setFieldError('prefix_len', msg)}
+              onApply={(value) => applyTextFilter('prefix_len', value)}
+              onClear={() => clearTextFilter('prefix_len')}
+            />
+          )),
+        },
+        {
+          accessorKey: 'ipFamily',
+          header: ui.filters.ip_family,
+          meta: columnMeta(
+            'ip_family',
+            <ColumnFacetFilter
+              label={ui.filters.ip_family}
+              field="ip_family"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'ip_family')}
+              contextFilters={facetContext('ip_family')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'ip_family', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'ip_family', []))}
             />,
           ),
         },
@@ -586,7 +601,7 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           meta: columnMeta(
             'allocated_at',
             <ColumnTextFilter
-              placeholder="YYYY-MM-DD"
+              placeholder={ui.filters.allocated_at}
               value={getTextFilterValue(activeFilters, 'allocated_at')}
               onApply={(value) => applyTextFilter('allocated_at', value)}
               onClear={() => clearTextFilter('allocated_at')}
@@ -607,23 +622,21 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           ),
         },
         {
-          accessorKey: 'prefixLen',
-          header: ui.filters.prefix_len,
-          meta: columnMeta('prefix_len', () => (
-            <ColumnTextFilter
-              placeholder={ui.filters.prefix_len}
-              value={getTextFilterValue(activeFilters, 'prefix_len')}
-              error={fieldErrors.prefix_len}
-              validate={(v) => validateTextFilterValue('prefix_len', v)}
-              onValidationError={(msg) => setFieldError('prefix_len', msg)}
-              onApply={(value) => applyTextFilter('prefix_len', value)}
-              onClear={() => clearTextFilter('prefix_len')}
-            />
-          )),
-        },
-        {
-          accessorKey: 'ipFamily',
-          header: ui.filters.ip_family,
+          accessorKey: 'registry',
+          header: ui.filters.registry,
+          meta: columnMeta(
+            'registry',
+            <ColumnFacetFilter
+              label={ui.filters.registry}
+              field="registry"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'registry')}
+              contextFilters={facetContext('registry')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'registry', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'registry', []))}
+            />,
+          ),
         },
       ];
     }

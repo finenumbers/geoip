@@ -20,6 +20,7 @@ function appendFilter(
     range_text: 'range_text',
     network: 'network::text',
     prefix_len: 'prefix_len',
+    ip_family: 'ip_family',
     opaque_id: 'opaque_id',
     allocated_at: 'allocated_at::text',
   };
@@ -34,43 +35,52 @@ function appendFilter(
     clauses.push(`${col} IS NOT NULL`);
     return;
   }
+
+  const asNumber = (value: unknown): number | unknown => {
+    if (filter.field === 'ip_family' || filter.field === 'prefix_len') {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : value;
+    }
+    return value;
+  };
+
   if (filter.op === 'eq') {
-    params.push(filter.value);
+    params.push(asNumber(filter.value));
     clauses.push(`${col} = $${params.length}`);
     return;
   }
   if (filter.op === 'neq') {
-    params.push(filter.value);
+    params.push(asNumber(filter.value));
     clauses.push(`${col} IS DISTINCT FROM $${params.length}`);
     return;
   }
   if (filter.op === 'contains') {
     params.push(`%${String(filter.value ?? '')}%`);
-    clauses.push(`${col} ILIKE $${params.length}`);
+    clauses.push(`${col}::text ILIKE $${params.length}`);
     return;
   }
   if (filter.op === 'startsWith') {
     params.push(`${String(filter.value ?? '')}%`);
-    clauses.push(`${col} ILIKE $${params.length}`);
+    clauses.push(`${col}::text ILIKE $${params.length}`);
     return;
   }
   if (filter.op === 'in' && Array.isArray(filter.value)) {
-    params.push(filter.value);
+    params.push(filter.value.map((entry) => asNumber(entry)));
     clauses.push(`${col} = ANY($${params.length})`);
     return;
   }
   if (filter.op === 'gte') {
-    params.push(filter.value);
+    params.push(asNumber(filter.value));
     clauses.push(`${col} >= $${params.length}`);
     return;
   }
   if (filter.op === 'lte') {
-    params.push(filter.value);
+    params.push(asNumber(filter.value));
     clauses.push(`${col} <= $${params.length}`);
     return;
   }
   if (filter.op === 'between' && Array.isArray(filter.value) && filter.value.length >= 2) {
-    params.push(filter.value[0], filter.value[1]);
+    params.push(asNumber(filter.value[0]), asNumber(filter.value[1]));
     clauses.push(`${col} BETWEEN $${params.length - 1} AND $${params.length}`);
   }
 }
@@ -157,7 +167,7 @@ export function buildRirFacetQuery(
   limit: number,
   contextFilters: FilterClause[],
 ): { sql: string; params: unknown[] } {
-  const allowed = new Set(['registry', 'status', 'resource_type', 'cc']);
+  const allowed = new Set(['registry', 'status', 'resource_type', 'cc', 'ip_family']);
   if (!allowed.has(field)) {
     throw new Error(`Unsupported RIR facet field: ${field}`);
   }

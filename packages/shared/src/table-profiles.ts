@@ -62,10 +62,11 @@ const RIR_TABLE_PROFILE: TableProfile = {
     'range_text',
     'network',
     'prefix_len',
+    'ip_family',
     'opaque_id',
     'allocated_at',
   ],
-  facetFields: ['registry', 'status', 'resource_type', 'cc'],
+  facetFields: ['registry', 'status', 'resource_type', 'cc', 'ip_family'],
   sortFields: RIR_TABLE_SORT_FIELDS,
   uiSortFields: [
     'registry',
