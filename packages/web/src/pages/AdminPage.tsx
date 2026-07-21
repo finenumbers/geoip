@@ -106,6 +106,10 @@ export function AdminPage() {
 
   const testRir = useMutation({
     mutationFn: adminApi.testRir,
+    onMutate: () => {
+      setMessage(ui.admin.rirProbeInProgress);
+      setError(null);
+    },
     onSuccess: (data) => {
       const dates = [
         ...new Set(
@@ -120,7 +124,10 @@ export function AdminPage() {
       );
       setError(null);
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => {
+      setMessage(null);
+      setError(err.message || ui.admin.rirProbeFailed);
+    },
   });
 
   const { data: rirStatus } = useQuery({
@@ -217,7 +224,7 @@ export function AdminPage() {
                 {ui.admin.testGrchc}
               </ActionButton>
               <ActionButton onClick={() => testRir.mutate()} loading={testRir.isPending}>
-                {ui.admin.testRir}
+                {testRir.isPending ? ui.admin.rirProbeInProgress : ui.admin.testRir}
               </ActionButton>
               <ActionButton onClick={() => triggerImport.mutate()} loading={triggerImport.isPending}>
                 {ui.admin.triggerImport}

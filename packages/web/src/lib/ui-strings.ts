@@ -235,6 +235,7 @@ export const ui = {
     rirImportQueued: 'Импорт RIR+IANA поставлен в очередь',
     rirProbeOk: 'RIR+IANA доступны',
     rirProbeFailed: 'Проверка RIR+IANA не прошла',
+    rirProbeInProgress: 'Проверка RIR+IANA…',
     username: 'Логин',
     password: 'Пароль',
     newPassword: 'Новый пароль',
