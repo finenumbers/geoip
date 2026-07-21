@@ -125,6 +125,18 @@ describe('wipeAllDatasets', () => {
     expect(heavySql.some((sql) => sql.includes('TRUNCATE') && sql.includes('rir_delegations'))).toBe(
       true,
     );
+    expect(
+      heavySql.some((sql) => sql.includes('TRUNCATE') && sql.includes('geo_rir_cc_mismatches')),
+    ).toBe(true);
+    expect(heavySql.some((sql) => sql.includes('TRUNCATE') && sql.includes('rir_rdap_cache'))).toBe(
+      true,
+    );
+    expect(
+      heavySql.some(
+        (sql) =>
+          sql.includes('UPDATE geo_rir_cc_mismatch_state') && sql.includes("status = 'never'"),
+      ),
+    ).toBe(true);
 
     const sqlCalls = vi.mocked(query).mock.calls.map(([sql]) => String(sql));
     expect(sqlCalls.some((sql) => sql.includes('UPDATE dataset_state'))).toBe(true);

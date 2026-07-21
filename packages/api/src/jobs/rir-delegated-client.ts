@@ -1,9 +1,5 @@
 import { RIR_DELEGATED_SOURCES, type RirRegistryId } from '@geoip/shared';
 import { logger } from '../config/logger.js';
-import {
-  parseDelegatedFileContent,
-  type DelegatedFileParseResult,
-} from './rir-delegated-parse.js';
 
 const FETCH_HEADERS = {
   Accept: 'text/plain,*/*',
@@ -13,13 +9,6 @@ const FETCH_HEADERS = {
 /** Enough for version header + summaries without downloading multi‑MB bodies. */
 const PROBE_MAX_BYTES = 64 * 1024;
 const PROBE_TIMEOUT_MS = 45_000;
-
-export type DownloadedRirFile = {
-  registry: RirRegistryId;
-  sourceFile: string;
-  url: string;
-  parse: DelegatedFileParseResult;
-};
 
 export type RirProbeSourceResult = {
   registry: RirRegistryId;
@@ -46,15 +35,6 @@ export async function fetchRirSourceResponse(
     headers: FETCH_HEADERS,
     redirect: 'follow',
   });
-}
-
-async function fetchDelegatedSourceFull(
-  source: (typeof RIR_DELEGATED_SOURCES)[number],
-  fetchImpl: typeof fetch,
-): Promise<{ httpStatus: number; content: string }> {
-  const res = await fetchRirSourceResponse(source, fetchImpl);
-  const content = res.ok ? await res.text() : '';
-  return { httpStatus: res.status, content };
 }
 
 /** Read at most `maxBytes` from the response body, then cancel the stream. */
@@ -207,39 +187,4 @@ export async function probeAllRirSources(
     reachableCount,
     sources,
   };
-}
-
-export async function downloadAndParseAllRirSources(
-  fetchImpl: typeof fetch = fetch,
-): Promise<DownloadedRirFile[]> {
-  const results: DownloadedRirFile[] = [];
-
-  for (const source of RIR_DELEGATED_SOURCES) {
-    logger.info({ registry: source.registry, url: source.url }, 'Downloading RIR delegated file');
-    const { httpStatus, content } = await fetchDelegatedSourceFull(source, fetchImpl);
-    if (httpStatus < 200 || httpStatus >= 300) {
-      throw new Error(`Failed to download ${source.sourceFile}: HTTP ${httpStatus}`);
-    }
-    const parse = parseDelegatedFileContent(content, source.sourceFile);
-    if (parse.records.length === 0) {
-      throw new Error(`No records parsed from ${source.sourceFile}`);
-    }
-    logger.info(
-      {
-        registry: source.registry,
-        rows: parse.records.length,
-        snapshotDate: parse.snapshotDate,
-        skipped: parse.skippedLines,
-      },
-      'Parsed RIR delegated file',
-    );
-    results.push({
-      registry: source.registry,
-      sourceFile: source.sourceFile,
-      url: source.url,
-      parse,
-    });
-  }
-
-  return results;
 }

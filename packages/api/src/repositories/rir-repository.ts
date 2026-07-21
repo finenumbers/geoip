@@ -291,11 +291,6 @@ export async function getBlockingRirImport(): Promise<RirImportRunRef | null> {
   return result.rows[0] ?? null;
 }
 
-export async function getRunningRirImport(): Promise<{ id: string } | null> {
-  const blocking = await getBlockingRirImport();
-  return blocking ? { id: blocking.id } : null;
-}
-
 export async function getQueuedRirImports(): Promise<{ id: string }[]> {
   const result = await query<{ id: string }>(
     `SELECT id FROM rir_import_runs

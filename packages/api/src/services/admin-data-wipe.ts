@@ -95,6 +95,17 @@ async function wipeDataTables(client: pg.PoolClient): Promise<void> {
   `);
 
   await client.query(`TRUNCATE stg_rir_delegations, rir_delegations RESTART IDENTITY`);
+  await client.query(`TRUNCATE geo_rir_cc_mismatches, rir_rdap_cache RESTART IDENTITY`);
+  await client.query(
+    `UPDATE geo_rir_cc_mismatch_state
+     SET status = 'never',
+         row_count = 0,
+         rebuilt_at = NULL,
+         duration_ms = NULL,
+         last_error = NULL,
+         updated_at = NOW()
+     WHERE id = 1`,
+  );
 }
 
 /**

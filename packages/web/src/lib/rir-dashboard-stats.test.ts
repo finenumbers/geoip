@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RirDatasetStateResponse } from '@geoip/shared';
-import {
-  ianaSlice,
-  rirDatasetLoaded,
-  rirRegistriesSlice,
-  rirRegistryDetails,
-} from './rir-dashboard-stats.js';
+import { rirDatasetLoaded, rirRegistryDetails } from './rir-dashboard-stats.js';
 
 const sample: RirDatasetStateResponse = {
   status: 'ready',
@@ -33,18 +28,6 @@ const sample: RirDatasetStateResponse = {
 };
 
 describe('rir-dashboard-stats', () => {
-  it('sums regional RIR rows excluding IANA', () => {
-    const slice = rirRegistriesSlice(sample);
-    expect(slice.rowCount).toBe(90);
-    expect(slice.loaded).toBe(true);
-  });
-
-  it('isolates IANA rows', () => {
-    const slice = ianaSlice(sample);
-    expect(slice.rowCount).toBe(10);
-    expect(slice.loaded).toBe(true);
-  });
-
   it('lists all six registries with snapshot dates', () => {
     const details = rirRegistryDetails(sample);
     expect(details).toHaveLength(6);
@@ -60,7 +43,8 @@ describe('rir-dashboard-stats', () => {
   it('detects loaded dataset from total row count', () => {
     expect(rirDatasetLoaded(sample)).toBe(true);
     expect(rirDatasetLoaded(undefined)).toBe(false);
-    expect(rirRegistriesSlice(undefined).loaded).toBe(false);
-    expect(ianaSlice({ ...sample, status: 'unavailable', rowsByRegistry: {} }).loaded).toBe(false);
+    expect(
+      rirDatasetLoaded({ ...sample, status: 'unavailable', rowCount: 0, rowsByRegistry: {} }),
+    ).toBe(false);
   });
 });
