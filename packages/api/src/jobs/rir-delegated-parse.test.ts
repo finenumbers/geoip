@@ -60,6 +60,16 @@ describe('parseDelegatedRecordLine', () => {
     expect(asn?.status).toBe('reserved');
   });
 
+  it('accepts asn_count above signed int32', () => {
+    const asn = parseDelegatedRecordLine(
+      'iana|ZZ|asn|1|4199595619|00000000|reserved|',
+      'delegated-iana-latest',
+      '2026-07-21',
+    );
+    expect(asn?.asnCount).toBe(4199595619);
+    expect(asn?.rangeText).toBe('AS1-AS4199595619');
+  });
+
   it('skips summary and header-like lines', () => {
     expect(
       parseDelegatedRecordLine('apnic|*|ipv4|*|123|summary', 'f', '2026-07-21'),

@@ -61,4 +61,27 @@ describe('recordToCopyLine', () => {
     expect(line).toContain('AS1');
     expect(line).toContain('reserved');
   });
+
+  it('keeps asn_count values above signed int32 as plain text', () => {
+    const line = recordToCopyLine({
+      registry: 'iana',
+      cc: null,
+      resourceType: 'asn',
+      startIp: null,
+      endIp: null,
+      network: null,
+      prefixLen: null,
+      hostCount: null,
+      startAsn: 1,
+      asnCount: 4199595619,
+      allocatedAt: null,
+      status: 'reserved',
+      opaqueId: null,
+      rangeText: 'AS1-AS4199595619',
+      ipFamily: null,
+      sourceFile: 'delegated-iana-latest',
+      snapshotDate: '2026-07-20',
+    });
+    expect(line.split('\t')[9]).toBe('4199595619');
+  });
 });

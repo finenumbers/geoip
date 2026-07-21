@@ -210,7 +210,7 @@ const rirDelegationColumns = {
   prefixLen: integer('prefix_len'),
   hostCount: numeric('host_count', { precision: 50, scale: 0 }),
   startAsn: bigint('start_asn', { mode: 'number' }),
-  asnCount: integer('asn_count'),
+  asnCount: bigint('asn_count', { mode: 'number' }),
   allocatedAt: date('allocated_at'),
   status: text('status').notNull(),
   opaqueId: text('opaque_id'),
