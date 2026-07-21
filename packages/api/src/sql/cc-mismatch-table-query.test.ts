@@ -30,4 +30,17 @@ describe('buildCcMismatchTableQuery', () => {
     expect(built.sql).toContain('registry = ANY');
     expect(built.countParams).toEqual(['US', ['apnic', 'arin']]);
   });
+
+  it('selects asn fields and filters by asn_org', () => {
+    const built = buildCcMismatchTableQuery({
+      filters: [{ field: 'asn_org', op: 'contains', value: 'Rostelecom' }],
+      sort: [{ field: 'asn', dir: 'asc' }],
+      limit: 25,
+      offset: 0,
+    });
+    expect(built.sql).toContain('asn, asn_org');
+    expect(built.sql).toContain('asn_org::text ILIKE $');
+    expect(built.sql).toContain('ORDER BY asn ASC');
+    expect(built.countParams).toEqual(['%Rostelecom%']);
+  });
 });

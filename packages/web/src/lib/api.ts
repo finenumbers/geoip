@@ -140,6 +140,8 @@ export const api = {
         rirCc: string;
         registry: string | null;
         rangeText: string | null;
+        asn: number | null;
+        asnOrg: string | null;
         rebuiltAt: string;
       }>;
       pagination: {

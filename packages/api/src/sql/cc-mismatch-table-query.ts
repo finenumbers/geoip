@@ -18,6 +18,8 @@ function appendFilter(
     rir_cc: 'rir_cc',
     registry: 'registry',
     range_text: 'range_text',
+    asn: 'asn',
+    asn_org: 'asn_org',
   };
   const col = fieldMap[filter.field];
   if (!col) return;
@@ -62,6 +64,8 @@ const SORT_COLUMNS: Record<string, string> = {
   rir_cc: 'rir_cc',
   registry: 'registry',
   range_text: 'range_text',
+  asn: 'asn',
+  asn_org: 'asn_org',
   id: 'id',
 };
 
@@ -114,7 +118,7 @@ export function buildCcMismatchTableQuery(options: {
 
   const sql = `
     SELECT id, country_block_id, network::text, grchc_cc, rir_cc, registry, range_text,
-           rebuilt_at
+           asn, asn_org, rebuilt_at
     FROM geo_rir_cc_mismatches
     ${whereSql}
     ORDER BY ${sortField} ${sortDir} ${nulls}, id ASC

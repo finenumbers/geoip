@@ -24,15 +24,19 @@ type CcMismatchRow = {
   rirCc: string;
   registry: string | null;
   rangeText: string | null;
+  asn: number | null;
+  asnOrg: string | null;
   rebuiltAt: string;
 };
 
 const COLUMN_API_FIELDS: Record<string, string> = {
   network: 'network',
+  rangeText: 'range_text',
+  asn: 'asn',
+  asnOrg: 'asn_org',
   grchcCc: 'grchc_cc',
   rirCc: 'rir_cc',
   registry: 'registry',
-  rangeText: 'range_text',
 };
 
 type PageParam = {
@@ -146,6 +150,56 @@ export function CcMismatchPage() {
         },
       },
       {
+        accessorKey: 'rangeText',
+        header: ui.ccMismatch.rangeText,
+        meta: {
+          sortable: true,
+          headerFilter: (
+            <ColumnTextFilter
+              placeholder={ui.ccMismatch.rangeText}
+              value={getTextFilterValue(filters, 'range_text')}
+              onApply={(value) => applyTextFilter('range_text', value)}
+              onClear={() => clearTextFilter('range_text')}
+            />
+          ),
+        },
+      },
+      {
+        accessorKey: 'asn',
+        header: ui.ccMismatch.asn,
+        cell: ({ getValue }) => {
+          const v = getValue<number | null>();
+          return v != null ? String(v) : '—';
+        },
+        meta: {
+          sortable: true,
+          headerFilter: (
+            <ColumnTextFilter
+              placeholder={ui.ccMismatch.asn}
+              value={getTextFilterValue(filters, 'asn')}
+              onApply={(value) => applyTextFilter('asn', value)}
+              onClear={() => clearTextFilter('asn')}
+            />
+          ),
+        },
+      },
+      {
+        accessorKey: 'asnOrg',
+        header: ui.ccMismatch.asnOrg,
+        cell: ({ getValue }) => getValue<string | null>() ?? '—',
+        meta: {
+          sortable: true,
+          headerFilter: (
+            <ColumnTextFilter
+              placeholder={ui.ccMismatch.asnOrg}
+              value={getTextFilterValue(filters, 'asn_org')}
+              onApply={(value) => applyTextFilter('asn_org', value)}
+              onClear={() => clearTextFilter('asn_org')}
+            />
+          ),
+        },
+      },
+      {
         accessorKey: 'grchcCc',
         header: ui.ccMismatch.grchcCc,
         meta: {
@@ -186,21 +240,6 @@ export function CcMismatchPage() {
               value={getTextFilterValue(filters, 'registry')}
               onApply={(value) => applyTextFilter('registry', value)}
               onClear={() => clearTextFilter('registry')}
-            />
-          ),
-        },
-      },
-      {
-        accessorKey: 'rangeText',
-        header: ui.ccMismatch.rangeText,
-        meta: {
-          sortable: true,
-          headerFilter: (
-            <ColumnTextFilter
-              placeholder={ui.ccMismatch.rangeText}
-              value={getTextFilterValue(filters, 'range_text')}
-              onApply={(value) => applyTextFilter('range_text', value)}
-              onClear={() => clearTextFilter('range_text')}
             />
           ),
         },

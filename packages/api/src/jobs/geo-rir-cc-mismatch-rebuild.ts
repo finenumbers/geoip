@@ -57,7 +57,8 @@ export async function rebuildGeoRirCcMismatches(
       const insert = await client.query<{ count: string }>(
         `WITH inserted AS (
            INSERT INTO geo_rir_cc_mismatches (
-             country_block_id, network, grchc_cc, rir_cc, registry, range_text, rebuilt_at
+             country_block_id, network, grchc_cc, rir_cc, registry, range_text,
+             asn, asn_org, rebuilt_at
            )
            SELECT
              cb.id,
@@ -66,6 +67,8 @@ export async function rebuildGeoRirCcMismatches(
              rir.cc,
              rir.registry,
              rir.range_text,
+             ba.asn,
+             ba.asn_org,
              NOW()
            FROM geo_country_blocks cb
            JOIN geo_country_locations cl ON cl.geoname_id = cb.geoname_id
@@ -78,6 +81,7 @@ export async function rebuildGeoRirCcMismatches(
              ORDER BY masklen(r.network) DESC
              LIMIT 1
            ) rir ON true
+           LEFT JOIN geo_country_block_asn ba ON ba.country_block_id = cb.id
            WHERE cl.country_iso_code IS NOT NULL
              AND rir.cc IS NOT NULL
              AND upper(cl.country_iso_code) IS DISTINCT FROM upper(rir.cc)

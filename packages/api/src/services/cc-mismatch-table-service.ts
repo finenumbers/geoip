@@ -7,8 +7,25 @@ import {
 } from '../sql/cc-mismatch-table-query.js';
 import { validateTableQueryLimits } from './query-limits.js';
 
-const ALLOWED_FILTERS = new Set(['network', 'grchc_cc', 'rir_cc', 'registry', 'range_text']);
-const ALLOWED_SORT = new Set(['network', 'grchc_cc', 'rir_cc', 'registry', 'range_text', 'id']);
+const ALLOWED_FILTERS = new Set([
+  'network',
+  'grchc_cc',
+  'rir_cc',
+  'registry',
+  'range_text',
+  'asn',
+  'asn_org',
+]);
+const ALLOWED_SORT = new Set([
+  'network',
+  'grchc_cc',
+  'rir_cc',
+  'registry',
+  'range_text',
+  'asn',
+  'asn_org',
+  'id',
+]);
 const FACET_FIELDS = new Set(['grchc_cc', 'rir_cc', 'registry']);
 
 function supportsCcMismatchKeyset(sort: SortClause[]): boolean {
@@ -25,6 +42,8 @@ function mapRow(row: Record<string, unknown>) {
     rirCc: String(row.rir_cc),
     registry: (row.registry as string | null) ?? null,
     rangeText: (row.range_text as string | null) ?? null,
+    asn: row.asn != null ? Number(row.asn) : null,
+    asnOrg: (row.asn_org as string | null) ?? null,
     rebuiltAt: row.rebuilt_at instanceof Date ? row.rebuilt_at.toISOString() : String(row.rebuilt_at),
   };
 }
@@ -44,6 +63,10 @@ function getSortCursorValue(
       return row.registry ?? '';
     case 'range_text':
       return row.rangeText ?? '';
+    case 'asn':
+      return row.asn != null ? String(row.asn) : '';
+    case 'asn_org':
+      return row.asnOrg ?? '';
     case 'id':
       return String(row.id);
     default:
