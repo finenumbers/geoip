@@ -153,6 +153,30 @@ services:
         reservations:
           memory: 256M
 
+  rir:
+    image: ghcr.io/finenumbers/geoip-api:latest
+    container_name: geoip_rir
+    restart: unless-stopped
+    command: ["node", "dist/jobs/rir-import-worker.js"]
+    environment:
+      <<: *api-database-env
+      CONFIG_DATA_DIR: /data/geoip/config
+      NODE_ENV: production
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - config_data:/data/geoip/config
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          memory: 128M
+
   web:
     image: ghcr.io/finenumbers/geoip-web:latest
     container_name: geoip_web

@@ -17,6 +17,7 @@ const sections: Array<{ id: SectionId; label: string }> = [
   { id: 'overview', label: ui.admin.sections.overview },
   { id: 'general', label: ui.admin.sections.general },
   { id: 'grchc', label: ui.admin.sections.grchc },
+  { id: 'rir', label: ui.admin.sections.rir },
   { id: 'api', label: ui.admin.sections.api },
   { id: 'adminAccess', label: ui.admin.sections.adminAccess },
   { id: 'export', label: ui.admin.sections.export },
@@ -103,11 +104,29 @@ export function AdminPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const { data: rirStatus } = useQuery({
+    queryKey: ['admin-rir-status'],
+    queryFn: adminApi.rirStatus,
+    enabled: !!me && (section === 'rir' || section === 'overview'),
+    refetchInterval: 15_000,
+  });
+
   const triggerImport = useMutation({
     mutationFn: adminApi.triggerImport,
     onSuccess: () => {
       setMessage(ui.admin.importQueued);
       void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const triggerRirImport = useMutation({
+    mutationFn: adminApi.triggerRirImport,
+    onSuccess: (data) => {
+      setMessage(`RIR import queued: ${data.importRunId}`);
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-rir-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['rir-status'] });
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -221,6 +240,58 @@ export function AdminPage() {
                 })
               }
             />
+          </Section>
+        )}
+
+        {section === 'rir' && (
+          <Section title={ui.admin.sections.rir}>
+            <p className="mb-3 text-sm text-muted">{ui.rir.subtitle}</p>
+            {rirStatus ? (
+              <div className="mb-4 space-y-1 text-sm">
+                <p>
+                  Status: <strong>{rirStatus.status}</strong>
+                </p>
+                <p>
+                  {ui.rir.rowCount}: {rirStatus.rowCount.toLocaleString('ru-RU')}
+                </p>
+                <p>
+                  {ui.rir.snapshotDate}: {rirStatus.lastSnapshotDate ?? '—'}
+                </p>
+                <p>
+                  {ui.rir.lastSuccess}:{' '}
+                  {rirStatus.lastSuccessAt
+                    ? formatDateTime(
+                        rirStatus.lastSuccessAt,
+                        config.settings.general.displayTimezone,
+                      )
+                    : '—'}
+                </p>
+                {rirStatus.lastError && (
+                  <p className="text-red-700">Error: {rirStatus.lastError}</p>
+                )}
+                <pre className="mt-2 overflow-auto rounded border border-border bg-muted/30 p-2 text-xs">
+                  {JSON.stringify(
+                    {
+                      byRegistry: rirStatus.rowsByRegistry,
+                      byStatus: rirStatus.rowsByStatus,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </div>
+            ) : (
+              <p className="mb-3 text-sm text-muted">{ui.rir.notReady}</p>
+            )}
+            <ActionButton
+              onClick={() => triggerRirImport.mutate()}
+              loading={triggerRirImport.isPending}
+            >
+              {ui.rir.triggerImport}
+            </ActionButton>
+            <p className="mt-3 text-xs text-muted">
+              Browse: <Link to="/browse/rir" search={{ sort: '[]', filters: '[]' }} className="underline">/browse/rir</Link>
+            </p>
           </Section>
         )}
 

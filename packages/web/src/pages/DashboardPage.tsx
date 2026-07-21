@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ImportRun } from '@geoip/shared';
+import type { ImportRun, RirDatasetStateResponse } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
@@ -17,6 +18,12 @@ import {
 import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/format-datetime';
+import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
+import {
+  ianaSlice,
+  RIR_REGISTRY_IDS,
+  rirRegistriesSlice,
+} from '@/lib/rir-dashboard-stats';
 
 function formatMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return '—';
@@ -90,12 +97,24 @@ export function DashboardPage() {
     queryFn: () => api.imports(10),
     refetchInterval: 15_000,
   });
+  const {
+    data: rirStatus,
+    isError: rirStatusError,
+    error: rirStatusErr,
+  } = useQuery({
+    queryKey: ['rir-status'],
+    queryFn: api.rirStatus,
+    refetchInterval: 30_000,
+  });
 
   useEffect(() => {
     if (imports?.items.some((item) => item.status === 'succeeded')) {
       void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
     }
   }, [imports?.items, queryClient]);
+
+  const rirSlice = useMemo(() => rirRegistriesSlice(rirStatus), [rirStatus]);
+  const iana = useMemo(() => ianaSlice(rirStatus), [rirStatus]);
   const {
     data: importDetail,
     isError: importDetailError,
@@ -123,9 +142,9 @@ export function DashboardPage() {
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-auto">
       <SetupChecklistBanner />
-      {(datasetError || metricsError || importsError || importDetailError) && (
+      {(datasetError || metricsError || importsError || importDetailError || rirStatusError) && (
         <QueryErrorNotice
-          error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr}
+          error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr ?? rirStatusErr}
         />
       )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))] xl:grid-cols-[repeat(3,minmax(0,1fr))]">
@@ -179,6 +198,29 @@ export function DashboardPage() {
             <DetailItem label={ui.dashboard.ipv4Addresses} value={formatBigCount(volumes?.ipv4Addresses)} />
           </SummaryDetails>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <RirStatsCard
+          title={ui.dashboard.rirRegistries}
+          headlineRows={rirSlice.rowCount}
+          loaded={rirSlice.loaded}
+          state={rirStatus}
+          displayTimezone={displayTimezone}
+          registryOrder={[...RIR_REGISTRY_IDS]}
+          browseFilters={[{ field: 'registry', op: 'in', value: [...RIR_REGISTRY_IDS] }]}
+          testId="dashboard-rir-registries"
+        />
+        <RirStatsCard
+          title={ui.dashboard.ianaDelegated}
+          headlineRows={iana.rowCount}
+          loaded={iana.loaded}
+          state={rirStatus}
+          displayTimezone={displayTimezone}
+          registryOrder={['iana']}
+          browseFilters={[{ field: 'registry', op: 'in', value: ['iana'] }]}
+          testId="dashboard-iana"
+        />
       </div>
 
       <Card title={ui.dashboard.recentImports}>
@@ -255,6 +297,105 @@ export function DashboardPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+function rirImportStatusLabel(status: RirDatasetStateResponse['status'] | undefined): string {
+  switch (status) {
+    case 'ready':
+      return ui.dashboard.rirStatusReady;
+    case 'importing':
+      return ui.dashboard.rirStatusImporting;
+    case 'failed':
+      return ui.dashboard.rirStatusFailed;
+    default:
+      return ui.dashboard.rirStatusUnavailable;
+  }
+}
+
+function rirImportStatusClass(
+  status: RirDatasetStateResponse['status'] | undefined,
+  loaded: boolean,
+): string {
+  if (status === 'importing') return 'text-amber-700';
+  if (status === 'failed') return 'text-red-600';
+  if (loaded) return 'text-green-600';
+  return 'text-red-600';
+}
+
+function RirStatsCard({
+  title,
+  headlineRows,
+  loaded,
+  state,
+  displayTimezone,
+  registryOrder,
+  browseFilters,
+  testId,
+}: {
+  title: string;
+  headlineRows: number;
+  loaded: boolean;
+  state: RirDatasetStateResponse | undefined;
+  displayTimezone: string;
+  registryOrder: string[];
+  browseFilters: Array<{ field: string; op: 'in'; value: string[] }>;
+  testId: string;
+}) {
+  const browseSearch = {
+    ...DEFAULT_BROWSE_SEARCH,
+    filters: JSON.stringify(browseFilters),
+  };
+
+  return (
+    <Card title={title} summaryTitle>
+      <div data-testid={testId}>
+        <SummaryHeadline className={rirImportStatusClass(state?.status, loaded)}>
+          {loaded ? formatCount(headlineRows) : ui.dashboard.rirNotLoaded}
+        </SummaryHeadline>
+        <p className="mt-1 text-xs text-muted">{ui.dashboard.rirNote}</p>
+        <SummaryDetails>
+          <DetailItem
+            label={ui.dashboard.rirImportStatus}
+            value={rirImportStatusLabel(state?.status)}
+            valueClassName={rirImportStatusClass(state?.status, loaded)}
+          />
+          <DetailItem
+            label={ui.dashboard.rirSnapshot}
+            value={state?.lastSnapshotDate ?? '—'}
+          />
+          <DetailItem
+            label={ui.dashboard.rirLastSuccess}
+            value={formatDateTime(state?.lastSuccessAt, displayTimezone)}
+          />
+          <DetailItem label={ui.dashboard.rirRows} value={formatCount(headlineRows)} />
+        </SummaryDetails>
+        <div className="mt-3 space-y-1 text-sm">
+          <p className="text-muted">{ui.dashboard.rirByRegistry}</p>
+          <div className="grid grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+            {registryOrder.map((id) => (
+              <DetailItem
+                key={id}
+                label={id}
+                value={formatCount(state?.rowsByRegistry[id] ?? 0)}
+              />
+            ))}
+          </div>
+        </div>
+        {state?.lastError && (
+          <p className="mt-2 text-xs text-red-600" title={state.lastError}>
+            {state.lastError}
+          </p>
+        )}
+        <Link
+          to="/browse/rir"
+          search={browseSearch}
+          className="mt-3 inline-block text-sm text-primary hover:underline"
+        >
+          {ui.dashboard.rirBrowse}
+        </Link>
+      </div>
+    </Card>
   );
 }
 

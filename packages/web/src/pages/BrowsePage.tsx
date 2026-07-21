@@ -50,6 +50,13 @@ const COLUMN_API_FIELDS: Record<string, string> = {
   subdivision1Name: 'subdivision_1_name',
   asn: 'asn',
   asnOrg: 'asn_org',
+  registry: 'registry',
+  resourceType: 'resource_type',
+  rangeText: 'range_text',
+  cc: 'cc',
+  status: 'status',
+  allocatedAt: 'allocated_at',
+  opaqueId: 'opaque_id',
 };
 
 const API_TO_COLUMN: Record<string, string> = Object.fromEntries(
@@ -64,7 +71,7 @@ type TablePageParam = {
 };
 
 async function fetchTableChunk(
-  tableType: 'city' | 'country',
+  tableType: 'city' | 'country' | 'rir',
   pageParam: TablePageParam | undefined,
   sortJson: string,
   filtersJson: string,
@@ -82,14 +89,22 @@ async function fetchTableChunk(
 }
 
 interface BrowsePageProps {
-  tableType: 'city' | 'country';
+  tableType: 'city' | 'country' | 'rir';
+}
+
+function browsePathFor(
+  tableType: BrowsePageProps['tableType'],
+): '/browse/city' | '/browse/country' | '/browse/rir' {
+  if (tableType === 'country') return '/browse/country';
+  if (tableType === 'rir') return '/browse/rir';
+  return '/browse/city';
 }
 
 export function BrowsePage({ tableType }: BrowsePageProps) {
   const search = useSearch({ strict: false }) as BrowseSearch;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const browsePath = tableType === 'city' ? '/browse/city' : '/browse/country';
+  const browsePath = browsePathFor(tableType);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   /** Bumps on full reset so header filters drop local draft/validation state. */
   const [browseUiKey, setBrowseUiKey] = useState(0);
@@ -394,6 +409,139 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   );
 
   const columns = useMemo<ColumnDef<TableBrowseRow>[]>(() => {
+    if (tableType === 'rir') {
+      return [
+        {
+          accessorKey: 'registry',
+          header: ui.filters.registry,
+          meta: columnMeta(
+            'registry',
+            <ColumnFacetFilter
+              label={ui.filters.registry}
+              field="registry"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'registry')}
+              contextFilters={facetContext('registry')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'registry', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'registry', []))}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'resourceType',
+          header: ui.filters.resource_type,
+          meta: columnMeta(
+            'resource_type',
+            <ColumnFacetFilter
+              label={ui.filters.resource_type}
+              field="resource_type"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'resource_type')}
+              contextFilters={facetContext('resource_type')}
+              compact
+              onChange={(values) =>
+                applyFilters(setMultiFilter(activeFilters, 'resource_type', values))
+              }
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'resource_type', []))}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'rangeText',
+          header: ui.filters.range_text,
+          meta: columnMeta(
+            'range_text',
+            <ColumnTextFilter
+              placeholder={ui.filters.range_text}
+              value={getTextFilterValue(activeFilters, 'range_text')}
+              onApply={(value) => applyTextFilter('range_text', value)}
+              onClear={() => clearTextFilter('range_text')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'cc',
+          header: ui.filters.cc,
+          meta: columnMeta(
+            'cc',
+            <ColumnFacetFilter
+              label={ui.filters.cc}
+              field="cc"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'cc')}
+              contextFilters={facetContext('cc')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'cc', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'cc', []))}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'status',
+          header: ui.filters.status,
+          meta: columnMeta(
+            'status',
+            <ColumnFacetFilter
+              label={ui.filters.status}
+              field="status"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'status')}
+              contextFilters={facetContext('status')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'status', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'status', []))}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'allocatedAt',
+          header: ui.filters.allocated_at,
+          meta: columnMeta(
+            'allocated_at',
+            <ColumnTextFilter
+              placeholder="YYYY-MM-DD"
+              value={getTextFilterValue(activeFilters, 'allocated_at')}
+              onApply={(value) => applyTextFilter('allocated_at', value)}
+              onClear={() => clearTextFilter('allocated_at')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'opaqueId',
+          header: ui.filters.opaque_id,
+          meta: columnMeta(
+            'opaque_id',
+            <ColumnTextFilter
+              placeholder={ui.filters.opaque_id}
+              value={getTextFilterValue(activeFilters, 'opaque_id')}
+              onApply={(value) => applyTextFilter('opaque_id', value)}
+              onClear={() => clearTextFilter('opaque_id')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'prefixLen',
+          header: ui.filters.prefix_len,
+          meta: columnMeta('prefix_len', () => (
+            <ColumnTextFilter
+              placeholder={ui.filters.prefix_len}
+              value={getTextFilterValue(activeFilters, 'prefix_len')}
+              error={fieldErrors.prefix_len}
+              validate={(v) => validateTextFilterValue('prefix_len', v)}
+              onValidationError={(msg) => setFieldError('prefix_len', msg)}
+              onApply={(value) => applyTextFilter('prefix_len', value)}
+              onClear={() => clearTextFilter('prefix_len')}
+            />
+          )),
+        },
+        {
+          accessorKey: 'ipFamily',
+          header: ui.filters.ip_family,
+        },
+      ];
+    }
+
     const base: ColumnDef<TableBrowseRow>[] = [
       {
         accessorKey: 'network',
@@ -552,6 +700,11 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      {tableType === 'rir' && (
+        <p className="shrink-0 text-sm text-muted" data-testid="browse-rir-subtitle">
+          {ui.rir.subtitle}
+        </p>
+      )}
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg border border-border p-1 text-sm">
           <Link
@@ -575,6 +728,17 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
             )}
           >
             {ui.browse.countryTab}
+          </Link>
+          <Link
+            to="/browse/rir"
+            data-testid="browse-rir-tab"
+            search={DEFAULT_BROWSE_SEARCH}
+            className={cn(
+              'rounded px-3 py-1 transition-colors',
+              tableType === 'rir' ? 'bg-accent font-medium' : 'text-muted hover:text-foreground',
+            )}
+          >
+            {ui.browse.rirTab}
           </Link>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

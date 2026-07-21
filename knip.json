@@ -9,7 +9,12 @@
       "project": ["e2e/**/*.ts"]
     },
     "packages/api": {
-      "entry": ["src/jobs/import-worker.ts", "src/jobs/export-worker.ts", "src/scripts/*.ts"],
+      "entry": [
+        "src/jobs/import-worker.ts",
+        "src/jobs/export-worker.ts",
+        "src/jobs/rir-import-worker.ts",
+        "src/scripts/*.ts"
+      ],
       "project": ["src/**/*.ts", "drizzle.config.ts"]
     },
     "packages/web": {

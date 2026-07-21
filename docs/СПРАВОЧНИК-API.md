@@ -225,11 +225,29 @@ Probe ЛК ГРЧЦ без import.
 
 ---
 
+### GET `/admin/rir/status`
+
+Статус параллельного слоя NRO delegated (`rir_dataset_state`).
+
+**Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `lastError`.
+
+### POST `/admin/rir/imports/trigger`
+
+Очередь импорта latest-файлов 5 RIR + IANA.
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ "importRunId": "uuid", "status": "queued" }` |
+| 409 | `RirImportAlreadyRunning` |
+
+---
+
 ## Data plane (API key if enabled)
 
 Все endpoint'ы ниже используют `verifyApiKeyIfEnabled` — при `authEnabled=true` требуют `X-API-Key`.
 
-Table routes дополнительно требуют готовые MV (`ensureMaterializedViewsReady`) — иначе **503**.
+Table city/country требуют готовые MV (`ensureMaterializedViewsReady`) — иначе **503**.  
+`/table/rir` требует `rir_dataset_state` ready — иначе **503** `RirNotReady` (GeoIP `/ready` не зависит от RIR).
 
 ---
 
@@ -276,6 +294,14 @@ IP lookup (longest-prefix match).
 
 ---
 
+### GET `/rir/status`
+
+Read-only статус снимка NRO delegated (для Dashboard). Не влияет на GeoIP `/ready`.
+
+**Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `lastError`.
+
+---
+
 ### GET `/imports`
 
 История import runs.
@@ -304,7 +330,10 @@ Import status: `queued`, `running`, `validating`, `swapping`, `refreshing_mv`, `
 
 ### GET `/table/country`
 
-Browse table с pagination.
+### GET `/table/rir`
+
+Browse table с pagination.  
+`/table/rir` — NRO delegated stats (отдельный data plane); готовность `rir_dataset_state`, не MV ГРЧЦ. При пустом снимке — **503** `RirNotReady`.
 
 **Query (основные):**
 
@@ -330,7 +359,7 @@ Filter operators: `eq`, `neq`, `contains`, `startsWith`, `in`, `gt`, `gte`, `lt`
 
 | Param | Описание |
 |-------|----------|
-| `tableType` | `city` \| `country` |
+| `tableType` | `city` \| `country` \| `rir` |
 | `field` | Имя поля facet |
 | `search` | Поиск по значениям |
 | `limit` | 1–100 (default 50) |

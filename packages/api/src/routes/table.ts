@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import type { FilterClause } from '@geoip/shared';
+import type { FilterClause, TableType } from '@geoip/shared';
 import { validateTableQueryProfile, profileValidationToFieldErrors, isAllowedFacetField, normalizeFiltersForQuery } from '@geoip/shared';
 import { queryTable } from '../services/table-service.js';
 import { getFacetValues } from '../services/facet-service.js';
+import { queryRirTable, getRirFacetValues } from '../services/rir-table-service.js';
 import { recordTableQueryMetric } from '../routes/metrics.js';
 import {
   defaultFacetField,
@@ -11,10 +12,10 @@ import {
 } from './table-query-parse.js';
 
 function recordTableQueryStats(
-  result: Awaited<ReturnType<typeof queryTable>>,
+  result: { meta?: { queryMs?: number; paginationMode?: string } },
   filters: unknown[],
 ): void {
-  if ('error' in result || !result.meta?.queryMs) return;
+  if (!result.meta?.queryMs) return;
   recordTableQueryMetric({
     queryMs: result.meta.queryMs,
     mode: result.meta.paginationMode === 'keyset' ? 'keyset' : 'offset',
@@ -25,8 +26,17 @@ function recordTableQueryStats(
 const dataPlanePreHandlers = (app: FastifyInstance) =>
   [app.verifyApiKeyIfEnabled, app.ensureMaterializedViewsReady] as const;
 
+const rirPreHandlers = (app: FastifyInstance) =>
+  [app.verifyApiKeyIfEnabled, app.ensureRirDatasetReady] as const;
+
+function parseTableType(raw: string | undefined): TableType {
+  if (raw === 'country' || raw === 'rir') return raw;
+  return 'city';
+}
+
 export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
   const guards = { preHandler: [...dataPlanePreHandlers(app)] };
+  const rirGuards = { preHandler: [...rirPreHandlers(app)] };
 
   app.get('/api/v1/table/city', guards, async (request, reply) => {
     const parsed = parseTableQueryInput(request.query as Record<string, unknown>);
@@ -60,7 +70,29 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
     return result;
   });
 
-  app.get('/api/v1/table/metadata/facet', guards, async (request, reply) => {
+  app.get('/api/v1/table/rir', rirGuards, async (request, reply) => {
+    const parsed = parseTableQueryInput(request.query as Record<string, unknown>);
+    if (!parsed.ok) {
+      return reply.status(422).send({
+        error: 'Validation error',
+        details: { formErrors: [], fieldErrors: { [parsed.path]: [parsed.error] } },
+      });
+    }
+    const result = await queryRirTable(parsed);
+    if ('notReady' in result) {
+      return reply.status(503).send({
+        error: 'RirNotReady',
+        message: 'RIR delegated snapshot is not ready yet. Retry shortly.',
+      });
+    }
+    if ('error' in result) {
+      return reply.status(422).send({ error: 'Validation error', details: result.error });
+    }
+    recordTableQueryStats(result, parsed.filters);
+    return result;
+  });
+
+  app.get('/api/v1/table/metadata/facet', async (request, reply) => {
     const q = request.query as {
       tableType?: string;
       field?: string;
@@ -68,10 +100,22 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
       limit?: string;
       contextFilters?: string;
     };
-    const tableType = q.tableType === 'country' ? 'country' : 'city';
+    const tableType = parseTableType(q.tableType);
     const field = q.field ?? defaultFacetField(tableType);
     const search = q.search ?? '';
     const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 100);
+
+    if (tableType === 'rir') {
+      await app.verifyApiKeyIfEnabled(request, reply);
+      if (reply.sent) return;
+      await app.ensureRirDatasetReady(request, reply);
+      if (reply.sent) return;
+    } else {
+      await app.verifyApiKeyIfEnabled(request, reply);
+      if (reply.sent) return;
+      await app.ensureMaterializedViewsReady(request, reply);
+      if (reply.sent) return;
+    }
 
     let contextFilters: FilterClause[] = [];
     if (q.contextFilters) {
@@ -106,6 +150,20 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
           },
         ]),
       });
+    }
+
+    if (tableType === 'rir') {
+      const result = await getRirFacetValues(field, search, limit, contextFilters);
+      if ('notReady' in result) {
+        return reply.status(503).send({
+          error: 'RirNotReady',
+          message: 'RIR delegated snapshot is not ready yet. Retry shortly.',
+        });
+      }
+      if ('error' in result) {
+        return reply.status(422).send({ error: 'Validation error', details: result.error });
+      }
+      return result;
     }
 
     return getFacetValues(tableType, field, search, limit, contextFilters);

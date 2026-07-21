@@ -153,14 +153,29 @@ export const paginationSchema = z.object({
 
 export const tableBrowseRowSchema = z.object({
   id: z.number(),
-  network: z.string(),
-  prefixLen: z.number(),
-  countryIsoCode: z.string().nullable(),
-  countryName: z.string().nullable(),
+  // GeoIP city/country
+  network: z.string().optional(),
+  prefixLen: z.number().nullable().optional(),
+  countryIsoCode: z.string().nullable().optional(),
+  countryName: z.string().nullable().optional(),
   cityName: z.string().nullable().optional(),
-  subdivision1Name: z.string().nullable(),
-  asn: z.number().nullable(),
-  asnOrg: z.string().nullable(),
+  subdivision1Name: z.string().nullable().optional(),
+  asn: z.number().nullable().optional(),
+  asnOrg: z.string().nullable().optional(),
+  // RIR delegated
+  registry: z.string().optional(),
+  resourceType: z.string().optional(),
+  rangeText: z.string().optional(),
+  cc: z.string().nullable().optional(),
+  status: z.string().optional(),
+  allocatedAt: z.string().nullable().optional(),
+  opaqueId: z.string().nullable().optional(),
+  ipFamily: z.number().nullable().optional(),
+  hostCount: z.string().nullable().optional(),
+  startAsn: z.number().nullable().optional(),
+  asnCount: z.number().nullable().optional(),
+  sourceFile: z.string().optional(),
+  snapshotDate: z.string().optional(),
 });
 
 export const tableResponseSchema = z.object({
@@ -188,7 +203,7 @@ export const tableResponseSchema = z.object({
 });
 
 export const exportRequestSchema = z.object({
-  tableType: z.enum(['city', 'country']),
+  tableType: z.enum(['city', 'country', 'rir']),
   filters: z.array(filterClauseSchema).default([]),
   sort: z.array(sortClauseSchema).default([]),
 });
@@ -196,7 +211,7 @@ export const exportRequestSchema = z.object({
 export const exportCreateResponseSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
-  tableType: z.enum(['city', 'country']),
+  tableType: z.enum(['city', 'country', 'rir']),
   createdAt: z.string().datetime(),
   estimatedRows: z.number().nullable(),
 });
@@ -204,12 +219,24 @@ export const exportCreateResponseSchema = z.object({
 export const exportStatusResponseSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
-  tableType: z.enum(['city', 'country']),
+  tableType: z.enum(['city', 'country', 'rir']),
   createdAt: z.string().datetime(),
   finishedAt: z.string().datetime().nullable(),
   errorMessage: z.string().nullable(),
   rowCount: z.number().nullable(),
 });
+
+export const rirDatasetStateResponseSchema = z.object({
+  status: z.enum(['ready', 'importing', 'failed', 'unavailable']),
+  lastSuccessAt: z.string().datetime().nullable(),
+  lastSnapshotDate: z.string().nullable(),
+  rowCount: z.number(),
+  rowsByRegistry: z.record(z.number()),
+  rowsByStatus: z.record(z.number()),
+  lastError: z.string().nullable(),
+});
+
+export type RirDatasetStateResponse = z.infer<typeof rirDatasetStateResponseSchema>;
 
 export const readyResponseSchema = z.object({
   status: z.enum(['ready', 'degraded', 'not_ready']),

@@ -42,7 +42,23 @@ export const exportStatusEnum = pgEnum('export_status', [
   'failed',
 ]);
 
-export const exportTableTypeEnum = pgEnum('export_table_type', ['city', 'country']);
+export const exportTableTypeEnum = pgEnum('export_table_type', ['city', 'country', 'rir']);
+
+export const rirImportStatusEnum = pgEnum('rir_import_status', [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+]);
+
+export const rirImportTriggerEnum = pgEnum('rir_import_trigger', ['manual', 'cron', 'api']);
+
+export const rirDatasetStatusEnum = pgEnum('rir_dataset_status', [
+  'ready',
+  'importing',
+  'failed',
+  'unavailable',
+]);
 
 const locationColumns = {
   geonameId: bigint('geoname_id', { mode: 'number' }).primaryKey(),
@@ -181,4 +197,54 @@ export const exportJobs = pgTable('export_jobs', {
   downloadPath: text('download_path'),
   errorMessage: text('error_message'),
   rowCount: integer('row_count'),
+});
+
+const rirDelegationColumns = {
+  id: serial('id').primaryKey(),
+  registry: text('registry').notNull(),
+  cc: text('cc'),
+  resourceType: text('resource_type').notNull(),
+  startIp: text('start_ip'),
+  endIp: text('end_ip'),
+  network: text('network'),
+  prefixLen: integer('prefix_len'),
+  hostCount: numeric('host_count', { precision: 50, scale: 0 }),
+  startAsn: bigint('start_asn', { mode: 'number' }),
+  asnCount: integer('asn_count'),
+  allocatedAt: date('allocated_at'),
+  status: text('status').notNull(),
+  opaqueId: text('opaque_id'),
+  rangeText: text('range_text').notNull(),
+  ipFamily: integer('ip_family'),
+  sourceFile: text('source_file').notNull(),
+  snapshotDate: date('snapshot_date').notNull(),
+};
+
+export const rirDelegations = pgTable('rir_delegations', rirDelegationColumns);
+export const stgRirDelegations = pgTable('stg_rir_delegations', rirDelegationColumns);
+
+export const rirImportRuns = pgTable('rir_import_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  status: rirImportStatusEnum('status').notNull().default('queued'),
+  triggeredBy: rirImportTriggerEnum('triggered_by').notNull().default('api'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  rowCount: integer('row_count').default(0).notNull(),
+  rowsByFile: jsonb('rows_by_file').notNull().default(sql`'{}'::jsonb`),
+  snapshotDate: date('snapshot_date'),
+});
+
+export const rirDatasetState = pgTable('rir_dataset_state', {
+  id: integer('id').primaryKey().default(1),
+  status: rirDatasetStatusEnum('status').notNull().default('unavailable'),
+  lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+  lastSnapshotDate: date('last_snapshot_date'),
+  rowCount: bigint('row_count', { mode: 'number' }).notNull().default(0),
+  rowsByRegistry: jsonb('rows_by_registry').notNull().default(sql`'{}'::jsonb`),
+  rowsByStatus: jsonb('rows_by_status').notNull().default(sql`'{}'::jsonb`),
+  lastError: text('last_error'),
+  activeImportRunId: uuid('active_import_run_id').references(() => rirImportRuns.id),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

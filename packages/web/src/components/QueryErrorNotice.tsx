@@ -1,7 +1,11 @@
 import { ApiError } from '@/lib/api';
+import { ui } from '@/lib/ui-strings';
 
 export function formatQueryErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === 'RirNotReady') {
+      return ui.rir.notReady;
+    }
     return error.message;
   }
   if (error instanceof Error) {

@@ -16,10 +16,13 @@ services:
       context: .
       dockerfile: packages/api/Dockerfile
     image: geoip-api:local
+  rir:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    image: geoip-api:local
   web:
     build:
       context: .
       dockerfile: packages/web/Dockerfile
-      args:
-        APP_BUILD: local
     image: geoip-web:local

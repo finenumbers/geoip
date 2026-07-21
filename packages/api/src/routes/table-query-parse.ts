@@ -70,6 +70,8 @@ export function parseTableQueryInput(query: Record<string, unknown>): ParsedTabl
   };
 }
 
-export function defaultFacetField(tableType: 'city' | 'country'): string {
-  return tableType === 'country' ? 'country_name' : 'city_name';
+export function defaultFacetField(tableType: 'city' | 'country' | 'rir'): string {
+  if (tableType === 'country') return 'country_name';
+  if (tableType === 'rir') return 'registry';
+  return 'city_name';
 }

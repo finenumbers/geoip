@@ -16,7 +16,6 @@ import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
 import { isSetupComplete } from '@geoip/shared';
 import { SystemStatusBanner } from '@/components/SystemStatusBanner';
 import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
-import { formatAppBuildLabel } from '@/lib/app-version';
 
 type NavItem = {
   to: string;
@@ -60,7 +59,7 @@ const nav: NavItem[] = [
 
 export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { datasetDate, datasetError, status, isReadyError } = useSystemReadyStatus();
+  const { datasetDate, datasetError } = useSystemReadyStatus();
   const { data: checklist } = useQuery({
     queryKey: ['setup-checklist'],
     queryFn: api.setupChecklist,
@@ -75,8 +74,6 @@ export function AppLayout() {
     staleTime: 5 * 60_000,
   });
   const showAdminBadge = checklist != null && !isSetupComplete(checklist);
-  const buildLabel = formatAppBuildLabel();
-  const isBuildReady = !isReadyError && status === 'ready';
 
   return (
     <div className="min-h-screen">
@@ -137,17 +134,6 @@ export function AppLayout() {
                 <span className="font-bold text-foreground">{datasetDate}</span>
               </span>
             )}
-            <span className="text-muted">
-              {ui.header.build}:{' '}
-              <span
-                className={cn(
-                  'font-bold',
-                  isBuildReady ? 'text-green-600' : 'text-red-600',
-                )}
-              >
-                {buildLabel}
-              </span>
-            </span>
           </div>
         </header>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">

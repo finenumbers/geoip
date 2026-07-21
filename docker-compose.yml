@@ -107,6 +107,22 @@ services:
       - export_data:/tmp/geoip-exports
       - config_data:/data/geoip/config
 
+  rir:
+    image: ghcr.io/finenumbers/geoip-api:latest
+    container_name: geoip_rir
+    restart: unless-stopped
+    command: ["node", "dist/jobs/rir-import-worker.js"]
+    environment:
+      <<: *api-database-env
+      CONFIG_DATA_DIR: /data/geoip/config
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - config_data:/data/geoip/config
+
   web:
     image: ghcr.io/finenumbers/geoip-web:latest
     container_name: geoip_web

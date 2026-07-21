@@ -10,6 +10,8 @@ import { usesRankSortField, rankColumn } from '../sql/sort-rank.js';
 import { isAsnMappingReady } from '../sql/asn-mapping-status.js';
 import { enrichBlockRowsWithAsn } from '../sql/asn-enrichment.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
+import { isRirDatasetReady } from '../repositories/rir-repository.js';
+import { buildRirTableQuery } from '../sql/rir-table-query.js';
 import { loadEnv } from '../config/env.js';
 import { createChildLogger } from '../config/logger.js';
 import { resolveFilteredRowCount } from './filter-row-count.js';
@@ -27,7 +29,7 @@ const EXPORT_BATCH_SIZE = 10_000;
 export const CSV_DELIMITER = ';';
 export const CSV_UTF8_BOM = '\uFEFF';
 
-const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
+const CSV_COLUMNS: Record<'city' | 'country' | 'rir', string[]> = {
   city: [
     'id',
     'network',
@@ -48,6 +50,20 @@ const CSV_COLUMNS: Record<'city' | 'country', string[]> = {
     'country_name',
     'asn',
     'asn_org',
+  ],
+  rir: [
+    'id',
+    'registry',
+    'resource_type',
+    'range_text',
+    'cc',
+    'status',
+    'allocated_at',
+    'opaque_id',
+    'prefix_len',
+    'ip_family',
+    'source_file',
+    'snapshot_date',
   ],
 };
 
@@ -107,12 +123,67 @@ export function resolveExportUseKeyset(
   );
 }
 
-export async function streamTableExportToFile(
-  tableType: 'city' | 'country',
+async function streamRirExportToFile(
   filters: FilterClause[],
   sort: SortClause[],
   filePath: string,
 ): Promise<number> {
+  const columns = CSV_COLUMNS.rir;
+  const stream = createWriteStream(filePath, { encoding: 'utf-8' });
+  stream.write(`${CSV_UTF8_BOM}${formatCsvHeader(columns)}\n`);
+
+  let rowCount = 0;
+  let offset = 0;
+  let afterId: number | undefined;
+  let afterSortValue: string | undefined;
+  const useKeyset = supportsKeysetPagination(sort);
+
+  while (true) {
+    const { sql, params } = buildRirTableQuery({
+      filters,
+      sort,
+      limit: EXPORT_BATCH_SIZE,
+      offset: useKeyset ? 0 : offset,
+      afterId: useKeyset ? afterId : undefined,
+      afterSortValue: useKeyset ? afterSortValue : undefined,
+    });
+    const result = await query<Record<string, unknown>>(sql, params);
+    if (result.rows.length === 0) break;
+
+    for (const row of result.rows) {
+      stream.write(`${formatCsvRow(row, columns)}\n`);
+      rowCount++;
+    }
+
+    if (result.rows.length < EXPORT_BATCH_SIZE) break;
+
+    const last = result.rows[result.rows.length - 1]!;
+    if (useKeyset && last.id != null) {
+      afterId = Number(last.id);
+      const primary = sort[0]?.field ?? 'range_text';
+      afterSortValue = last[primary] != null ? String(last[primary]) : String(last.range_text ?? '');
+    } else {
+      offset += EXPORT_BATCH_SIZE;
+    }
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    stream.end((err: NodeJS.ErrnoException | null | undefined) => (err ? reject(err) : resolve()));
+  });
+
+  return rowCount;
+}
+
+export async function streamTableExportToFile(
+  tableType: 'city' | 'country' | 'rir',
+  filters: FilterClause[],
+  sort: SortClause[],
+  filePath: string,
+): Promise<number> {
+  if (tableType === 'rir') {
+    return streamRirExportToFile(filters, sort, filePath);
+  }
+
   const columns = CSV_COLUMNS[tableType];
   const stream = createWriteStream(filePath, { encoding: 'utf-8' });
   stream.write(`${CSV_UTF8_BOM}${formatCsvHeader(columns)}\n`);
@@ -165,10 +236,15 @@ export async function streamTableExportToFile(
 }
 
 export async function estimateExportRows(
-  tableType: 'city' | 'country',
+  tableType: 'city' | 'country' | 'rir',
   filters: FilterClause[],
   sort: SortClause[],
 ): Promise<number | null> {
+  if (tableType === 'rir') {
+    const built = buildRirTableQuery({ filters, sort, limit: 1, offset: 0 });
+    const result = await query<{ count: string }>(built.countSql, built.countParams);
+    return Number(result.rows[0]?.count ?? 0);
+  }
   return resolveFilteredRowCount(tableType, filters, sort);
 }
 
@@ -237,7 +313,20 @@ export async function processExportJob(
 
     const filters = normalizeFiltersForQuery(rawFilters);
 
-    if (!(await isMaterializedViewsReadyForQueries())) {
+    if (job.tableType === 'rir') {
+      if (!(await isRirDatasetReady())) {
+        await db
+          .update(exportJobs)
+          .set({
+            status: 'queued',
+            finishedAt: null,
+            errorMessage: null,
+          })
+          .where(eq(exportJobs.id, jobId));
+        log.info('Export deferred — RIR dataset not ready');
+        return;
+      }
+    } else if (!(await isMaterializedViewsReadyForQueries())) {
       await db
         .update(exportJobs)
         .set({
@@ -310,7 +399,7 @@ export function shouldUseSyncExport(estimatedRows: number): boolean {
 
 export function resolveExportDownloadHeaders(
   downloadPath: string,
-  tableType: 'city' | 'country',
+  tableType: 'city' | 'country' | 'rir',
   jobId: string,
 ): { contentType: string; filename: string } {
   if (downloadPath.endsWith('.zip')) {

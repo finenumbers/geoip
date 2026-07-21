@@ -1,6 +1,7 @@
 import { closeDb } from '../db/client.js';
 import { migrate } from '../db/migrate.js';
 import { isFixtureDatasetReady, seedFixtureDataset } from './seed-fixture-dataset.js';
+import { seedRirFixtureDataset } from './seed-rir-fixture.js';
 import { loadEnv } from '../config/env.js';
 
 export const runIntegration = process.env.RUN_INTEGRATION === '1';
@@ -9,6 +10,7 @@ export const runIntegration = process.env.RUN_INTEGRATION === '1';
 export async function prepareIntegrationDb(): Promise<void> {
   await migrate();
   await seedFixtureDataset();
+  await seedRirFixtureDataset();
 }
 
 /** Headers for integration requests when API auth is enabled. */

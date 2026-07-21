@@ -6,6 +6,7 @@ import {
   sanitizeSortForTableType,
   validateTableQueryProfile,
   type TableQueryValidationIssue,
+  type TableType,
 } from '@geoip/shared';
 
 /** Default browse URL search — no filters, default sort. */
@@ -43,7 +44,7 @@ export function parseSortJson(sortJson: string): SortClause[] {
 }
 
 export function normalizeBrowseSearch(
-  tableType: 'city' | 'country',
+  tableType: TableType,
   sortJson: string,
   filtersJson: string,
 ): { sortJson: string; filtersJson: string; changed: boolean } {
@@ -64,7 +65,7 @@ export type BrowseQueryValidationResult =
 
 /** Sanitize profile fields, normalize ISO codes, validate ops/values before URL update. */
 export function validateBrowseQuery(
-  tableType: 'city' | 'country',
+  tableType: TableType,
   sortJson: string,
   filtersJson: string,
 ): BrowseQueryValidationResult {
@@ -107,14 +108,14 @@ export function mapBrowseIssuesToFilterFields(
   return fieldErrors;
 }
 
-/** Keeps browse URL aligned with the active table profile (city vs country). */
+/** Keeps browse URL aligned with the active table profile (city / country / rir). */
 export function useNormalizeBrowseSearch(
-  tableType: 'city' | 'country',
-  browsePath: '/browse/city' | '/browse/country',
+  tableType: TableType,
+  browsePath: '/browse/city' | '/browse/country' | '/browse/rir',
   sortJson: string,
   filtersJson: string,
   navigate: (opts: {
-    to: '/browse/city' | '/browse/country';
+    to: '/browse/city' | '/browse/country' | '/browse/rir';
     search: { sort: string; filters: string };
     replace?: boolean;
   }) => void,

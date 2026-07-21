@@ -10,6 +10,7 @@ import type {
   LookupResponse,
   MetricsResponse,
   ReadyResponse,
+  RirDatasetStateResponse,
   SetupChecklistResponse,
   TableResponse,
 } from '@geoip/shared';
@@ -52,7 +53,7 @@ function formatErrorBody(body: unknown, fallback: string): {
   return {
     message,
     details: record.details,
-    code: record.code,
+    code: record.code ?? (typeof record.error === 'string' ? record.error : undefined),
     estimatedRows: record.estimatedRows,
     maxRows: record.maxRows,
   };
@@ -90,6 +91,7 @@ export const api = {
   clientIp: () => request<{ ip: string | null }>('/public/client-ip'),
   externalIp: () => request<{ ip: string | null }>('/public/external-ip'),
   dataset: () => request<DatasetState>('/dataset/active'),
+  rirStatus: () => request<RirDatasetStateResponse>('/rir/status'),
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
   importById: (id: string) => request<ImportRun>(`/imports/${id}`),
   lookup: (
@@ -101,10 +103,10 @@ export const api = {
       body: JSON.stringify({ ip, include: options?.include }),
       signal: options?.signal,
     }),
-  table: (tableType: 'city' | 'country', params: URLSearchParams, signal?: AbortSignal) =>
+  table: (tableType: 'city' | 'country' | 'rir', params: URLSearchParams, signal?: AbortSignal) =>
     request<TableResponse>(`/table/${tableType}?${params.toString()}`, { signal }),
   facetValues: (
-    tableType: 'city' | 'country',
+    tableType: 'city' | 'country' | 'rir',
     field: string,
     search = '',
     limit = 50,
@@ -131,7 +133,7 @@ export const api = {
     }),
   getExportStatus: (id: string, signal?: AbortSignal) =>
     request<ExportStatusResponse>(`/exports/${id}`, { signal }),
-  downloadExport: (id: string, tableType: 'city' | 'country'): void => {
+  downloadExport: (id: string, tableType: 'city' | 'country' | 'rir'): void => {
     const anchor = document.createElement('a');
     anchor.href = `${API_BASE}/exports/${id}/download`;
     anchor.download = `geoip-${tableType}-export-${id}.zip`;

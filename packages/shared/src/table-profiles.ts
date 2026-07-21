@@ -2,10 +2,11 @@ import type { FilterClause, SortClause } from './api-contracts/index.js';
 import {
   CITY_TABLE_SORT_FIELDS,
   COUNTRY_TABLE_SORT_FIELDS,
+  RIR_TABLE_SORT_FIELDS,
   FILTER_OPERATORS,
 } from './constants.js';
 
-export type TableType = 'city' | 'country';
+export type TableType = 'city' | 'country' | 'rir';
 
 export type TableProfile = {
   filterFields: readonly string[];
@@ -51,9 +52,34 @@ const COUNTRY_TABLE_PROFILE: TableProfile = {
   uiSortFields: ['network', 'country_iso_code', 'country_name'],
 };
 
+const RIR_TABLE_PROFILE: TableProfile = {
+  filterFields: [
+    'registry',
+    'cc',
+    'resource_type',
+    'status',
+    'range_text',
+    'network',
+    'prefix_len',
+    'opaque_id',
+    'allocated_at',
+  ],
+  facetFields: ['registry', 'status', 'resource_type', 'cc'],
+  sortFields: RIR_TABLE_SORT_FIELDS,
+  uiSortFields: [
+    'registry',
+    'range_text',
+    'cc',
+    'status',
+    'allocated_at',
+    'resource_type',
+  ],
+};
+
 const TABLE_PROFILES: Record<TableType, TableProfile> = {
   city: CITY_TABLE_PROFILE,
   country: COUNTRY_TABLE_PROFILE,
+  rir: RIR_TABLE_PROFILE,
 };
 
 export function getTableProfile(tableType: TableType): TableProfile {
@@ -76,6 +102,12 @@ export const KEYSET_SORT_FIELDS = [
   'country_name',
   'city_name',
   'subdivision_1_name',
+  'registry',
+  'range_text',
+  'cc',
+  'status',
+  'allocated_at',
+  'resource_type',
 ] as const;
 
 const KEYSET_SORT_SET = new Set<string>(KEYSET_SORT_FIELDS);

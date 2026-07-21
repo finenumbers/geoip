@@ -12,7 +12,7 @@ export const EXPORT_MAX_POLL_MS = 30 * 60 * 1000;
 export type TableExportClient = {
   createTableExport: typeof api.createTableExport;
   getExportStatus: typeof api.getExportStatus;
-  downloadExport: (id: string, tableType: 'city' | 'country') => void;
+  downloadExport: (id: string, tableType: 'city' | 'country' | 'rir') => void;
 };
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -61,7 +61,7 @@ export function formatExportRowLimitBlocked(totalRows: number, exportMaxRows: nu
 }
 
 export async function runTableExport(
-  tableType: 'city' | 'country',
+  tableType: 'city' | 'country' | 'rir',
   filters: FilterClause[],
   sort: SortClause[],
   client: TableExportClient,
@@ -115,7 +115,7 @@ export function useTableExport() {
   }, []);
 
   const startExport = useCallback(
-    async (tableType: 'city' | 'country', filters: FilterClause[], sort: SortClause[]) => {
+    async (tableType: 'city' | 'country' | 'rir', filters: FilterClause[], sort: SortClause[]) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;

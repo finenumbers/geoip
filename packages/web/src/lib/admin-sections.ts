@@ -2,6 +2,7 @@ export const ADMIN_SECTIONS = [
   'overview',
   'general',
   'grchc',
+  'rir',
   'api',
   'adminAccess',
   'export',

@@ -46,6 +46,17 @@ services:
         reservations:
           memory: 256M
 
+  rir:
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          memory: 128M
+
   web:
     ports: !override
       - "8080:80"

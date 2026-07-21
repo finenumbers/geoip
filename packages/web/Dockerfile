@@ -7,8 +7,7 @@ COPY packages/web/package.json ./packages/web/
 RUN pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 COPY packages/shared ./packages/shared
 COPY packages/web ./packages/web
-ARG APP_BUILD=
-RUN VITE_APP_BUILD="${APP_BUILD}" pnpm --filter @geoip/shared build && pnpm --filter @geoip/web build
+RUN pnpm --filter @geoip/shared build && pnpm --filter @geoip/web build
 
 FROM nginx:alpine AS runner
 RUN apk add --no-cache gettext

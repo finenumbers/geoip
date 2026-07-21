@@ -8,6 +8,7 @@ import { registerRequestId } from './plugins/request-id.js';
 import { registerApiKeyAuth } from './plugins/api-key-auth.js';
 import { registerAdminAuthPlugin } from './plugins/admin-auth.js';
 import { registerMvReadiness } from './plugins/mv-readiness.js';
+import { registerRirReadiness } from './plugins/rir-readiness.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerDatasetRoutes } from './routes/dataset.js';
 import { registerLookupRoutes } from './routes/lookup.js';
@@ -15,6 +16,8 @@ import { registerTableRoutes } from './routes/table.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerMetricsRoutes } from './routes/metrics.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerRirAdminRoutes } from './routes/rir-admin.js';
+import { registerRirStatusRoutes } from './routes/rir-status.js';
 
 export async function buildApp() {
   const env = loadEnv();
@@ -40,6 +43,7 @@ export async function buildApp() {
   await registerApiKeyAuth(app);
   await registerAdminAuthPlugin(app);
   await registerMvReadiness(app);
+  await registerRirReadiness(app);
   await registerHealthRoutes(app);
   await registerDatasetRoutes(app);
   await registerLookupRoutes(app);
@@ -47,6 +51,8 @@ export async function buildApp() {
   await registerExportRoutes(app);
   await registerMetricsRoutes(app);
   await registerAdminRoutes(app);
+  await registerRirAdminRoutes(app);
+  await registerRirStatusRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {
     const err = error as { statusCode?: number; name?: string; message?: string };

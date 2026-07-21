@@ -59,6 +59,22 @@ describe('table-profiles', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('allows rir registry/status filters and rejects geo-only fields', () => {
+    expect(
+      validateTableQueryProfile(
+        'rir',
+        [{ field: 'registry', dir: 'asc' }],
+        [
+          { field: 'registry', op: 'in', value: ['iana'] },
+          { field: 'status', op: 'eq', value: 'reserved' },
+        ],
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateTableQueryProfile('rir', [], [{ field: 'city_name', op: 'eq', value: 'x' }]).ok,
+    ).toBe(false);
+  });
+
   it('validates prefix and asn text filters', () => {
     expect(validateTextFilterValue('prefix_len', 'abc')).toMatch(/Prefix/);
     expect(validateTextFilterValue('asn', '12a')).toMatch(/ASN/);

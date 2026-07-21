@@ -55,6 +55,13 @@ const browseCountryRoute = createRoute({
   validateSearch: browseSearchSchema,
 });
 
+const browseRirRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/browse/rir',
+  component: () => <BrowsePage tableType="rir" />,
+  validateSearch: browseSearchSchema,
+});
+
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
@@ -86,6 +93,7 @@ const routeTree = rootRoute.addChildren([
   apiDocsRoute,
   browseCityRoute,
   browseCountryRoute,
+  browseRirRoute,
   adminRoute,
   adminLoginRoute,
   adminSetupRoute,

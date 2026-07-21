@@ -74,6 +74,20 @@ export const adminApi = {
     adminRequest<{ ok: boolean; importRunId?: string }>('/imports/trigger', {
       method: 'POST',
     }),
+  rirStatus: () =>
+    adminRequest<{
+      status: string;
+      lastSuccessAt: string | null;
+      lastSnapshotDate: string | null;
+      rowCount: number;
+      rowsByRegistry: Record<string, number>;
+      rowsByStatus: Record<string, number>;
+      lastError: string | null;
+    }>('/rir/status'),
+  triggerRirImport: () =>
+    adminRequest<{ importRunId: string; status: string }>('/rir/imports/trigger', {
+      method: 'POST',
+    }),
 };
 
 export type { AdminConfigResponse, AdminConfigPatch };
