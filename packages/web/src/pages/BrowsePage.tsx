@@ -19,6 +19,7 @@ import { ColumnFacetFilter } from '@/components/ColumnFacetFilter';
 import { ColumnTextFilter } from '@/components/ColumnTextFilter';
 import { ActiveFiltersBar } from '@/components/ActiveFiltersBar';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
+import { RirDetailModal } from '@/components/RirDetailModal';
 import { cn } from '@/lib/utils';
 import {
   expandFilterChips,
@@ -58,6 +59,9 @@ const COLUMN_API_FIELDS: Record<string, string> = {
   allocatedAt: 'allocated_at',
   opaqueId: 'opaque_id',
   ipFamily: 'ip_family',
+  hostCount: 'host_count',
+  startAsn: 'start_asn',
+  asnCount: 'asn_count',
 };
 
 const API_TO_COLUMN: Record<string, string> = Object.fromEntries(
@@ -108,6 +112,7 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   const queryClient = useQueryClient();
   const browsePath = browsePathFor(tableType);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [selectedRirRow, setSelectedRirRow] = useState<TableBrowseRow | null>(null);
   /** Bumps on full reset so header filters drop local draft/validation state. */
   const [browseUiKey, setBrowseUiKey] = useState(0);
   /** Gates table fetch until city/country tab switch reset has applied default URL. */
@@ -562,6 +567,64 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           ),
         },
         {
+          accessorKey: 'hostCount',
+          header: ui.filters.host_count,
+          meta: columnMeta(
+            'host_count',
+            <ColumnTextFilter
+              placeholder={ui.filters.host_count}
+              value={getTextFilterValue(activeFilters, 'host_count')}
+              onApply={(value) => applyTextFilter('host_count', value)}
+              onClear={() => clearTextFilter('host_count')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'network',
+          header: ui.filters.network,
+          meta: columnMeta(
+            'network',
+            <ColumnTextFilter
+              placeholder={ui.filters.network}
+              value={getTextFilterValue(activeFilters, 'network')}
+              onApply={(value) => applyTextFilter('network', value)}
+              onClear={() => clearTextFilter('network')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'startAsn',
+          header: ui.filters.start_asn,
+          meta: columnMeta('start_asn', () => (
+            <ColumnTextFilter
+              placeholder={ui.filters.start_asn}
+              inputMode="numeric"
+              value={getTextFilterValue(activeFilters, 'start_asn')}
+              error={fieldErrors.start_asn}
+              validate={(v) => validateTextFilterValue('start_asn', v)}
+              onValidationError={(msg) => setFieldError('start_asn', msg)}
+              onApply={(value) => applyTextFilter('start_asn', value)}
+              onClear={() => clearTextFilter('start_asn')}
+            />
+          )),
+        },
+        {
+          accessorKey: 'asnCount',
+          header: ui.filters.asn_count,
+          meta: columnMeta('asn_count', () => (
+            <ColumnTextFilter
+              placeholder={ui.filters.asn_count}
+              inputMode="numeric"
+              value={getTextFilterValue(activeFilters, 'asn_count')}
+              error={fieldErrors.asn_count}
+              validate={(v) => validateTextFilterValue('asn_count', v)}
+              onValidationError={(msg) => setFieldError('asn_count', msg)}
+              onApply={(value) => applyTextFilter('asn_count', value)}
+              onClear={() => clearTextFilter('asn_count')}
+            />
+          )),
+        },
+        {
           accessorKey: 'cc',
           header: ui.filters.cc,
           meta: columnMeta(
@@ -961,8 +1024,13 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           onLoadMore={loadMore}
           onNearEnd={loadMore}
           scrollResetKey={`${sortJson}|${filtersJson}`}
+          onRowClick={tableType === 'rir' ? setSelectedRirRow : undefined}
         />
       </div>
+
+      {tableType === 'rir' && (
+        <RirDetailModal row={selectedRirRow} onClose={() => setSelectedRirRow(null)} />
+      )}
     </div>
   );
 }

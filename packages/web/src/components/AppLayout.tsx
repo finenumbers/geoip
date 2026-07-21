@@ -150,9 +150,6 @@ export function AppLayout() {
                 <span className="inline-flex cursor-default items-center gap-1">
                   {ui.datasetBadge}
                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
-                  {datasetDate ? (
-                    <span className="font-bold text-green-600">{datasetDate}</span>
-                  ) : null}
                 </span>
                 <div
                   className="pointer-events-none absolute right-0 top-full z-40 mt-1 hidden min-w-[16rem] rounded-md border border-border bg-card p-3 text-sm shadow-md group-hover:block"

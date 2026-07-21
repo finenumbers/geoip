@@ -18,6 +18,7 @@ import { registerMetricsRoutes } from './routes/metrics.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerRirAdminRoutes } from './routes/rir-admin.js';
 import { registerRirStatusRoutes } from './routes/rir-status.js';
+import { registerRirEnrichmentRoutes } from './routes/rir-enrichment.js';
 
 export async function buildApp() {
   const env = loadEnv();
@@ -53,6 +54,7 @@ export async function buildApp() {
   await registerAdminRoutes(app);
   await registerRirAdminRoutes(app);
   await registerRirStatusRoutes(app);
+  await registerRirEnrichmentRoutes(app);
 
   app.setErrorHandler((error, _request, reply) => {
     const err = error as { statusCode?: number; name?: string; message?: string };

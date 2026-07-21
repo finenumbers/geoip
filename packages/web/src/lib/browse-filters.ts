@@ -46,13 +46,17 @@ export function setTextFilter(filters: TableFilter[], field: string, value: stri
   const trimmed = value.trim();
   const rest = filters.filter((f) => f.field !== field);
 
-  if (field === 'prefix_len') {
+  if (field === 'prefix_len' || field === 'start_asn' || field === 'asn_count') {
     const num = Number(trimmed);
     return [...rest, { field, op: 'eq', value: num }];
   }
 
   if (field === 'asn') {
     return [...rest, { field, op: 'startsWith', value: trimmed }];
+  }
+
+  if (field === 'host_count') {
+    return [...rest, { field, op: 'eq', value: trimmed }];
   }
 
   if (field === 'network') {

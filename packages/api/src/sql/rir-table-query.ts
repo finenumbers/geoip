@@ -23,6 +23,9 @@ function appendFilter(
     ip_family: 'ip_family',
     opaque_id: 'opaque_id',
     allocated_at: 'allocated_at::text',
+    host_count: 'host_count::text',
+    start_asn: 'start_asn',
+    asn_count: 'asn_count',
   };
   const col = fieldMap[filter.field];
   if (!col) return;
@@ -37,7 +40,12 @@ function appendFilter(
   }
 
   const asNumber = (value: unknown): number | unknown => {
-    if (filter.field === 'ip_family' || filter.field === 'prefix_len') {
+    if (
+      filter.field === 'ip_family' ||
+      filter.field === 'prefix_len' ||
+      filter.field === 'start_asn' ||
+      filter.field === 'asn_count'
+    ) {
       const n = Number(value);
       return Number.isFinite(n) ? n : value;
     }

@@ -63,6 +63,9 @@ const RIR_TABLE_PROFILE: TableProfile = {
     'network',
     'prefix_len',
     'ip_family',
+    'host_count',
+    'start_asn',
+    'asn_count',
     'opaque_id',
     'allocated_at',
   ],
@@ -326,9 +329,9 @@ export function validateTextFilterValue(field: string, rawValue: string): string
     }
   }
 
-  if (field === 'asn') {
+  if (field === 'asn' || field === 'start_asn' || field === 'asn_count') {
     if (!/^\d+$/.test(trimmed)) {
-      return 'ASN: только цифры';
+      return field === 'asn' ? 'ASN: только цифры' : 'Только цифры';
     }
   }
 

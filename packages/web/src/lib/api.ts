@@ -96,6 +96,86 @@ export const api = {
   rirStatus: () => request<RirDatasetStateResponse>('/rir/status'),
   rirImports: (limit = 10) => request<RirImportRunListResponse>(`/rir/imports?limit=${limit}`),
   rirImportById: (id: string) => request<RirImportRun>(`/rir/imports/${id}`),
+  rirEnrich: (body: {
+    registry: string;
+    resourceType: string;
+    rangeText: string;
+    network?: string | null;
+    startAsn?: number | null;
+    opaqueId?: string | null;
+  }) =>
+    request<{
+      rdap: {
+        cacheKey: string;
+        kind: string;
+        payload: Record<string, unknown>;
+        errorMessage: string | null;
+        fetchedAt: string;
+        stale: boolean;
+      };
+      peeringdb: {
+        cacheKey: string;
+        kind: string;
+        payload: Record<string, unknown>;
+        errorMessage: string | null;
+        fetchedAt: string;
+        stale: boolean;
+      } | null;
+    }>('/rir/enrich', { method: 'POST', body: JSON.stringify(body) }),
+  rirGeoMismatch: (limit = 20) =>
+    request<{
+      mismatchCount: number;
+      sampleSize: number;
+      sampled: true;
+      sample: Array<{
+        network: string;
+        geoCc: string | null;
+        rirCc: string | null;
+        registry: string | null;
+        rangeText: string | null;
+      }>;
+    }>(`/rir/analytics/geo-mismatch?limit=${limit}`),
+  rirSnapshotHistory: (limit = 20) =>
+    request<{
+      items: Array<{
+        id: number;
+        importRunId: string | null;
+        capturedAt: string;
+        lastSnapshotDate: string | null;
+        rowCount: number;
+        rowsByRegistry: Record<string, number>;
+        rowsByStatus: Record<string, number>;
+        snapshotsByRegistry: Record<string, string>;
+        ipv4AddressCount: string;
+        tableSizeBytes: number | null;
+      }>;
+    }>(`/rir/analytics/snapshot-history?limit=${limit}`),
+  rirTransfers: (limit = 50) =>
+    request<{
+      items: Array<{
+        id: number;
+        sourceRir: string;
+        transferId: string | null;
+        resourceType: string | null;
+        resourceRange: string;
+        fromOrg: string | null;
+        toOrg: string | null;
+        transferredAt: string | null;
+      }>;
+    }>(`/rir/analytics/transfers?limit=${limit}`),
+  rirRpkiAdoption: (limit = 100) =>
+    request<{
+      items: Array<{
+        id: number;
+        sourceFile: string;
+        economy: string | null;
+        registry: string | null;
+        metric: string;
+        value: string | null;
+        snapshotDate: string | null;
+        importedAt: string;
+      }>;
+    }>(`/rir/analytics/rpki-adoption?limit=${limit}`),
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
   importById: (id: string) => request<ImportRun>(`/imports/${id}`),
   lookup: (

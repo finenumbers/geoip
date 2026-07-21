@@ -216,7 +216,27 @@ async function loadAllSourcesToStaging(
   });
 }
 
-async function swapStagingToProduction(log: Logger): Promise<{
+async function archiveCurrentSnapshot(
+  client: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+  importRunId: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO rir_snapshot_history (
+       import_run_id, last_snapshot_date, row_count, rows_by_registry, rows_by_status,
+       snapshots_by_registry, ipv4_address_count, table_size_bytes
+     )
+     SELECT $1::uuid, last_snapshot_date, row_count, rows_by_registry, rows_by_status,
+            snapshots_by_registry, ipv4_address_count, table_size_bytes
+     FROM rir_dataset_state
+     WHERE id = 1 AND row_count > 0`,
+    [importRunId],
+  );
+}
+
+async function swapStagingToProduction(
+  log: Logger,
+  importRunId: string,
+): Promise<{
   rowCount: number;
   rowsByRegistry: Record<string, number>;
   rowsByStatus: Record<string, number>;
@@ -226,6 +246,7 @@ async function swapStagingToProduction(log: Logger): Promise<{
   return withDirectPoolClient(async (client) => {
     await client.query('BEGIN');
     try {
+      await archiveCurrentSnapshot(client, importRunId);
       await client.query('TRUNCATE rir_delegations RESTART IDENTITY');
       await client.query(`
         INSERT INTO rir_delegations (
@@ -322,7 +343,7 @@ export async function runRirImportPipeline(
     stepStart = Date.now();
     currentStep = 'swap';
     await recordRirStep(importRunId, currentStep, 'running');
-    const swapped = await swapStagingToProduction(log);
+    const swapped = await swapStagingToProduction(log, importRunId);
     await recordRirStep(importRunId, currentStep, 'succeeded', {
       durationMs: Date.now() - stepStart,
       rows: swapped.rowCount,
@@ -353,6 +374,21 @@ export async function runRirImportPipeline(
       durationMs: Date.now() - stepStart,
       rows: swapped.rowCount,
     });
+
+    // Soft-fail enrichment feeds — delegated import already succeeded.
+    try {
+      const { importRirTransfers } = await import('./rir-transfers-import.js');
+      await importRirTransfers(log, fetchImpl);
+    } catch (err) {
+      log.warn({ err }, 'RIR transfers enrichment skipped');
+    }
+    try {
+      const { importRirRpkiAdoption } = await import('./rir-rpki-import.js');
+      await importRirRpkiAdoption(log, fetchImpl);
+    } catch (err) {
+      log.warn({ err }, 'RPKI adoption enrichment skipped');
+    }
+
     log.info({ importRunId, rowCount: swapped.rowCount }, 'RIR import succeeded');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

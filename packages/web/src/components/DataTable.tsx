@@ -38,6 +38,7 @@ interface DataTableProps<T> {
   /** When changed, scroll body back to top (e.g. sort/filter change). */
   scrollResetKey?: string;
   emptyMessage?: string;
+  onRowClick?: (row: T) => void;
 }
 
 const ROW_HEIGHT = 40;
@@ -65,6 +66,7 @@ export function DataTable<T>({
   onNearEnd,
   scrollResetKey,
   emptyMessage,
+  onRowClick,
 }: DataTableProps<T>) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const nearEndLock = useRef(false);
@@ -209,7 +211,12 @@ export function DataTable<T>({
               return (
                 <div
                   key={row.id}
-                  className={cn('grid border-b border-border text-sm hover:bg-accent/50')}
+                  role={onRowClick ? 'button' : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  className={cn(
+                    'grid border-b border-border text-sm hover:bg-accent/50',
+                    onRowClick && 'cursor-pointer',
+                  )}
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -219,6 +226,17 @@ export function DataTable<T>({
                     transform: `translateY(${vRow.start}px)`,
                     gridTemplateColumns: gridTemplate,
                   }}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onRowClick(row.original);
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <div
