@@ -10,6 +10,7 @@ import {
   resolveExportDownloadHeaders,
 } from '../services/export-service.js';
 import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
+import { isRirDatasetReady } from '../repositories/rir-repository.js';
 import { validateExportRowLimit } from '../services/query-limits.js';
 
 const exportIdParamsSchema = z.object({
@@ -26,14 +27,22 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
         return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
       }
 
-      if (!(await isMaterializedViewsReadyForQueries())) {
+      const { tableType, sort } = parsed.data;
+
+      if (tableType === 'rir') {
+        if (!(await isRirDatasetReady())) {
+          return reply.status(503).send({
+            error: 'Service unavailable',
+            message: 'RIR dataset is not ready. Retry export shortly.',
+          });
+        }
+      } else if (!(await isMaterializedViewsReadyForQueries())) {
         return reply.status(503).send({
           error: 'Service unavailable',
           message: 'Materialized views are refreshing. Retry export shortly.',
         });
       }
 
-      const { tableType, sort } = parsed.data;
       const filters = normalizeFiltersForQuery(parsed.data.filters);
       const profileCheck = validateTableQueryProfile(tableType, sort, filters);
       if (!profileCheck.ok) {

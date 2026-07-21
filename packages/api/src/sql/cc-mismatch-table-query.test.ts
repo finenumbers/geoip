@@ -43,4 +43,30 @@ describe('buildCcMismatchTableQuery', () => {
     expect(built.sql).toContain('ORDER BY asn ASC');
     expect(built.countParams).toEqual(['%Rostelecom%']);
   });
+
+  it('uses numeric (asn, id) keyset cursor', () => {
+    const built = buildCcMismatchTableQuery({
+      filters: [],
+      sort: [{ field: 'asn', dir: 'asc' }],
+      limit: 100,
+      offset: 0,
+      afterId: 42,
+      afterSortValue: '15169',
+    });
+    expect(built.sql).toContain('(asn, id) > ($1::int, $2::bigint)');
+    expect(built.params).toEqual([15169, 42, 100]);
+  });
+
+  it('uses NULL::int for empty asn keyset cursor', () => {
+    const built = buildCcMismatchTableQuery({
+      filters: [],
+      sort: [{ field: 'asn', dir: 'desc' }],
+      limit: 50,
+      offset: 0,
+      afterId: 7,
+      afterSortValue: '',
+    });
+    expect(built.sql).toContain('(asn, id) < ($1::int, $2::bigint)');
+    expect(built.params).toEqual([null, 7, 50]);
+  });
 });

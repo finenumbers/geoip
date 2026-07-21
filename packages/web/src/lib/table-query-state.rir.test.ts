@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { defaultRirBrowseSearch, ensureRirResourceTypeFilter } from './table-query-state.js';
+import {
+  defaultRirBrowseSearch,
+  ensureRirResourceTypeFilter,
+  hasRirResourceTypeLock,
+} from './table-query-state.js';
 
 describe('RIR browse mode helpers', () => {
   it('defaults IP mode to ipv4+ipv6 filter', () => {
@@ -30,5 +34,24 @@ describe('RIR browse mode helpers', () => {
         'ip',
       ),
     ).toEqual([{ field: 'resource_type', op: 'in', value: ['ipv4'] }]);
+  });
+
+  it('preserves eq ipv4/ipv6 as single-value in lock (does not widen)', () => {
+    expect(
+      ensureRirResourceTypeFilter([{ field: 'resource_type', op: 'eq', value: 'ipv4' }], 'ip'),
+    ).toEqual([{ field: 'resource_type', op: 'in', value: ['ipv4'] }]);
+    expect(
+      ensureRirResourceTypeFilter([{ field: 'resource_type', op: 'eq', value: 'ipv6' }], 'ip'),
+    ).toEqual([{ field: 'resource_type', op: 'in', value: ['ipv6'] }]);
+  });
+
+  it('hasRirResourceTypeLock detects unlocked empty filters', () => {
+    expect(hasRirResourceTypeLock([], 'ip')).toBe(false);
+    expect(
+      hasRirResourceTypeLock(
+        [{ field: 'resource_type', op: 'in', value: ['ipv4', 'ipv6'] }],
+        'ip',
+      ),
+    ).toBe(true);
   });
 });

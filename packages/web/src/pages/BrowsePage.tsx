@@ -15,6 +15,7 @@ import {
   DEFAULT_BROWSE_SEARCH,
   defaultRirBrowseSearch,
   ensureRirResourceTypeFilter,
+  hasRirResourceTypeLock,
   type BrowsePath,
   type RirBrowseMode,
 } from '@/lib/table-query-state';
@@ -172,15 +173,24 @@ export function BrowsePage({ tableType, rirMode }: BrowsePageProps) {
   /** Ensure RIR mode always has locked resource_type in the URL. */
   useEffect(() => {
     if (tableType !== 'rir' || !rirMode || !browseSessionReady) return;
+    let cancelled = false;
     const current = parseFiltersJson(filtersJson);
     const locked = ensureRirResourceTypeFilter(current, rirMode);
     if (JSON.stringify(current) === JSON.stringify(locked)) return;
-    void navigate({
-      to: browsePath,
-      search: { sort: sortJson, filters: JSON.stringify(locked) },
-      replace: true,
+    const targetPath = browsePath;
+    const targetSort = sortJson;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void navigate({
+        to: targetPath,
+        search: { sort: targetSort, filters: JSON.stringify(locked) },
+        replace: true,
+      });
     });
-  }, [tableType, rirMode, filtersJson, sortJson, browsePath, navigate, browseSessionReady]);
+    return () => {
+      cancelled = true;
+    };
+  }, [tableType, rirMode, sessionKey, filtersJson, sortJson, browsePath, navigate, browseSessionReady]);
 
   const { data: dataset } = useQuery({
     queryKey: ['dataset'],
@@ -228,8 +238,15 @@ export function BrowsePage({ tableType, rirMode }: BrowsePageProps) {
 
   const handleExportCsv = useCallback(() => {
     if (!browseValidation.ok) return;
-    void startExport(tableType, activeFilters, activeSort);
-  }, [activeFilters, activeSort, browseValidation.ok, startExport, tableType]);
+    const filters =
+      tableType === 'rir' && rirMode
+        ? ensureRirResourceTypeFilter(activeFilters, rirMode)
+        : activeFilters;
+    void startExport(tableType, filters, activeSort);
+  }, [activeFilters, activeSort, browseValidation.ok, rirMode, startExport, tableType]);
+
+  const rirFiltersLocked =
+    tableType !== 'rir' || !rirMode || hasRirResourceTypeLock(activeFilters, rirMode);
 
   const exportStatusText = useMemo(() => {
     if (exportState === 'submitting' || exportState === 'polling') {
@@ -270,7 +287,7 @@ export function BrowsePage({ tableType, rirMode }: BrowsePageProps) {
     queryFn: ({ pageParam, signal }) =>
       fetchTableChunk(tableType, pageParam, sortJson, filtersJson, signal),
     initialPageParam: undefined as TablePageParam | undefined,
-    enabled: browseSessionReady,
+    enabled: browseSessionReady && rirFiltersLocked,
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((sum, page) => sum + page.rows.length, 0);
       if (loaded >= MAX_LOADED_ROWS) return undefined;

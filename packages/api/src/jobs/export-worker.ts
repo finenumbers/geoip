@@ -5,7 +5,6 @@ import { migrate } from '../db/migrate.js';
 import { processQueuedExports } from '../services/export-service.js';
 import { pruneExportHistory } from '../jobs/export-retention.js';
 import { registerWorkerShutdown, startWorkerPoll } from './worker-lifecycle.js';
-import { isMaterializedViewsReadyForQueries } from '../sql/recreate-materialized-views.js';
 import { subscribeConfigChanges } from '../config/runtime-config.js';
 import { watchConfigFileChanges } from '../config/config-reload-watcher.js';
 
@@ -22,11 +21,8 @@ async function main(): Promise<void> {
 
   const poll = async () => {
     try {
-      if (await isMaterializedViewsReadyForQueries()) {
-        await processQueuedExports();
-      } else {
-        logger.debug('Skipping export poll — materialized views not ready');
-      }
+      // Per-job readiness (MV vs RIR) is handled inside processExportJob.
+      await processQueuedExports();
     } catch (err) {
       logger.error({ err }, 'Export poll error');
     }

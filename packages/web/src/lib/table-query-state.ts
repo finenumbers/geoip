@@ -41,11 +41,20 @@ export function ensureRirResourceTypeFilter(
   if (mode === 'asn') {
     return [...rest, { field: 'resource_type', op: 'in', value: ['asn'] }];
   }
-  const existing = filters.find((f) => f.field === 'resource_type' && f.op === 'in');
-  const values = Array.isArray(existing?.value)
-    ? existing.value.map(String).filter((v) => v === 'ipv4' || v === 'ipv6')
-    : [];
+  const existingIn = filters.find((f) => f.field === 'resource_type' && f.op === 'in');
+  const existingEq = filters.find((f) => f.field === 'resource_type' && f.op === 'eq');
+  let values: string[] = [];
+  if (existingIn && Array.isArray(existingIn.value)) {
+    values = existingIn.value.map(String).filter((v) => v === 'ipv4' || v === 'ipv6');
+  } else if (existingEq && (existingEq.value === 'ipv4' || existingEq.value === 'ipv6')) {
+    values = [String(existingEq.value)];
+  }
   return [...rest, { field: 'resource_type', op: 'in', value: values.length ? values : ['ipv4', 'ipv6'] }];
+}
+
+/** True when URL filters already include the locked resource_type for the RIR mode. */
+export function hasRirResourceTypeLock(filters: FilterClause[], mode: RirBrowseMode): boolean {
+  return JSON.stringify(filters) === JSON.stringify(ensureRirResourceTypeFilter(filters, mode));
 }
 
 /** TanStack Router may pass JSON search params as parsed objects — keep browse state as JSON strings. */

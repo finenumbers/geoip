@@ -12,6 +12,10 @@ import { invalidateAsnMappingCache } from '../sql/asn-mapping-status.js';
 import { DATASET_CACHE_VERSION } from '../sql/dataset-cache-version.js';
 import { resolveExportZipPath } from './export-archive.js';
 import { invalidateReadyCache } from './ready-cache.js';
+import {
+  lockCcMismatchRebuild,
+  unlockCcMismatchRebuild,
+} from '../jobs/geo-rir-cc-mismatch-rebuild.js';
 
 export type AdminDataWipeResult = {
   ok: true;
@@ -68,44 +72,49 @@ async function clearExportJobs(): Promise<{ deleted: number; filesRemoved: numbe
 }
 
 async function wipeDataTables(client: pg.PoolClient): Promise<void> {
-  await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_ru');
-  await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_analytics');
-  await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_country_blocks_analytics');
+  await lockCcMismatchRebuild(client);
+  try {
+    await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_ru');
+    await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_analytics');
+    await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_country_blocks_analytics');
 
-  await client.query(`
-    TRUNCATE
-      geo_city_block_asn,
-      geo_country_block_asn,
-      geo_city_blocks,
-      geo_country_blocks,
-      geo_asn_blocks,
-      geo_city_locations,
-      geo_country_locations,
-      stg_geo_city_locations,
-      stg_geo_country_locations,
-      stg_geo_city_blocks,
-      stg_geo_country_blocks,
-      stg_geo_asn_blocks
-    RESTART IDENTITY CASCADE
-  `);
+    await client.query(`
+      TRUNCATE
+        geo_city_block_asn,
+        geo_country_block_asn,
+        geo_city_blocks,
+        geo_country_blocks,
+        geo_asn_blocks,
+        geo_city_locations,
+        geo_country_locations,
+        stg_geo_city_locations,
+        stg_geo_country_locations,
+        stg_geo_city_blocks,
+        stg_geo_country_blocks,
+        stg_geo_asn_blocks
+      RESTART IDENTITY CASCADE
+    `);
 
-  await client.query(`
-    ALTER TABLE stg_geo_city_blocks DROP CONSTRAINT IF EXISTS geo_city_blocks_geoname_id_fkey;
-    ALTER TABLE stg_geo_country_blocks DROP CONSTRAINT IF EXISTS geo_country_blocks_geoname_id_fkey;
-  `);
+    await client.query(`
+      ALTER TABLE stg_geo_city_blocks DROP CONSTRAINT IF EXISTS geo_city_blocks_geoname_id_fkey;
+      ALTER TABLE stg_geo_country_blocks DROP CONSTRAINT IF EXISTS geo_country_blocks_geoname_id_fkey;
+    `);
 
-  await client.query(`TRUNCATE stg_rir_delegations, rir_delegations RESTART IDENTITY`);
-  await client.query(`TRUNCATE geo_rir_cc_mismatches, rir_rdap_cache RESTART IDENTITY`);
-  await client.query(
-    `UPDATE geo_rir_cc_mismatch_state
-     SET status = 'never',
-         row_count = 0,
-         rebuilt_at = NULL,
-         duration_ms = NULL,
-         last_error = NULL,
-         updated_at = NOW()
-     WHERE id = 1`,
-  );
+    await client.query(`TRUNCATE stg_rir_delegations, rir_delegations RESTART IDENTITY`);
+    await client.query(`TRUNCATE geo_rir_cc_mismatches, rir_rdap_cache RESTART IDENTITY`);
+    await client.query(
+      `UPDATE geo_rir_cc_mismatch_state
+       SET status = 'never',
+           row_count = 0,
+           rebuilt_at = NULL,
+           duration_ms = NULL,
+           last_error = NULL,
+           updated_at = NOW()
+       WHERE id = 1`,
+    );
+  } finally {
+    await unlockCcMismatchRebuild(client);
+  }
 }
 
 /**

@@ -9,7 +9,14 @@ import { AdminPage } from '@/pages/AdminPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
 import { AdminSetupPage } from '@/pages/AdminSetupPage';
 import { AdminSetupApiKeyPage } from '@/pages/AdminSetupApiKeyPage';
-import { DEFAULT_BROWSE_SEARCH, coerceBrowseSearchJsonParam } from '@/lib/table-query-state';
+import {
+  DEFAULT_BROWSE_SEARCH,
+  coerceBrowseSearchJsonParam,
+  defaultRirBrowseSearch,
+  ensureRirResourceTypeFilter,
+  parseFiltersJson,
+  type RirBrowseMode,
+} from '@/lib/table-query-state';
 import { parseAdminSearch } from '@/lib/admin-sections';
 
 const rootRoute = createRootRoute({
@@ -42,6 +49,14 @@ const browseSearchSchema = (search: Record<string, unknown>) => ({
   filters: coerceBrowseSearchJsonParam(search.filters, DEFAULT_BROWSE_SEARCH.filters),
 });
 
+const rirBrowseSearchSchema = (mode: RirBrowseMode) => (search: Record<string, unknown>) => {
+  const defaults = defaultRirBrowseSearch(mode);
+  const sort = coerceBrowseSearchJsonParam(search.sort, defaults.sort);
+  const rawFilters = coerceBrowseSearchJsonParam(search.filters, defaults.filters);
+  const locked = ensureRirResourceTypeFilter(parseFiltersJson(rawFilters), mode);
+  return { sort, filters: JSON.stringify(locked) };
+};
+
 const browseCityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/city',
@@ -60,16 +75,15 @@ const browseRirRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/rir',
   component: () => <BrowsePage tableType="rir" rirMode="ip" />,
-  validateSearch: browseSearchSchema,
+  validateSearch: rirBrowseSearchSchema('ip'),
 });
 
 const browseRirAsnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/rir-asn',
   component: () => <BrowsePage tableType="rir" rirMode="asn" />,
-  validateSearch: browseSearchSchema,
+  validateSearch: rirBrowseSearchSchema('asn'),
 });
-
 const browseAsnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/asn',

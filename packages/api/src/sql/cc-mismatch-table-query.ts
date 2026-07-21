@@ -90,11 +90,22 @@ export function buildCcMismatchTableQuery(options: {
   const nulls = sortDir === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST';
 
   if (options.afterId != null && options.afterSortValue !== undefined) {
-    params.push(options.afterSortValue, options.afterId);
     const op = sortDir === 'DESC' ? '<' : '>';
-    where.push(
-      `(${sortField}, id) ${op} ($${params.length - 1}::text, $${params.length}::bigint)`,
-    );
+    if (primarySort?.field === 'asn') {
+      const asnCursor =
+        options.afterSortValue === '' || options.afterSortValue == null
+          ? null
+          : Number(options.afterSortValue);
+      params.push(Number.isFinite(asnCursor) ? asnCursor : null, options.afterId);
+      where.push(
+        `(${sortField}, id) ${op} ($${params.length - 1}::int, $${params.length}::bigint)`,
+      );
+    } else {
+      params.push(options.afterSortValue, options.afterId);
+      where.push(
+        `(${sortField}, id) ${op} ($${params.length - 1}::text, $${params.length}::bigint)`,
+      );
+    }
   } else if (options.afterId != null) {
     params.push(options.afterId);
     where.push(`id > $${params.length}`);
