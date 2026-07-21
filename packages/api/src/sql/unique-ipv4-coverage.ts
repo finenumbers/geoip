@@ -64,8 +64,8 @@ export const ADDRESS_SPACE_COUNT_SQL = `
   WITH ipv4_count AS (
     WITH ipv4_ranges AS (
       SELECT
-        (network(b.network::inet) - '0.0.0.0'::inet)::bigint AS start_ip,
-        (broadcast(b.network::inet) - '0.0.0.0'::inet)::bigint AS end_ip
+        trunc(network(b.network::inet) - '0.0.0.0'::inet)::bigint AS start_ip,
+        trunc(broadcast(b.network::inet) - '0.0.0.0'::inet)::bigint AS end_ip
       FROM geo_country_blocks b
       WHERE family(b.network) = 4
     ),
@@ -90,12 +90,9 @@ export const ADDRESS_SPACE_COUNT_SQL = `
 export const RIR_UNIQUE_IPV4_SQL = `
   WITH ipv4_ranges AS (
     SELECT
-      (start_ip::inet - '0.0.0.0'::inet)::bigint AS start_ip,
-      CASE
-        WHEN end_ip IS NOT NULL AND BTRIM(end_ip) <> ''
-          THEN (BTRIM(end_ip)::inet - '0.0.0.0'::inet)::bigint
-        ELSE (start_ip::inet - '0.0.0.0'::inet)::bigint + host_count::bigint - 1
-      END AS end_ip
+      trunc(start_ip::inet - '0.0.0.0'::inet)::bigint AS start_ip,
+      trunc(start_ip::inet - '0.0.0.0'::inet)::bigint
+        + trunc(host_count)::bigint - 1 AS end_ip
     FROM rir_delegations
     WHERE resource_type = 'ipv4'
       AND start_ip IS NOT NULL

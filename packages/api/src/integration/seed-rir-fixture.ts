@@ -31,6 +31,8 @@ export async function seedRirFixtureDataset(): Promise<void> {
          rows_by_registry = '{"iana":1,"apnic":1,"arin":1}'::jsonb,
          rows_by_status = '{"reserved":1,"allocated":1,"assigned":1}'::jsonb,
          snapshots_by_registry = '{"iana":"2026-07-20","apnic":"2026-07-20","arin":"2026-07-20"}'::jsonb,
+         ipv4_address_count = 259,
+         table_size_bytes = 8192,
          last_error = NULL,
          active_import_run_id = NULL,
          updated_at = NOW()

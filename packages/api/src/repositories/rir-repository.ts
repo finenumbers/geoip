@@ -122,17 +122,21 @@ export async function computeRirDatasetVolumes(): Promise<{
 async function backfillRirVolumesIfNeeded(): Promise<{
   ipv4Addresses: string;
   tableSizeBytes: number;
-}> {
-  const volumes = await computeRirDatasetVolumes();
-  await query(
-    `UPDATE rir_dataset_state
-     SET ipv4_address_count = $1::numeric,
-         table_size_bytes = $2::bigint,
-         updated_at = NOW()
-     WHERE id = 1`,
-    [volumes.ipv4Addresses, volumes.tableSizeBytes],
-  );
-  return volumes;
+} | null> {
+  try {
+    const volumes = await computeRirDatasetVolumes();
+    await query(
+      `UPDATE rir_dataset_state
+       SET ipv4_address_count = $1::numeric,
+           table_size_bytes = $2::bigint,
+           updated_at = NOW()
+       WHERE id = 1`,
+      [volumes.ipv4Addresses, volumes.tableSizeBytes],
+    );
+    return volumes;
+  } catch {
+    return null;
+  }
 }
 
 export async function getRirDatasetState(): Promise<RirDatasetState> {
@@ -188,8 +192,10 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
     (tableSizeBytes == null || ipv4CountLooksInflated(ipv4Addresses))
   ) {
     const filled = await backfillRirVolumesIfNeeded();
-    ipv4Addresses = filled.ipv4Addresses;
-    tableSizeBytes = filled.tableSizeBytes;
+    if (filled) {
+      ipv4Addresses = filled.ipv4Addresses;
+      tableSizeBytes = filled.tableSizeBytes;
+    }
   }
 
   return {
@@ -210,9 +216,14 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
   };
 }
 
+/** Lightweight readiness — must not run volume backfill or heavy aggregates. */
 export async function isRirDatasetReady(): Promise<boolean> {
-  const state = await getRirDatasetState();
-  return state.status === 'ready' && state.rowCount > 0;
+  const result = await query<{ ready: boolean }>(
+    `SELECT (status = 'ready' AND row_count > 0) AS ready
+     FROM rir_dataset_state
+     WHERE id = 1`,
+  );
+  return Boolean(result.rows[0]?.ready);
 }
 
 export async function listRirImportRuns(limit = 10): Promise<{ items: RirImportRun[] }> {
