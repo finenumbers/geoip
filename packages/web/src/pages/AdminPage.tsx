@@ -453,7 +453,30 @@ export function AdminPage() {
               </ActionButton>
             </div>
             <p className="mt-3 text-xs text-muted">
-              Browse: <Link to="/browse/rir" search={{ sort: '[]', filters: '[]' }} className="underline">/browse/rir</Link>
+              Browse:{' '}
+              <Link
+                to="/browse/rir"
+                search={{
+                  sort: '[]',
+                  filters: JSON.stringify([
+                    { field: 'resource_type', op: 'in', value: ['ipv4', 'ipv6'] },
+                  ]),
+                }}
+                className="underline"
+              >
+                /browse/rir
+              </Link>
+              {' · '}
+              <Link
+                to="/browse/rir-asn"
+                search={{
+                  sort: '[]',
+                  filters: JSON.stringify([{ field: 'resource_type', op: 'in', value: ['asn'] }]),
+                }}
+                className="underline"
+              >
+                /browse/rir-asn
+              </Link>
             </p>
           </Section>
         )}

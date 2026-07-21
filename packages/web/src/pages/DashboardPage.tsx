@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ImportRun, RirDatasetStateResponse, RirImportRun } from '@geoip/shared';
 import { api } from '@/lib/api';
@@ -18,12 +17,7 @@ import {
 import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/format-datetime';
-import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
-import {
-  rirDatasetLoaded,
-  rirRegistryDetails,
-  RIR_DASHBOARD_REGISTRY_IDS,
-} from '@/lib/rir-dashboard-stats';
+import { rirDatasetLoaded, rirRegistryDetails } from '@/lib/rir-dashboard-stats';
 
 type ImportPlane = 'grchc' | 'rir';
 
@@ -164,11 +158,6 @@ export function DashboardPage() {
 
   const registryDetails = useMemo(() => rirRegistryDetails(rirStatus), [rirStatus]);
   const rirLoaded = rirDatasetLoaded(rirStatus);
-  const statusShare = useMemo(() => {
-    const entries = Object.entries(rirStatus?.rowsByStatus ?? {});
-    entries.sort((a, b) => b[1] - a[1]);
-    return entries;
-  }, [rirStatus?.rowsByStatus]);
 
   const mergedImports = useMemo((): MergedImportRow[] => {
     const grchc: MergedImportRow[] = (imports?.items ?? []).map((run: ImportRun) => ({
@@ -326,22 +315,6 @@ export function DashboardPage() {
                 </div>
               ))}
             </div>
-            <Link
-              to="/browse/rir"
-              search={{
-                ...DEFAULT_BROWSE_SEARCH,
-                filters: JSON.stringify([
-                  {
-                    field: 'registry',
-                    op: 'in',
-                    value: [...RIR_DASHBOARD_REGISTRY_IDS],
-                  },
-                ]),
-              }}
-              className="mt-3 inline-block text-sm text-primary hover:underline"
-            >
-              {ui.dashboard.rirBrowse}
-            </Link>
           </div>
         </Card>
 
@@ -403,19 +376,6 @@ export function DashboardPage() {
                 value={formatBigCount(rirStatus?.volumes?.ipv4Addresses)}
               />
             </SummaryDetails>
-            {statusShare.length > 0 && (
-              <div className="mt-3">
-                <p className="mb-1 text-sm text-muted">{ui.dashboard.rirByStatus}</p>
-                <div className="grid grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-sm">
-                  {statusShare.map(([status, count]) => (
-                    <div key={status} className="contents">
-                      <span className="text-muted">{status}</span>
-                      <span className="tabular-nums text-right">{formatCount(count)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </Card>
       </div>

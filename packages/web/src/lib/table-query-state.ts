@@ -15,6 +15,39 @@ export const DEFAULT_BROWSE_SEARCH = {
   filters: '[]',
 } as const;
 
+export type BrowsePath =
+  | '/browse/city'
+  | '/browse/country'
+  | '/browse/rir'
+  | '/browse/rir-asn'
+  | '/browse/asn';
+
+export type RirBrowseMode = 'ip' | 'asn';
+
+export function defaultRirBrowseSearch(mode: RirBrowseMode): { sort: string; filters: string } {
+  const resourceTypes = mode === 'asn' ? ['asn'] : ['ipv4', 'ipv6'];
+  return {
+    sort: '[]',
+    filters: JSON.stringify([{ field: 'resource_type', op: 'in', value: resourceTypes }]),
+  };
+}
+
+/** Keep locked resource_type for RIR IP / RIR ASN tabs. */
+export function ensureRirResourceTypeFilter(
+  filters: FilterClause[],
+  mode: RirBrowseMode,
+): FilterClause[] {
+  const rest = filters.filter((f) => f.field !== 'resource_type');
+  if (mode === 'asn') {
+    return [...rest, { field: 'resource_type', op: 'in', value: ['asn'] }];
+  }
+  const existing = filters.find((f) => f.field === 'resource_type' && f.op === 'in');
+  const values = Array.isArray(existing?.value)
+    ? existing.value.map(String).filter((v) => v === 'ipv4' || v === 'ipv6')
+    : [];
+  return [...rest, { field: 'resource_type', op: 'in', value: values.length ? values : ['ipv4', 'ipv6'] }];
+}
+
 /** TanStack Router may pass JSON search params as parsed objects — keep browse state as JSON strings. */
 export function coerceBrowseSearchJsonParam(value: unknown, fallback: string): string {
   if (value == null || value === '') return fallback;
@@ -111,11 +144,11 @@ export function mapBrowseIssuesToFilterFields(
 /** Keeps browse URL aligned with the active table profile (city / country / rir / asn). */
 export function useNormalizeBrowseSearch(
   tableType: TableType,
-  browsePath: '/browse/city' | '/browse/country' | '/browse/rir' | '/browse/asn',
+  browsePath: BrowsePath,
   sortJson: string,
   filtersJson: string,
   navigate: (opts: {
-    to: '/browse/city' | '/browse/country' | '/browse/rir' | '/browse/asn';
+    to: BrowsePath;
     search: { sort: string; filters: string };
     replace?: boolean;
   }) => void,

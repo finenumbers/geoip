@@ -13,6 +13,10 @@ import {
   validateBrowseQuery,
   mapBrowseIssuesToFilterFields,
   DEFAULT_BROWSE_SEARCH,
+  defaultRirBrowseSearch,
+  ensureRirResourceTypeFilter,
+  type BrowsePath,
+  type RirBrowseMode,
 } from '@/lib/table-query-state';
 import { DataTable } from '@/components/DataTable';
 import { ColumnFacetFilter } from '@/components/ColumnFacetFilter';
@@ -95,39 +99,52 @@ async function fetchTableChunk(
 
 interface BrowsePageProps {
   tableType: 'city' | 'country' | 'rir' | 'asn';
+  /** When tableType is rir: IP (ipv4/ipv6) vs ASN-only view. */
+  rirMode?: RirBrowseMode;
 }
 
 function browsePathFor(
   tableType: BrowsePageProps['tableType'],
-): '/browse/city' | '/browse/country' | '/browse/rir' | '/browse/asn' {
+  rirMode?: RirBrowseMode,
+): BrowsePath {
   if (tableType === 'country') return '/browse/country';
-  if (tableType === 'rir') return '/browse/rir';
+  if (tableType === 'rir') return rirMode === 'asn' ? '/browse/rir-asn' : '/browse/rir';
   if (tableType === 'asn') return '/browse/asn';
   return '/browse/city';
 }
 
-export function BrowsePage({ tableType }: BrowsePageProps) {
+function defaultBrowseSearchFor(
+  tableType: BrowsePageProps['tableType'],
+  rirMode?: RirBrowseMode,
+): { sort: string; filters: string } {
+  if (tableType === 'rir' && rirMode) return defaultRirBrowseSearch(rirMode);
+  return DEFAULT_BROWSE_SEARCH;
+}
+
+export function BrowsePage({ tableType, rirMode }: BrowsePageProps) {
   const search = useSearch({ strict: false }) as BrowseSearch;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const browsePath = browsePathFor(tableType);
+  const browsePath = browsePathFor(tableType, rirMode);
+  const defaultSearch = defaultBrowseSearchFor(tableType, rirMode);
+  const sessionKey = `${tableType}:${rirMode ?? ''}`;
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [selectedRirRow, setSelectedRirRow] = useState<TableBrowseRow | null>(null);
   /** Bumps on full reset so header filters drop local draft/validation state. */
   const [browseUiKey, setBrowseUiKey] = useState(0);
   /** Gates table fetch until city/country tab switch reset has applied default URL. */
   const [browseSessionReady, setBrowseSessionReady] = useState(true);
-  const prevTableTypeRef = useRef(tableType);
+  const prevSessionKeyRef = useRef(sessionKey);
   const pendingTabResetRef = useRef(false);
   const datasetFingerprintRef = useRef<string | null | undefined>(undefined);
 
-  const sortJson = search.sort ?? DEFAULT_BROWSE_SEARCH.sort;
-  const filtersJson = search.filters ?? DEFAULT_BROWSE_SEARCH.filters;
+  const sortJson = search.sort ?? defaultSearch.sort;
+  const filtersJson = search.filters ?? defaultSearch.filters;
 
-  /** Reset browse state only when switching city ↔ country tabs. */
+  /** Reset browse state when switching tabs / RIR modes. */
   useEffect(() => {
-    if (prevTableTypeRef.current === tableType) return;
-    prevTableTypeRef.current = tableType;
+    if (prevSessionKeyRef.current === sessionKey) return;
+    prevSessionKeyRef.current = sessionKey;
     pendingTabResetRef.current = true;
     setBrowseSessionReady(false);
     setFieldErrors({});
@@ -135,23 +152,35 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     queryClient.removeQueries({ queryKey: ['table'] });
     void navigate({
       to: browsePath,
-      search: DEFAULT_BROWSE_SEARCH,
+      search: defaultBrowseSearchFor(tableType, rirMode),
       replace: true,
     });
-  }, [tableType, browsePath, navigate, queryClient]);
+  }, [sessionKey, browsePath, navigate, queryClient, tableType, rirMode]);
 
   useEffect(() => {
     if (!pendingTabResetRef.current) {
       setBrowseSessionReady(true);
       return;
     }
-    const isDefault =
-      sortJson === DEFAULT_BROWSE_SEARCH.sort && filtersJson === DEFAULT_BROWSE_SEARCH.filters;
+    const isDefault = sortJson === defaultSearch.sort && filtersJson === defaultSearch.filters;
     if (isDefault) {
       pendingTabResetRef.current = false;
       setBrowseSessionReady(true);
     }
-  }, [sortJson, filtersJson]);
+  }, [sortJson, filtersJson, defaultSearch.sort, defaultSearch.filters]);
+
+  /** Ensure RIR mode always has locked resource_type in the URL. */
+  useEffect(() => {
+    if (tableType !== 'rir' || !rirMode || !browseSessionReady) return;
+    const current = parseFiltersJson(filtersJson);
+    const locked = ensureRirResourceTypeFilter(current, rirMode);
+    if (JSON.stringify(current) === JSON.stringify(locked)) return;
+    void navigate({
+      to: browsePath,
+      search: { sort: sortJson, filters: JSON.stringify(locked) },
+      replace: true,
+    });
+  }, [tableType, rirMode, filtersJson, sortJson, browsePath, navigate, browseSessionReady]);
 
   const { data: dataset } = useQuery({
     queryKey: ['dataset'],
@@ -181,7 +210,13 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
   const keysetCapableSort = useMemo(() => supportsKeysetPagination(activeSort), [activeSort]);
   const offsetOnlySort = useMemo(() => usesOffsetOnlySort(activeSort), [activeSort]);
 
-  const activeFilterChips = useMemo(() => expandFilterChips(activeFilters), [activeFilters]);
+  const activeFilterChips = useMemo(() => {
+    const chips = expandFilterChips(activeFilters);
+    if (tableType === 'rir' && rirMode) {
+      return chips.filter((chip) => chip.field !== 'resource_type');
+    }
+    return chips;
+  }, [activeFilters, tableType, rirMode]);
 
   const browseValidation = useMemo(
     () => validateBrowseQuery(tableType, sortJson, filtersJson),
@@ -231,7 +266,7 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery({
-    queryKey: ['table', tableType, 'infinite', sortJson, filtersJson],
+    queryKey: ['table', tableType, rirMode ?? '', 'infinite', sortJson, filtersJson],
     queryFn: ({ pageParam, signal }) =>
       fetchTableChunk(tableType, pageParam, sortJson, filtersJson, signal),
     initialPageParam: undefined as TablePageParam | undefined,
@@ -310,9 +345,13 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
 
   const applyFilters = useCallback(
     (nextFilters: TableFilter[]) => {
-      commitBrowseSearch(sortJson, JSON.stringify(nextFilters));
+      const locked =
+        tableType === 'rir' && rirMode
+          ? ensureRirResourceTypeFilter(nextFilters, rirMode)
+          : nextFilters;
+      commitBrowseSearch(sortJson, JSON.stringify(locked));
     },
-    [commitBrowseSearch, sortJson],
+    [commitBrowseSearch, sortJson, tableType, rirMode],
   );
 
   const setFieldError = useCallback((field: string, message: string | undefined) => {
@@ -360,13 +399,14 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
 
   const removeFilter = useCallback(
     (field: string, removeValue?: string) => {
+      if (tableType === 'rir' && rirMode && field === 'resource_type') return;
       if (removeValue != null) {
         applyFilters(removeMultiFilterValue(activeFilters, field, removeValue));
         return;
       }
       applyFilters(activeFilters.filter((f) => f.field !== field));
     },
-    [activeFilters, applyFilters],
+    [activeFilters, applyFilters, tableType, rirMode],
   );
 
   const handleSortingChange = (next: SortingState) => {
@@ -383,10 +423,10 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     queryClient.removeQueries({ queryKey: ['table'] });
     void navigate({
       to: browsePath,
-      search: DEFAULT_BROWSE_SEARCH,
+      search: defaultBrowseSearchFor(tableType, rirMode),
       replace: true,
     });
-  }, [browsePath, navigate, queryClient]);
+  }, [browsePath, navigate, queryClient, tableType, rirMode]);
 
   const loadMore = useCallback(() => {
     if (rowCapReached) return;
@@ -501,129 +541,20 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     }
 
     if (tableType === 'rir') {
-      return [
-        {
-          accessorKey: 'rangeText',
-          header: ui.filters.range_text,
-          meta: columnMeta(
-            'range_text',
-            <ColumnTextFilter
-              placeholder={ui.filters.range_text}
-              value={getTextFilterValue(activeFilters, 'range_text')}
-              onApply={(value) => applyTextFilter('range_text', value)}
-              onClear={() => clearTextFilter('range_text')}
-            />,
-          ),
-        },
-        {
-          accessorKey: 'resourceType',
-          header: ui.filters.resource_type,
-          meta: columnMeta(
-            'resource_type',
-            <ColumnFacetFilter
-              label={ui.filters.resource_type}
-              field="resource_type"
-              tableType="rir"
-              selectedValues={getMultiFilterValues(activeFilters, 'resource_type')}
-              contextFilters={facetContext('resource_type')}
-              compact
-              onChange={(values) =>
-                applyFilters(setMultiFilter(activeFilters, 'resource_type', values))
-              }
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'resource_type', []))}
-            />,
-          ),
-        },
-        {
-          accessorKey: 'prefixLen',
-          header: ui.filters.prefix_len,
-          meta: columnMeta('prefix_len', () => (
-            <ColumnTextFilter
-              placeholder={ui.filters.prefix_len}
-              value={getTextFilterValue(activeFilters, 'prefix_len')}
-              error={fieldErrors.prefix_len}
-              validate={(v) => validateTextFilterValue('prefix_len', v)}
-              onValidationError={(msg) => setFieldError('prefix_len', msg)}
-              onApply={(value) => applyTextFilter('prefix_len', value)}
-              onClear={() => clearTextFilter('prefix_len')}
-            />
-          )),
-        },
-        {
-          accessorKey: 'ipFamily',
-          header: ui.filters.ip_family,
-          meta: columnMeta(
-            'ip_family',
-            <ColumnFacetFilter
-              label={ui.filters.ip_family}
-              field="ip_family"
-              tableType="rir"
-              selectedValues={getMultiFilterValues(activeFilters, 'ip_family')}
-              contextFilters={facetContext('ip_family')}
-              compact
-              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'ip_family', values))}
-              onClear={() => applyFilters(setMultiFilter(activeFilters, 'ip_family', []))}
-            />,
-          ),
-        },
-        {
-          accessorKey: 'hostCount',
-          header: ui.filters.host_count,
-          meta: columnMeta(
-            'host_count',
-            <ColumnTextFilter
-              placeholder={ui.filters.host_count}
-              value={getTextFilterValue(activeFilters, 'host_count')}
-              onApply={(value) => applyTextFilter('host_count', value)}
-              onClear={() => clearTextFilter('host_count')}
-            />,
-          ),
-        },
-        {
-          accessorKey: 'network',
-          header: ui.filters.network,
-          meta: columnMeta(
-            'network',
-            <ColumnTextFilter
-              placeholder={ui.filters.network}
-              value={getTextFilterValue(activeFilters, 'network')}
-              onApply={(value) => applyTextFilter('network', value)}
-              onClear={() => clearTextFilter('network')}
-            />,
-          ),
-        },
-        {
-          accessorKey: 'startAsn',
-          header: ui.filters.start_asn,
-          meta: columnMeta('start_asn', () => (
-            <ColumnTextFilter
-              placeholder={ui.filters.start_asn}
-              inputMode="numeric"
-              value={getTextFilterValue(activeFilters, 'start_asn')}
-              error={fieldErrors.start_asn}
-              validate={(v) => validateTextFilterValue('start_asn', v)}
-              onValidationError={(msg) => setFieldError('start_asn', msg)}
-              onApply={(value) => applyTextFilter('start_asn', value)}
-              onClear={() => clearTextFilter('start_asn')}
-            />
-          )),
-        },
-        {
-          accessorKey: 'asnCount',
-          header: ui.filters.asn_count,
-          meta: columnMeta('asn_count', () => (
-            <ColumnTextFilter
-              placeholder={ui.filters.asn_count}
-              inputMode="numeric"
-              value={getTextFilterValue(activeFilters, 'asn_count')}
-              error={fieldErrors.asn_count}
-              validate={(v) => validateTextFilterValue('asn_count', v)}
-              onValidationError={(msg) => setFieldError('asn_count', msg)}
-              onApply={(value) => applyTextFilter('asn_count', value)}
-              onClear={() => clearTextFilter('asn_count')}
-            />
-          )),
-        },
+      const rangeCol: ColumnDef<TableBrowseRow> = {
+        accessorKey: 'rangeText',
+        header: ui.filters.range_text,
+        meta: columnMeta(
+          'range_text',
+          <ColumnTextFilter
+            placeholder={ui.filters.range_text}
+            value={getTextFilterValue(activeFilters, 'range_text')}
+            onApply={(value) => applyTextFilter('range_text', value)}
+            onClear={() => clearTextFilter('range_text')}
+          />,
+        ),
+      };
+      const sharedTail: ColumnDef<TableBrowseRow>[] = [
         {
           accessorKey: 'cc',
           header: ui.filters.cc,
@@ -701,6 +632,133 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
             />,
           ),
         },
+      ];
+
+      if (rirMode === 'asn') {
+        return [
+          rangeCol,
+          {
+            accessorKey: 'startAsn',
+            header: ui.filters.start_asn,
+            meta: columnMeta('start_asn', () => (
+              <ColumnTextFilter
+                placeholder={ui.filters.start_asn}
+                inputMode="numeric"
+                value={getTextFilterValue(activeFilters, 'start_asn')}
+                error={fieldErrors.start_asn}
+                validate={(v) => validateTextFilterValue('start_asn', v)}
+                onValidationError={(msg) => setFieldError('start_asn', msg)}
+                onApply={(value) => applyTextFilter('start_asn', value)}
+                onClear={() => clearTextFilter('start_asn')}
+              />
+            )),
+          },
+          {
+            accessorKey: 'asnCount',
+            header: ui.filters.asn_count,
+            meta: columnMeta('asn_count', () => (
+              <ColumnTextFilter
+                placeholder={ui.filters.asn_count}
+                inputMode="numeric"
+                value={getTextFilterValue(activeFilters, 'asn_count')}
+                error={fieldErrors.asn_count}
+                validate={(v) => validateTextFilterValue('asn_count', v)}
+                onValidationError={(msg) => setFieldError('asn_count', msg)}
+                onApply={(value) => applyTextFilter('asn_count', value)}
+                onClear={() => clearTextFilter('asn_count')}
+              />
+            )),
+          },
+          ...sharedTail,
+        ];
+      }
+
+      // RIR IP (ipv4/ipv6)
+      return [
+        rangeCol,
+        {
+          accessorKey: 'resourceType',
+          header: ui.filters.resource_type,
+          meta: columnMeta(
+            'resource_type',
+            <ColumnFacetFilter
+              label={ui.filters.resource_type}
+              field="resource_type"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'resource_type')}
+              contextFilters={facetContext('resource_type')}
+              compact
+              onChange={(values) => {
+                const next = values.filter((v) => v === 'ipv4' || v === 'ipv6');
+                applyFilters(
+                  setMultiFilter(activeFilters, 'resource_type', next.length ? next : ['ipv4', 'ipv6']),
+                );
+              }}
+              onClear={() =>
+                applyFilters(setMultiFilter(activeFilters, 'resource_type', ['ipv4', 'ipv6']))
+              }
+            />,
+          ),
+        },
+        {
+          accessorKey: 'prefixLen',
+          header: ui.filters.prefix_len,
+          meta: columnMeta('prefix_len', () => (
+            <ColumnTextFilter
+              placeholder={ui.filters.prefix_len}
+              value={getTextFilterValue(activeFilters, 'prefix_len')}
+              error={fieldErrors.prefix_len}
+              validate={(v) => validateTextFilterValue('prefix_len', v)}
+              onValidationError={(msg) => setFieldError('prefix_len', msg)}
+              onApply={(value) => applyTextFilter('prefix_len', value)}
+              onClear={() => clearTextFilter('prefix_len')}
+            />
+          )),
+        },
+        {
+          accessorKey: 'ipFamily',
+          header: ui.filters.ip_family,
+          meta: columnMeta(
+            'ip_family',
+            <ColumnFacetFilter
+              label={ui.filters.ip_family}
+              field="ip_family"
+              tableType="rir"
+              selectedValues={getMultiFilterValues(activeFilters, 'ip_family')}
+              contextFilters={facetContext('ip_family')}
+              compact
+              onChange={(values) => applyFilters(setMultiFilter(activeFilters, 'ip_family', values))}
+              onClear={() => applyFilters(setMultiFilter(activeFilters, 'ip_family', []))}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'hostCount',
+          header: ui.filters.host_count,
+          meta: columnMeta(
+            'host_count',
+            <ColumnTextFilter
+              placeholder={ui.filters.host_count}
+              value={getTextFilterValue(activeFilters, 'host_count')}
+              onApply={(value) => applyTextFilter('host_count', value)}
+              onClear={() => clearTextFilter('host_count')}
+            />,
+          ),
+        },
+        {
+          accessorKey: 'network',
+          header: ui.filters.network,
+          meta: columnMeta(
+            'network',
+            <ColumnTextFilter
+              placeholder={ui.filters.network}
+              value={getTextFilterValue(activeFilters, 'network')}
+              onApply={(value) => applyTextFilter('network', value)}
+              onClear={() => clearTextFilter('network')}
+            />,
+          ),
+        },
+        ...sharedTail,
       ];
     }
 
@@ -858,6 +916,7 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
     fieldErrors,
     setFieldError,
     tableType,
+    rirMode,
   ]);
 
   return (
@@ -899,14 +958,29 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
           </Link>
           <Link
             to="/browse/rir"
-            data-testid="browse-rir-tab"
-            search={DEFAULT_BROWSE_SEARCH}
+            data-testid="browse-rir-ip-tab"
+            search={defaultRirBrowseSearch('ip')}
             className={cn(
               'rounded px-3 py-1 transition-colors',
-              tableType === 'rir' ? 'bg-accent font-medium' : 'text-muted hover:text-foreground',
+              tableType === 'rir' && rirMode === 'ip'
+                ? 'bg-accent font-medium'
+                : 'text-muted hover:text-foreground',
             )}
           >
-            {ui.browse.rirTab}
+            {ui.browse.rirIpTab}
+          </Link>
+          <Link
+            to="/browse/rir-asn"
+            data-testid="browse-rir-asn-tab"
+            search={defaultRirBrowseSearch('asn')}
+            className={cn(
+              'rounded px-3 py-1 transition-colors',
+              tableType === 'rir' && rirMode === 'asn'
+                ? 'bg-accent font-medium'
+                : 'text-muted hover:text-foreground',
+            )}
+          >
+            {ui.browse.rirAsnTab}
           </Link>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

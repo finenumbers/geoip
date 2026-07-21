@@ -59,7 +59,14 @@ const browseCountryRoute = createRoute({
 const browseRirRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/browse/rir',
-  component: () => <BrowsePage tableType="rir" />,
+  component: () => <BrowsePage tableType="rir" rirMode="ip" />,
+  validateSearch: browseSearchSchema,
+});
+
+const browseRirAsnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/browse/rir-asn',
+  component: () => <BrowsePage tableType="rir" rirMode="asn" />,
   validateSearch: browseSearchSchema,
 });
 
@@ -109,6 +116,7 @@ const routeTree = rootRoute.addChildren([
   browseCountryRoute,
   browseAsnRoute,
   browseRirRoute,
+  browseRirAsnRoute,
   ccMismatchRoute,
   adminRoute,
   adminLoginRoute,
