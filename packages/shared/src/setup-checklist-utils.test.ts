@@ -6,7 +6,9 @@ const baseSteps: SetupChecklistResponse['steps'] = [
   { id: 'adminAccount', label: 'Admin', done: false },
   { id: 'externalLookupApiKey', label: 'API key', done: false },
   { id: 'grchcCredentials', label: 'GRChC', done: false },
-  { id: 'datasetImported', label: 'Import', done: false },
+  { id: 'datasetImported', label: 'Import GRChC', done: false },
+  { id: 'rirDatasetImported', label: 'Import RIR', done: false },
+  { id: 'autoImportsConfigured', label: 'Auto-imports', done: false },
   { id: 'googleMapsKey', label: 'Maps', done: false, optional: true },
 ];
 
@@ -28,7 +30,9 @@ describe('setup-checklist-utils', () => {
       { id: 'adminAccount', label: 'Admin', done: true },
       { id: 'externalLookupApiKey', label: 'API key', done: true },
       { id: 'grchcCredentials', label: 'GRChC', done: true },
-      { id: 'datasetImported', label: 'Import', done: true },
+      { id: 'datasetImported', label: 'Import GRChC', done: true },
+      { id: 'rirDatasetImported', label: 'Import RIR', done: true },
+      { id: 'autoImportsConfigured', label: 'Auto-imports', done: true },
       { id: 'googleMapsKey', label: 'Maps', done: false, optional: true },
     ];
     expect(isSetupComplete({ steps, blockingReady: true })).toBe(true);

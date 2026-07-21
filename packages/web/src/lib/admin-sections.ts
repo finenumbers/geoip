@@ -36,6 +36,11 @@ export function adminLinkForSetupStep(stepId: string, href?: string) {
       return { to: '/admin/setup-api-key' as const };
     case 'grchcCredentials':
       return { to: '/admin' as const, search: { section: 'grchc' as const } };
+    case 'datasetImported':
+    case 'rirDatasetImported':
+      return { to: '/admin' as const, search: { section: 'overview' as const } };
+    case 'autoImportsConfigured':
+      return { to: '/admin' as const, search: { section: 'general' as const } };
     case 'googleMapsKey':
       return { to: '/admin' as const, search: { section: 'integrations' as const } };
     default:

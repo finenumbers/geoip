@@ -44,7 +44,7 @@ export const runtimeSettingsSchema = z.object({
     .default({}),
   import: z
     .object({
-      enabled: z.boolean().default(true),
+      enabled: z.boolean().default(false),
       cron: z.string().min(1).default(FIXED_IMPORT_CRON),
       cronTimezone: z.string().default(FIXED_IMPORT_TIMEZONE),
       pollIntervalMs: z.number().int().positive().default(5000),
@@ -58,7 +58,7 @@ export const runtimeSettingsSchema = z.object({
     .default({}),
   rirImport: z
     .object({
-      enabled: z.boolean().default(true),
+      enabled: z.boolean().default(false),
       cron: z.string().min(1).default(FIXED_RIR_IMPORT_CRON),
       cronTimezone: z.string().default(FIXED_IMPORT_TIMEZONE),
     })

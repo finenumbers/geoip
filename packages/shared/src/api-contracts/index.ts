@@ -362,7 +362,15 @@ export const facetValuesResponseSchema = z.object({
 export type FacetValuesResponse = z.infer<typeof facetValuesResponseSchema>;
 
 export const setupChecklistStepSchema = z.object({
-  id: z.enum(['adminAccount', 'externalLookupApiKey', 'grchcCredentials', 'datasetImported', 'googleMapsKey']),
+  id: z.enum([
+    'adminAccount',
+    'externalLookupApiKey',
+    'grchcCredentials',
+    'datasetImported',
+    'rirDatasetImported',
+    'autoImportsConfigured',
+    'googleMapsKey',
+  ]),
   label: z.string(),
   done: z.boolean(),
   optional: z.boolean().optional(),

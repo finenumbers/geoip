@@ -96,6 +96,7 @@ export function AdminPage() {
       queryClient.setQueryData(['admin-config'], data);
       setMessage(ui.admin.saved);
       setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -158,6 +159,7 @@ export function AdminPage() {
       setError(null);
       void queryClient.invalidateQueries({ queryKey: ['admin-rir-status'] });
       void queryClient.invalidateQueries({ queryKey: ['rir-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -297,6 +299,9 @@ export function AdminPage() {
 
         {section === 'general' && (
           <Section title={ui.admin.sections.general}>
+            <HelpBox title={ui.setup.autoImportHelpTitle} className="mb-4">
+              <p>{ui.setup.autoImportHelpBody}</p>
+            </HelpBox>
             <Field label={ui.admin.displayTimezone}>
               <p className="text-xs text-muted">{ui.admin.displayTimezoneHint}</p>
               <select
@@ -766,9 +771,9 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
   const [geoipLkPassword, setGeoipLkPassword] = useState('');
   const [geoipLkBaseUrl, setGeoipLkBaseUrl] = useState('');
   const [displayTimezone, setDisplayTimezone] = useState(DEFAULT_DISPLAY_TIMEZONE);
-  const [importCronEnabled, setImportCronEnabled] = useState(true);
+  const [importCronEnabled, setImportCronEnabled] = useState(false);
   const [importCronTime, setImportCronTime] = useState('10:00');
-  const [rirImportCronEnabled, setRirImportCronEnabled] = useState(true);
+  const [rirImportCronEnabled, setRirImportCronEnabled] = useState(false);
   const [rirImportCronTime, setRirImportCronTime] = useState('06:00');
   const [zipCacheEnabled, setZipCacheEnabled] = useState(true);
   const [skipUnchanged, setSkipUnchanged] = useState(false);

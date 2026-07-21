@@ -14,7 +14,9 @@ const completeChecklist: SetupChecklistResponse = {
     { id: 'adminAccount', label: 'Admin', done: true },
     { id: 'externalLookupApiKey', label: 'API key', done: true },
     { id: 'grchcCredentials', label: 'GRChC', done: true },
-    { id: 'datasetImported', label: 'Import', done: true },
+    { id: 'datasetImported', label: 'Import GRChC', done: true },
+    { id: 'rirDatasetImported', label: 'Import RIR', done: true },
+    { id: 'autoImportsConfigured', label: 'Auto-imports', done: true },
     { id: 'googleMapsKey', label: 'Maps', done: false, optional: true },
   ],
 };
@@ -25,7 +27,9 @@ const pendingChecklist: SetupChecklistResponse = {
     { id: 'adminAccount', label: 'Admin', done: false, href: '/admin/setup' },
     { id: 'externalLookupApiKey', label: 'API key', done: false, href: '/admin/setup-api-key' },
     { id: 'grchcCredentials', label: 'GRChC', done: false, href: '/admin?section=grchc' },
-    { id: 'datasetImported', label: 'Import', done: false },
+    { id: 'datasetImported', label: 'Import GRChC', done: false, href: '/admin?section=overview' },
+    { id: 'rirDatasetImported', label: 'Import RIR', done: false, href: '/admin?section=overview' },
+    { id: 'autoImportsConfigured', label: 'Auto-imports', done: false, href: '/admin?section=general' },
     { id: 'googleMapsKey', label: 'Maps', done: false, optional: true },
   ],
 };

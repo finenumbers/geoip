@@ -17,9 +17,15 @@ vi.mock('../repositories/dataset-repository.js', () => ({
   getDatasetState: vi.fn(),
 }));
 
+vi.mock('../repositories/rir-repository.js', () => ({
+  isRirDatasetReady: vi.fn(),
+}));
+
 import { getDatasetState } from '../repositories/dataset-repository.js';
+import { isRirDatasetReady } from '../repositories/rir-repository.js';
 
 const mockGetDatasetState = vi.mocked(getDatasetState);
+const mockIsRirDatasetReady = vi.mocked(isRirDatasetReady);
 
 function configureAdminAndGrchc(): void {
   const config = loadRuntimeConfig();
@@ -39,6 +45,18 @@ function configureAdminAndGrchc(): void {
   });
 }
 
+function enableAutoImports(): void {
+  const config = loadRuntimeConfig();
+  persistRuntimeConfig(
+    {
+      ...config.settings,
+      import: { ...config.settings.import, enabled: true },
+      rirImport: { ...config.settings.rirImport, enabled: true },
+    },
+    config.secrets,
+  );
+}
+
 describe('setup-checklist', () => {
   let configDir: string;
   const masterKey = ensureGeneratedMasterKeyForTests();
@@ -56,7 +74,8 @@ describe('setup-checklist', () => {
       cityRowCount: 0,
       countryRowCount: 0,
       mvRefreshedAt: null,
-    });
+    } as Awaited<ReturnType<typeof getDatasetState>>);
+    mockIsRirDatasetReady.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -75,6 +94,10 @@ describe('setup-checklist', () => {
     expect(checklist.steps.find((s) => s.id === 'externalLookupApiKey')?.done).toBe(false);
     expect(checklist.steps.find((s) => s.id === 'grchcCredentials')?.done).toBe(false);
     expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(false);
+    expect(checklist.steps.find((s) => s.id === 'rirDatasetImported')?.done).toBe(false);
+    expect(checklist.steps.find((s) => s.id === 'autoImportsConfigured')?.done).toBe(false);
+    expect(loadRuntimeConfig().settings.import.enabled).toBe(false);
+    expect(loadRuntimeConfig().settings.rirImport.enabled).toBe(false);
   });
 
   it('marks admin and grchc done when configured', async () => {
@@ -87,7 +110,26 @@ describe('setup-checklist', () => {
     expect(checklist.blockingReady).toBe(false);
   });
 
-  it('marks blockingReady when dataset is imported', async () => {
+  it('marks blockingReady when datasets are imported and auto-imports are enabled', async () => {
+    configureAdminAndGrchc();
+    enableAutoImports();
+    mockGetDatasetState.mockResolvedValue({
+      datasetDate: '2026-06-20',
+      mvStatus: 'ready',
+      cityRowCount: 100,
+      countryRowCount: 10,
+      mvRefreshedAt: new Date().toISOString(),
+    } as Awaited<ReturnType<typeof getDatasetState>>);
+    mockIsRirDatasetReady.mockResolvedValue(true);
+
+    const checklist = await buildSetupChecklist();
+    expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(true);
+    expect(checklist.steps.find((s) => s.id === 'rirDatasetImported')?.done).toBe(true);
+    expect(checklist.steps.find((s) => s.id === 'autoImportsConfigured')?.done).toBe(true);
+    expect(checklist.blockingReady).toBe(true);
+  });
+
+  it('keeps blockingReady false until auto-imports are enabled', async () => {
     configureAdminAndGrchc();
     mockGetDatasetState.mockResolvedValue({
       datasetDate: '2026-06-20',
@@ -95,22 +137,27 @@ describe('setup-checklist', () => {
       cityRowCount: 100,
       countryRowCount: 10,
       mvRefreshedAt: new Date().toISOString(),
-    });
+    } as Awaited<ReturnType<typeof getDatasetState>>);
+    mockIsRirDatasetReady.mockResolvedValue(true);
 
     const checklist = await buildSetupChecklist();
     expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(true);
-    expect(checklist.blockingReady).toBe(true);
+    expect(checklist.steps.find((s) => s.id === 'rirDatasetImported')?.done).toBe(true);
+    expect(checklist.steps.find((s) => s.id === 'autoImportsConfigured')?.done).toBe(false);
+    expect(checklist.blockingReady).toBe(false);
   });
 
   it('marks dataset imported while MV is refreshing after restart', async () => {
     configureAdminAndGrchc();
+    enableAutoImports();
     mockGetDatasetState.mockResolvedValue({
       datasetDate: '2026-06-20',
       mvStatus: 'refreshing',
       cityRowCount: 100,
       countryRowCount: 10,
       mvRefreshedAt: new Date().toISOString(),
-    });
+    } as Awaited<ReturnType<typeof getDatasetState>>);
+    mockIsRirDatasetReady.mockResolvedValue(true);
 
     const checklist = await buildSetupChecklist();
     expect(checklist.steps.find((s) => s.id === 'datasetImported')?.done).toBe(true);

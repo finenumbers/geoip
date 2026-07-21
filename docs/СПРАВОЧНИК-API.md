@@ -83,7 +83,7 @@ Onboarding checklist (без auth).
 }
 ```
 
-Step IDs: `adminAccount`, `externalLookupApiKey`, `grchcCredentials`, `datasetImported`, `googleMapsKey`.
+Step IDs: `adminAccount`, `externalLookupApiKey`, `grchcCredentials`, `datasetImported`, `rirDatasetImported`, `autoImportsConfigured`, `googleMapsKey`.
 
 ---
 

@@ -25,7 +25,7 @@ Node.js · TypeScript · Fastify · PostgreSQL · React · Docker Compose · NGI
 
 | Документ | Описание |
 |----------|----------|
-| **[docs/БЫСТРЫЙ-СТАРТ.md](docs/БЫСТРЫЙ-СТАРТ.md)** | Первый запуск: 5 шагов onboarding, `/ready`, первый lookup |
+| **[docs/БЫСТРЫЙ-СТАРТ.md](docs/БЫСТРЫЙ-СТАРТ.md)** | Первый запуск: 7 шагов onboarding, `/ready`, первый lookup |
 | [docs/РАЗВЁРТЫВАНИЕ.md](docs/РАЗВЁРТЫВАНИЕ.md) | Portainer, Docker Compose CLI, volumes, backup, обновление |
 | [docs/ПЕРИМЕТР-И-HTTPS.md](docs/ПЕРИМЕТР-И-HTTPS.md) | NPM, HTTPS, Access List, External IP Lookup API |
 | [docs/АДМИНИСТРИРОВАНИЕ.md](docs/АДМИНИСТРИРОВАНИЕ.md) | Admin UI, config store, import, все секции настроек |
