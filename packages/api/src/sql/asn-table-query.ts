@@ -107,13 +107,14 @@ export function buildAsnTableQuery(options: {
   const sortDir = primarySort?.dir === 'desc' ? 'DESC' : 'ASC';
   const nulls = sortDir === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST';
 
-  if (options.afterId != null && primarySort && options.afterSortValue !== undefined) {
+  // Default sort is network even when sort=[]; always use (sortField, id) when cursor present.
+  if (options.afterId != null && options.afterSortValue !== undefined) {
     params.push(options.afterSortValue, options.afterId);
     const op = sortDir === 'DESC' ? '<' : '>';
     where.push(
       `(${sortField}::text, id) ${op} ($${params.length - 1}::text, $${params.length}::bigint)`,
     );
-  } else if (options.afterId != null && !primarySort) {
+  } else if (options.afterId != null) {
     params.push(options.afterId);
     where.push(`id > $${params.length}`);
   }

@@ -94,6 +94,36 @@ function rdapBaseForRegistry(registry: string): string {
   return RDAP_BASE[registry.toLowerCase()] ?? RDAP_BASE.ripe!;
 }
 
+/** Build RDAP /ip/... path. CIDR slash must stay unencoded (APNIC/ARIN reject %2F). */
+export function buildRdapIpPath(target: string): string {
+  const trimmed = target.trim();
+  if (!trimmed) return '/ip/';
+  const slash = trimmed.lastIndexOf('/');
+  if (slash > 0 && slash < trimmed.length - 1) {
+    const address = trimmed.slice(0, slash);
+    const prefix = trimmed.slice(slash + 1);
+    if (/^\d{1,3}$/.test(prefix)) {
+      return `/ip/${address}/${prefix}`;
+    }
+  }
+  // start-end range or bare address: use first token only
+  const start = trimmed.split('-')[0]?.trim() ?? trimmed;
+  return `/ip/${start}`;
+}
+
+export function formatRdapHttpError(status: number, registry: string): string {
+  if (status === 501) {
+    return 'RDAP IANA не отдаёт объекты IP/ASN для этого запроса';
+  }
+  if (status === 404) {
+    return 'В RDAP реестра нет объекта для этого диапазона (часто reserved/available)';
+  }
+  if (status === 400) {
+    return `RDAP ${registry}: некорректный запрос (HTTP 400)`;
+  }
+  return `HTTP ${status}`;
+}
+
 function summarizeRdap(payload: Record<string, unknown>): Record<string, unknown> {
   const entities = Array.isArray(payload.entities) ? payload.entities : [];
   const names: string[] = [];
@@ -128,6 +158,7 @@ function summarizeRdap(payload: Record<string, unknown>): Record<string, unknown
 async function fetchJson(
   url: string,
   fetchImpl: typeof fetch,
+  registry?: string,
 ): Promise<{ ok: true; json: Record<string, unknown> } | { ok: false; error: string }> {
   try {
     const res = await fetchImpl(url, {
@@ -135,7 +166,11 @@ async function fetchJson(
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
-      return { ok: false, error: `HTTP ${res.status}` };
+      const error =
+        registry != null
+          ? formatRdapHttpError(res.status, registry)
+          : `HTTP ${res.status}`;
+      return { ok: false, error };
     }
     const json = (await res.json()) as Record<string, unknown>;
     return { ok: true, json };
@@ -159,16 +194,16 @@ async function ensureRdap(
     resourceRef = String(req.startAsn);
     url = `${base}/autnum/${req.startAsn}`;
   } else {
-    const target = (req.network ?? req.rangeText.split('-')[0] ?? '').trim();
+    const target = (req.network ?? req.rangeText ?? '').trim();
     resourceRef = target;
-    url = `${base}/ip/${encodeURIComponent(target)}`;
+    url = `${base}${buildRdapIpPath(target)}`;
   }
 
   const cacheKey = `${kind}:${registry}:${resourceRef}`;
   const cached = await readCache(cacheKey);
   if (cached && !cached.stale && !cached.errorMessage) return cached;
 
-  const fetched = await fetchJson(url, fetchImpl);
+  const fetched = await fetchJson(url, fetchImpl, registry);
   if (!fetched.ok) {
     logger.warn({ url, error: fetched.error }, 'RDAP fetch failed');
     return writeCache(cacheKey, kind, registry, resourceRef, {}, fetched.error, RDAP_TTL_MS / 7);

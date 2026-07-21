@@ -38,6 +38,20 @@ describe('buildAsnTableQuery', () => {
     expect(built.params).toContain(20);
     expect(built.params).toContain(40);
   });
+
+  it('uses (network, id) keyset when sort is empty but cursor is set', () => {
+    const built = buildAsnTableQuery({
+      filters: [],
+      sort: [],
+      limit: 100,
+      offset: 0,
+      afterId: 42,
+      afterSortValue: '1.0.0.0/24',
+    });
+    expect(built.sql).toContain('(network::text, id)');
+    expect(built.sql).not.toMatch(/id > \$/);
+    expect(built.params).toEqual(['1.0.0.0/24', 42, 100]);
+  });
 });
 
 describe('buildAsnFacetQuery', () => {

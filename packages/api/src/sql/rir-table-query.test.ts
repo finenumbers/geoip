@@ -18,6 +18,21 @@ describe('buildRirTableQuery', () => {
     expect(built.countSql).toContain('COUNT(*)');
     expect(built.countParams).toEqual([['iana'], 'reserved']);
   });
+
+  it('uses (range_text, id) keyset when sort is empty but cursor is set', () => {
+    const built = buildRirTableQuery({
+      filters: [],
+      sort: [],
+      limit: 100,
+      offset: 0,
+      afterId: 1556,
+      afterSortValue: '1.0.0.0/24',
+    });
+    expect(built.sql).toContain('(range_text, id)');
+    expect(built.sql).not.toMatch(/id > \$/);
+    expect(built.params).toEqual(['1.0.0.0/24', 1556, 100]);
+    expect(built.countParams).toEqual([]);
+  });
 });
 
 describe('buildRirFacetQuery', () => {
