@@ -143,12 +143,6 @@ export function DashboardPage() {
     queryFn: api.rirStatus,
     refetchInterval: 30_000,
   });
-  const { data: geoMismatch } = useQuery({
-    queryKey: ['rir-geo-mismatch'],
-    queryFn: () => api.rirGeoMismatch(12),
-    refetchInterval: 120_000,
-    enabled: rirDatasetLoaded(rirStatus),
-  });
   const { data: snapshotHistory } = useQuery({
     queryKey: ['rir-snapshot-history'],
     queryFn: () => api.rirSnapshotHistory(8),
@@ -158,12 +152,6 @@ export function DashboardPage() {
   const { data: rirTransfers } = useQuery({
     queryKey: ['rir-transfers'],
     queryFn: () => api.rirTransfers(12),
-    refetchInterval: 120_000,
-    enabled: rirDatasetLoaded(rirStatus),
-  });
-  const { data: rpkiAdoption } = useQuery({
-    queryKey: ['rir-rpki-adoption'],
-    queryFn: () => api.rirRpkiAdoption(12),
     refetchInterval: 120_000,
     enabled: rirDatasetLoaded(rirStatus),
   });
@@ -434,42 +422,6 @@ export function DashboardPage() {
 
       {rirLoaded && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card title={ui.dashboard.rirGeoMismatch}>
-            <p className="mb-2 text-sm text-muted">{ui.dashboard.rirGeoMismatchHint}</p>
-            <SummaryDetails>
-              <DetailItem
-                label={ui.dashboard.rirGeoMismatchCount}
-                value={formatCount(geoMismatch?.mismatchCount)}
-              />
-              <DetailItem
-                label={ui.dashboard.rirSampleSize}
-                value={formatCount(geoMismatch?.sampleSize)}
-              />
-            </SummaryDetails>
-            {(geoMismatch?.sample.length ?? 0) > 0 && (
-              <table className="mt-3 w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted">
-                    <th className="py-1">Network</th>
-                    <th>Geo</th>
-                    <th>RIR</th>
-                    <th>Registry</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {geoMismatch!.sample.slice(0, 8).map((row) => (
-                    <tr key={`${row.network}-${row.geoCc}-${row.rirCc}`} className="border-b border-border">
-                      <td className="py-1 font-mono text-xs">{row.network}</td>
-                      <td>{row.geoCc ?? '—'}</td>
-                      <td>{row.rirCc ?? '—'}</td>
-                      <td>{row.registry ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-
           <Card title={ui.dashboard.rirSnapshotHistory}>
             {(snapshotHistory?.items.length ?? 0) === 0 ? (
               <p className="text-sm text-muted">{ui.dashboard.rirSnapshotHistoryEmpty}</p>
@@ -519,35 +471,6 @@ export function DashboardPage() {
                         {item.toOrg ?? '—'}
                       </td>
                       <td>{item.transferredAt ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-
-          <Card title={ui.dashboard.rirRpkiAdoption}>
-            {(rpkiAdoption?.items.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted">{ui.dashboard.rirRpkiEmpty}</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted">
-                    <th className="py-1">Economy</th>
-                    <th>Registry</th>
-                    <th>Metric</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rpkiAdoption!.items.slice(0, 10).map((item) => (
-                    <tr key={item.id} className="border-b border-border">
-                      <td className="py-1">{item.economy ?? '—'}</td>
-                      <td>{item.registry ?? '—'}</td>
-                      <td className="max-w-[10rem] truncate" title={item.metric}>
-                        {item.metric}
-                      </td>
-                      <td>{item.value ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

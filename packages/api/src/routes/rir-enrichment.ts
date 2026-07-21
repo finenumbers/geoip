@@ -1,12 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { enrichRirDelegation } from '../services/rir-enrichment-service.js';
-import {
-  getGeoRirCcMismatch,
-  listRirRpkiAdoption,
-  listRirSnapshotHistory,
-  listRirTransfers,
-} from '../services/rir-analytics-service.js';
+import { listRirSnapshotHistory, listRirTransfers } from '../services/rir-analytics-service.js';
 
 const enrichBodySchema = z.object({
   registry: z.string().min(1),
@@ -45,17 +40,6 @@ export async function registerRirEnrichmentRoutes(app: FastifyInstance): Promise
   );
 
   app.get(
-    '/api/v1/rir/analytics/geo-mismatch',
-    { preHandler: [app.verifyApiKeyIfEnabled] },
-    async (request) => {
-      const limit = z.coerce.number().int().min(1).max(100).optional().parse(
-        (request.query as { limit?: string }).limit,
-      );
-      return getGeoRirCcMismatch(limit ?? 20);
-    },
-  );
-
-  app.get(
     '/api/v1/rir/analytics/snapshot-history',
     { preHandler: [app.verifyApiKeyIfEnabled] },
     async (request) => {
@@ -74,17 +58,6 @@ export async function registerRirEnrichmentRoutes(app: FastifyInstance): Promise
         (request.query as { limit?: string }).limit,
       );
       return listRirTransfers(limit ?? 50);
-    },
-  );
-
-  app.get(
-    '/api/v1/rir/analytics/rpki-adoption',
-    { preHandler: [app.verifyApiKeyIfEnabled] },
-    async (request) => {
-      const limit = z.coerce.number().int().min(1).max(500).optional().parse(
-        (request.query as { limit?: string }).limit,
-      );
-      return listRirRpkiAdoption(limit ?? 100);
     },
   );
 }

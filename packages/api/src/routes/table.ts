@@ -5,6 +5,11 @@ import { queryTable } from '../services/table-service.js';
 import { getFacetValues } from '../services/facet-service.js';
 import { queryRirTable, getRirFacetValues } from '../services/rir-table-service.js';
 import { queryAsnTable, getAsnFacetValues } from '../services/asn-table-service.js';
+import {
+  getCcMismatchFacetValues,
+  getCcMismatchState,
+  queryCcMismatchTable,
+} from '../services/cc-mismatch-table-service.js';
 import { recordTableQueryMetric } from '../routes/metrics.js';
 import {
   defaultFacetField,
@@ -108,6 +113,67 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
     recordTableQueryStats(result, parsed.filters);
     return result;
   });
+
+  app.get(
+    '/api/v1/table/cc-mismatch',
+    { preHandler: [app.verifyApiKeyIfEnabled] },
+    async (request, reply) => {
+      const parsed = parseTableQueryInput(request.query as Record<string, unknown>);
+      if (!parsed.ok) {
+        return reply.status(422).send({
+          error: 'Validation error',
+          details: { formErrors: [], fieldErrors: { [parsed.path]: [parsed.error] } },
+        });
+      }
+      const result = await queryCcMismatchTable(parsed);
+      if ('error' in result) {
+        return reply.status(422).send({ error: 'Validation error', details: result.error });
+      }
+      recordTableQueryStats(result, parsed.filters);
+      return result;
+    },
+  );
+
+  app.get(
+    '/api/v1/table/cc-mismatch/state',
+    { preHandler: [app.verifyApiKeyIfEnabled] },
+    async () => getCcMismatchState(),
+  );
+
+  app.get(
+    '/api/v1/table/cc-mismatch/facet',
+    { preHandler: [app.verifyApiKeyIfEnabled] },
+    async (request, reply) => {
+      const q = request.query as {
+        field?: string;
+        search?: string;
+        limit?: string;
+        contextFilters?: string;
+      };
+      const field = q.field ?? 'grchc_cc';
+      const search = q.search ?? '';
+      const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 100);
+      let contextFilters: FilterClause[] = [];
+      if (q.contextFilters) {
+        const contextParsed = parseJsonArrayParam(q.contextFilters, 'contextFilters');
+        if (!contextParsed.ok) {
+          return reply.status(422).send({
+            error: 'Validation error',
+            details: {
+              formErrors: [],
+              fieldErrors: { [contextParsed.path]: [contextParsed.error] },
+            },
+          });
+        }
+        contextFilters = contextParsed.value as FilterClause[];
+      }
+      const result = await getCcMismatchFacetValues(field, search, limit, contextFilters);
+      if ('error' in result) {
+        return reply.status(422).send({ error: 'Validation error', details: result.error });
+      }
+      return result;
+    },
+  );
 
   app.get('/api/v1/table/metadata/facet', async (request, reply) => {
     const q = request.query as {

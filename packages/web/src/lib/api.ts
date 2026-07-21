@@ -122,19 +122,6 @@ export const api = {
         stale: boolean;
       } | null;
     }>('/rir/enrich', { method: 'POST', body: JSON.stringify(body) }),
-  rirGeoMismatch: (limit = 20) =>
-    request<{
-      mismatchCount: number;
-      sampleSize: number;
-      sampled: true;
-      sample: Array<{
-        network: string;
-        geoCc: string | null;
-        rirCc: string | null;
-        registry: string | null;
-        rangeText: string | null;
-      }>;
-    }>(`/rir/analytics/geo-mismatch?limit=${limit}`),
   rirSnapshotHistory: (limit = 20) =>
     request<{
       items: Array<{
@@ -163,19 +150,58 @@ export const api = {
         transferredAt: string | null;
       }>;
     }>(`/rir/analytics/transfers?limit=${limit}`),
-  rirRpkiAdoption: (limit = 100) =>
+  ccMismatchState: () =>
     request<{
-      items: Array<{
+      status: 'never' | 'running' | 'ready' | 'failed';
+      rowCount: number;
+      rebuiltAt: string | null;
+      durationMs: number | null;
+      lastError: string | null;
+    }>('/table/cc-mismatch/state'),
+  ccMismatchTable: (params: URLSearchParams, signal?: AbortSignal) =>
+    request<{
+      rows: Array<{
         id: number;
-        sourceFile: string;
-        economy: string | null;
+        countryBlockId: number;
+        network: string;
+        grchcCc: string;
+        rirCc: string;
         registry: string | null;
-        metric: string;
-        value: string | null;
-        snapshotDate: string | null;
-        importedAt: string;
+        rangeText: string | null;
+        rebuiltAt: string;
       }>;
-    }>(`/rir/analytics/rpki-adoption?limit=${limit}`),
+      pagination: {
+        page: number;
+        pageSize: number;
+        totalRows: number;
+        totalPages: number;
+      };
+      meta: {
+        queryMs: number;
+        paginationMode?: 'keyset' | 'offset';
+        nextCursor?: { afterId: number; afterSortValue?: string } | null;
+        rebuildStatus?: string;
+        rebuiltAt?: string | null;
+        rebuildError?: string | null;
+      };
+    }>(`/table/cc-mismatch?${params.toString()}`, { signal }),
+  ccMismatchFacet: (
+    field: string,
+    search = '',
+    limit = 50,
+    contextFilters: FilterClause[] = [],
+    signal?: AbortSignal,
+  ) => {
+    const params = new URLSearchParams({
+      field,
+      search,
+      limit: String(limit),
+    });
+    if (contextFilters.length > 0) {
+      params.set('contextFilters', JSON.stringify(contextFilters));
+    }
+    return request<FacetValuesResponse>(`/table/cc-mismatch/facet?${params.toString()}`, { signal });
+  },
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
   importById: (id: string) => request<ImportRun>(`/imports/${id}`),
   lookup: (

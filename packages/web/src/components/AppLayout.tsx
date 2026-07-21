@@ -7,6 +7,7 @@ import {
   Settings,
   Code2,
   ChevronDown,
+  GitCompareArrows,
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -37,6 +38,12 @@ const nav: NavItem[] = [
     label: ui.nav.table,
     icon: Table2,
     match: (pathname) => pathname.startsWith('/browse'),
+  },
+  {
+    to: '/cc-mismatch',
+    label: ui.nav.ccMismatch,
+    icon: GitCompareArrows,
+    match: (pathname) => pathname.startsWith('/cc-mismatch'),
   },
   {
     to: '/lookup',

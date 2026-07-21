@@ -383,10 +383,10 @@ export async function runRirImportPipeline(
       log.warn({ err }, 'RIR transfers enrichment skipped');
     }
     try {
-      const { importRirRpkiAdoption } = await import('./rir-rpki-import.js');
-      await importRirRpkiAdoption(log, fetchImpl);
+      const { rebuildGeoRirCcMismatches } = await import('./geo-rir-cc-mismatch-rebuild.js');
+      await rebuildGeoRirCcMismatches(log);
     } catch (err) {
-      log.warn({ err }, 'RPKI adoption enrichment skipped');
+      log.warn({ err }, 'GRChC≠RIR CC mismatch rebuild skipped');
     }
 
     log.info({ importRunId, rowCount: swapped.rowCount }, 'RIR import succeeded');

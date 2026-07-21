@@ -442,6 +442,13 @@ export async function runImportPipeline(importRunId: string, logger?: Logger): P
 
     await logImportBenchmarkSummary(importRunId, log);
     log.info({ datasetDate, totalCity, totalCountry, totalAsn, asnCounts }, 'Import succeeded');
+
+    try {
+      const { rebuildGeoRirCcMismatches } = await import('./geo-rir-cc-mismatch-rebuild.js');
+      await rebuildGeoRirCcMismatches(log);
+    } catch (err) {
+      log.warn({ err }, 'GRChC≠RIR CC mismatch rebuild skipped');
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ err }, 'Import failed');

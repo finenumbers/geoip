@@ -4,6 +4,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { LookupPage } from '@/pages/LookupPage';
 import { ApiDocsPage } from '@/pages/ApiDocsPage';
 import { BrowsePage } from '@/pages/BrowsePage';
+import { CcMismatchPage } from '@/pages/CcMismatchPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { AdminLoginPage } from '@/pages/AdminLoginPage';
 import { AdminSetupPage } from '@/pages/AdminSetupPage';
@@ -69,6 +70,12 @@ const browseAsnRoute = createRoute({
   validateSearch: browseSearchSchema,
 });
 
+const ccMismatchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/cc-mismatch',
+  component: CcMismatchPage,
+});
+
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
@@ -102,6 +109,7 @@ const routeTree = rootRoute.addChildren([
   browseCountryRoute,
   browseAsnRoute,
   browseRirRoute,
+  ccMismatchRoute,
   adminRoute,
   adminLoginRoute,
   adminSetupRoute,
