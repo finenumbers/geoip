@@ -269,6 +269,11 @@ export const ui = {
     rirProbeInProgress: 'Проверка RIR+IANA…',
     resetRirImport: 'Сбросить зависший импорт',
     resetRirImportDone: 'Зависший импорт RIR сброшен',
+    wipeData: 'Удалить данные',
+    wipeDataConfirm:
+      'Удалить все датасеты ГРЧЦ и RIR, историю импортов, экспорты и кэш? Это действие нельзя отменить.',
+    wipeDataDone: 'Данные удалены',
+    wipeDataHint: 'Полная очистка датасетов, истории импортов и экспортов. Конфигурация Admin сохранится.',
     rirActiveImport: 'Активный run',
     username: 'Логин',
     password: 'Пароль',

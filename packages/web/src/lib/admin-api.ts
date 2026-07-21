@@ -108,6 +108,15 @@ export const adminApi = {
     adminRequest<{ ok: boolean; clearedRuns: number }>('/rir/imports/reset', {
       method: 'POST',
     }),
+  wipeData: () =>
+    adminRequest<{
+      ok: boolean;
+      grchcImportRunsDeleted: number;
+      rirImportRunsDeleted: number;
+      exportJobsDeleted: number;
+      exportFilesRemoved: number;
+      zipCacheCleared: boolean;
+    }>('/data/wipe', { method: 'POST' }),
 };
 
 export type { AdminConfigResponse, AdminConfigPatch };

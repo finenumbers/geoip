@@ -184,6 +184,18 @@ export async function registerAdminOpsRoutes(app: FastifyInstance): Promise<void
     }
     return { ok: true, importRunId: result.importRunId };
   });
+
+  app.post('/api/v1/admin/data/wipe', { preHandler: [app.requireAdminSession] }, async (_request, reply) => {
+    try {
+      const { wipeAllDatasets } = await import('../services/admin-data-wipe.js');
+      return await wipeAllDatasets();
+    } catch (err) {
+      return reply.status(500).send({
+        error: 'DataWipeFailed',
+        message: err instanceof Error ? err.message : 'Не удалось удалить данные',
+      });
+    }
+  });
 }
 
 export async function registerPublicConfigRoutes(app: FastifyInstance): Promise<void> {

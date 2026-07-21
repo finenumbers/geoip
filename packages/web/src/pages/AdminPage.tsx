@@ -173,6 +173,25 @@ export function AdminPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const wipeData = useMutation({
+    mutationFn: adminApi.wipeData,
+    onSuccess: (data) => {
+      setMessage(
+        `${ui.admin.wipeDataDone}: GRChC runs ${data.grchcImportRunsDeleted}, RIR runs ${data.rirImportRunsDeleted}, exports ${data.exportJobsDeleted}`,
+      );
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-rir-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['rir-status'] });
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['status'] });
+    },
+    onError: (err: Error) => {
+      setMessage(null);
+      setError(err.message);
+    },
+  });
+
   const logout = useMutation({
     mutationFn: adminApi.logout,
     onSuccess: () => {
@@ -216,18 +235,6 @@ export function AdminPage() {
       </nav>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-auto pb-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold">{ui.admin.title}</h1>
-          </div>
-          {config.meta.updatedAt && (
-            <p className="text-xs text-muted">
-              {ui.admin.updatedAt}:{' '}
-              {formatDateTime(config.meta.updatedAt, config.settings.general.displayTimezone)}
-            </p>
-          )}
-        </div>
-
         {message && <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">{message}</p>}
         {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
@@ -263,6 +270,19 @@ export function AdminPage() {
                 loading={triggerRirImport.isPending}
               >
                 {ui.admin.triggerRirImport}
+              </ActionButton>
+            </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-muted">{ui.admin.wipeDataHint}</p>
+              <ActionButton
+                variant="danger"
+                loading={wipeData.isPending}
+                onClick={() => {
+                  if (!window.confirm(ui.admin.wipeDataConfirm)) return;
+                  wipeData.mutate();
+                }}
+              >
+                {ui.admin.wipeData}
               </ActionButton>
             </div>
             {reloadStatus && (
@@ -992,14 +1012,16 @@ function ActionButton({
   children: React.ReactNode;
   loading?: boolean;
   onClick: () => void;
-  variant?: 'secondary' | 'probe' | 'import';
+  variant?: 'secondary' | 'probe' | 'import' | 'danger';
 }) {
   const className =
     variant === 'probe'
       ? 'btn-probe'
       : variant === 'import'
         ? 'btn-import'
-        : 'btn-secondary rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50';
+        : variant === 'danger'
+          ? 'btn-danger'
+          : 'btn-secondary rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50';
   return (
     <button type="button" disabled={loading} className={className} onClick={onClick}>
       {children}
