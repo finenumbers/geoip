@@ -159,6 +159,8 @@ export const ui = {
     rirActiveDataset: 'Активный датасет RIR / IANA',
     rirDataVolume: 'Объем данных датасета RIR / IANA',
     rirTotalRows: 'Всего диапазонов',
+    rirCcMismatches: 'Расхождения ГРЧЦ ≠ RIR CC',
+    rirCcMismatchesRunning: 'Пересчёт…',
     rirRegistryRipencc: 'RIPE NCC',
     rirRegistryArin: 'ARIN',
     rirRegistryApnic: 'APNIC',

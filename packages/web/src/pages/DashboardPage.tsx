@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import type { ImportRun, RirDatasetStateResponse, RirImportRun } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
@@ -136,6 +137,11 @@ export function DashboardPage() {
     queryKey: ['rir-status'],
     queryFn: api.rirStatus,
     refetchInterval: 30_000,
+  });
+  const { data: ccMismatchState } = useQuery({
+    queryKey: ['cc-mismatch-state'],
+    queryFn: api.ccMismatchState,
+    refetchInterval: (q) => (q.state.data?.status === 'running' ? 5_000 : 60_000),
   });
   useEffect(() => {
     if (imports?.items.some((item) => item.status === 'succeeded')) {
@@ -361,6 +367,20 @@ export function DashboardPage() {
               <DetailItem
                 label={ui.dashboard.ipv4Addresses}
                 value={formatBigCount(rirStatus?.volumes?.ipv4Addresses)}
+              />
+              <DetailItem
+                label={
+                  <Link to="/cc-mismatch" className="text-muted underline-offset-2 hover:underline">
+                    {ui.dashboard.rirCcMismatches}
+                  </Link>
+                }
+                value={
+                  ccMismatchState?.status === 'ready'
+                    ? formatCount(ccMismatchState.rowCount)
+                    : ccMismatchState?.status === 'running'
+                      ? ui.dashboard.rirCcMismatchesRunning
+                      : '—'
+                }
               />
             </SummaryDetails>
           </div>
@@ -596,14 +616,16 @@ function DetailItem({
   title,
   valueClassName,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   title?: string;
   valueClassName?: string;
 }) {
   return (
     <>
-      <span className="text-muted">{label}:</span>
+      <span className="text-muted">
+        {label}:
+      </span>
       <span
         className={cn('min-w-0 truncate', valueClassName ?? 'text-foreground')}
         title={title}
