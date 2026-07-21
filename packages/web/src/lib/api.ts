@@ -122,34 +122,6 @@ export const api = {
         stale: boolean;
       } | null;
     }>('/rir/enrich', { method: 'POST', body: JSON.stringify(body) }),
-  rirSnapshotHistory: (limit = 20) =>
-    request<{
-      items: Array<{
-        id: number;
-        importRunId: string | null;
-        capturedAt: string;
-        lastSnapshotDate: string | null;
-        rowCount: number;
-        rowsByRegistry: Record<string, number>;
-        rowsByStatus: Record<string, number>;
-        snapshotsByRegistry: Record<string, string>;
-        ipv4AddressCount: string;
-        tableSizeBytes: number | null;
-      }>;
-    }>(`/rir/analytics/snapshot-history?limit=${limit}`),
-  rirTransfers: (limit = 50) =>
-    request<{
-      items: Array<{
-        id: number;
-        sourceRir: string;
-        transferId: string | null;
-        resourceType: string | null;
-        resourceRange: string;
-        fromOrg: string | null;
-        toOrg: string | null;
-        transferredAt: string | null;
-      }>;
-    }>(`/rir/analytics/transfers?limit=${limit}`),
   ccMismatchState: () =>
     request<{
       status: 'never' | 'running' | 'ready' | 'failed';

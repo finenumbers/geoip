@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { enrichRirDelegation } from '../services/rir-enrichment-service.js';
-import { listRirSnapshotHistory, listRirTransfers } from '../services/rir-analytics-service.js';
 
 const enrichBodySchema = z.object({
   registry: z.string().min(1),
@@ -36,28 +35,6 @@ export async function registerRirEnrichmentRoutes(app: FastifyInstance): Promise
           message: err instanceof Error ? err.message : 'Enrichment failed',
         });
       }
-    },
-  );
-
-  app.get(
-    '/api/v1/rir/analytics/snapshot-history',
-    { preHandler: [app.verifyApiKeyIfEnabled] },
-    async (request) => {
-      const limit = z.coerce.number().int().min(1).max(100).optional().parse(
-        (request.query as { limit?: string }).limit,
-      );
-      return listRirSnapshotHistory(limit ?? 20);
-    },
-  );
-
-  app.get(
-    '/api/v1/rir/analytics/transfers',
-    { preHandler: [app.verifyApiKeyIfEnabled] },
-    async (request) => {
-      const limit = z.coerce.number().int().min(1).max(200).optional().parse(
-        (request.query as { limit?: string }).limit,
-      );
-      return listRirTransfers(limit ?? 50);
     },
   );
 }

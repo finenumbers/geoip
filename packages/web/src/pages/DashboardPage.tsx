@@ -137,19 +137,6 @@ export function DashboardPage() {
     queryFn: api.rirStatus,
     refetchInterval: 30_000,
   });
-  const { data: snapshotHistory } = useQuery({
-    queryKey: ['rir-snapshot-history'],
-    queryFn: () => api.rirSnapshotHistory(8),
-    refetchInterval: 120_000,
-    enabled: rirDatasetLoaded(rirStatus),
-  });
-  const { data: rirTransfers } = useQuery({
-    queryKey: ['rir-transfers'],
-    queryFn: () => api.rirTransfers(12),
-    refetchInterval: 120_000,
-    enabled: rirDatasetLoaded(rirStatus),
-  });
-
   useEffect(() => {
     if (imports?.items.some((item) => item.status === 'succeeded')) {
       void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
@@ -379,66 +366,6 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
-
-      {rirLoaded && (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card title={ui.dashboard.rirSnapshotHistory}>
-            {(snapshotHistory?.items.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted">{ui.dashboard.rirSnapshotHistoryEmpty}</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted">
-                    <th className="py-1">{ui.dashboard.rirSnapshot}</th>
-                    <th>{ui.dashboard.rirRows}</th>
-                    <th>{ui.dashboard.colStarted}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshotHistory!.items.map((item) => (
-                    <tr key={item.id} className="border-b border-border">
-                      <td className="py-1">{item.lastSnapshotDate ?? '—'}</td>
-                      <td>{formatCount(item.rowCount)}</td>
-                      <td>{formatDateTime(item.capturedAt, rirDisplayTimezone)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-
-          <Card title={ui.dashboard.rirTransfers}>
-            {(rirTransfers?.items.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted">{ui.dashboard.rirTransfersEmpty}</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted">
-                    <th className="py-1">Range</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rirTransfers!.items.slice(0, 10).map((item) => (
-                    <tr key={item.id} className="border-b border-border">
-                      <td className="py-1 font-mono text-xs">{item.resourceRange}</td>
-                      <td className="max-w-[8rem] truncate" title={item.fromOrg ?? undefined}>
-                        {item.fromOrg ?? '—'}
-                      </td>
-                      <td className="max-w-[8rem] truncate" title={item.toOrg ?? undefined}>
-                        {item.toOrg ?? '—'}
-                      </td>
-                      <td>{item.transferredAt ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Card>
-        </div>
-      )}
 
       <Card title={ui.dashboard.recentImports}>
         <table className="w-full text-sm">
