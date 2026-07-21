@@ -104,6 +104,25 @@ export function AdminPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const testRir = useMutation({
+    mutationFn: adminApi.testRir,
+    onSuccess: (data) => {
+      const dates = [
+        ...new Set(
+          data.sources
+            .map((s) => s.snapshotDate)
+            .filter((d): d is string => Boolean(d)),
+        ),
+      ].join(', ');
+      const totalRows = data.sources.reduce((sum, s) => sum + (s.recordCount ?? 0), 0);
+      setMessage(
+        `${ui.admin.rirProbeOk}: ${data.reachableCount}/${data.sources.length}, ~${totalRows.toLocaleString('ru-RU')} строк, snapshot ${dates || '—'}`,
+      );
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const { data: rirStatus } = useQuery({
     queryKey: ['admin-rir-status'],
     queryFn: adminApi.rirStatus,
@@ -123,7 +142,7 @@ export function AdminPage() {
   const triggerRirImport = useMutation({
     mutationFn: adminApi.triggerRirImport,
     onSuccess: (data) => {
-      setMessage(`RIR import queued: ${data.importRunId}`);
+      setMessage(`${ui.admin.rirImportQueued}: ${data.importRunId}`);
       setError(null);
       void queryClient.invalidateQueries({ queryKey: ['admin-rir-status'] });
       void queryClient.invalidateQueries({ queryKey: ['rir-status'] });
@@ -197,8 +216,17 @@ export function AdminPage() {
               <ActionButton onClick={() => testGrchc.mutate()} loading={testGrchc.isPending}>
                 {ui.admin.testGrchc}
               </ActionButton>
+              <ActionButton onClick={() => testRir.mutate()} loading={testRir.isPending}>
+                {ui.admin.testRir}
+              </ActionButton>
               <ActionButton onClick={() => triggerImport.mutate()} loading={triggerImport.isPending}>
                 {ui.admin.triggerImport}
+              </ActionButton>
+              <ActionButton
+                onClick={() => triggerRirImport.mutate()}
+                loading={triggerRirImport.isPending}
+              >
+                {ui.admin.triggerRirImport}
               </ActionButton>
             </div>
             {reloadStatus && (
@@ -287,7 +315,7 @@ export function AdminPage() {
               onClick={() => triggerRirImport.mutate()}
               loading={triggerRirImport.isPending}
             >
-              {ui.rir.triggerImport}
+              {ui.admin.triggerRirImport}
             </ActionButton>
             <p className="mt-3 text-xs text-muted">
               Browse: <Link to="/browse/rir" search={{ sort: '[]', filters: '[]' }} className="underline">/browse/rir</Link>

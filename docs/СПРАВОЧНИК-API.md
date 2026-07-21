@@ -231,6 +231,15 @@ Probe ЛК ГРЧЦ без import.
 
 **Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `lastError`.
 
+### POST `/admin/rir/test`
+
+Probe доступности 6 delegated latest-файлов (5 RIR + IANA) без записи в БД.
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ "ok": true, "reachableCount": 6, "sources": [{ registry, sourceFile, httpStatus, ok, snapshotDate, recordCount, error }] }` |
+| 502 | `RirProbeFailed` (частичный `sources` в теле) |
+
 ### POST `/admin/rir/imports/trigger`
 
 Очередь импорта latest-файлов 5 RIR + IANA.

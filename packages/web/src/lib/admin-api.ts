@@ -70,6 +70,20 @@ export const adminApi = {
       '/config/test/grchc',
       { method: 'POST' },
     ),
+  testRir: () =>
+    adminRequest<{
+      ok: boolean;
+      reachableCount: number;
+      sources: Array<{
+        registry: string;
+        sourceFile: string;
+        httpStatus: number;
+        ok: boolean;
+        snapshotDate: string | null;
+        recordCount: number | null;
+        error: string | null;
+      }>;
+    }>('/rir/test', { method: 'POST' }),
   triggerImport: () =>
     adminRequest<{ ok: boolean; importRunId?: string }>('/imports/trigger', {
       method: 'POST',
