@@ -11,6 +11,8 @@ import type {
   MetricsResponse,
   ReadyResponse,
   RirDatasetStateResponse,
+  RirImportRun,
+  RirImportRunListResponse,
   SetupChecklistResponse,
   TableResponse,
 } from '@geoip/shared';
@@ -92,6 +94,8 @@ export const api = {
   externalIp: () => request<{ ip: string | null }>('/public/external-ip'),
   dataset: () => request<DatasetState>('/dataset/active'),
   rirStatus: () => request<RirDatasetStateResponse>('/rir/status'),
+  rirImports: (limit = 10) => request<RirImportRunListResponse>(`/rir/imports?limit=${limit}`),
+  rirImportById: (id: string) => request<RirImportRun>(`/rir/imports/${id}`),
   imports: (limit = 10) => request<ImportRunListResponse>(`/imports?limit=${limit}`),
   importById: (id: string) => request<ImportRun>(`/imports/${id}`),
   lookup: (

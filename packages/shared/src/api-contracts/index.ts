@@ -226,6 +226,11 @@ export const exportStatusResponseSchema = z.object({
   rowCount: z.number().nullable(),
 });
 
+export const rirDatasetVolumesSchema = z.object({
+  totalRows: z.number(),
+  ipv4Addresses: z.string(),
+});
+
 export const rirDatasetStateResponseSchema = z.object({
   status: z.enum(['ready', 'importing', 'failed', 'unavailable']),
   lastSuccessAt: z.string().datetime().nullable(),
@@ -235,9 +240,35 @@ export const rirDatasetStateResponseSchema = z.object({
   rowsByStatus: z.record(z.number()),
   snapshotsByRegistry: z.record(z.string()).default({}),
   lastError: z.string().nullable(),
+  activeImportRunId: z.string().uuid().nullable().optional(),
+  tableSizeBytes: z.number().nullable().optional(),
+  volumes: rirDatasetVolumesSchema.optional(),
+  nextImportAt: z.string().datetime().nullable().optional(),
+  displayTimezone: z.string().optional(),
+  serverNow: z.string().datetime().optional(),
 });
 
 export type RirDatasetStateResponse = z.infer<typeof rirDatasetStateResponseSchema>;
+
+export const rirImportRunSchema = z.object({
+  id: z.string().uuid(),
+  datasetDate: z.string().nullable(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed']),
+  triggeredBy: importTriggerSchema,
+  startedAt: z.string().datetime().nullable(),
+  finishedAt: z.string().datetime().nullable(),
+  errorCode: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  rowCount: z.number(),
+  steps: z.array(importRunStepSchema).optional(),
+});
+
+export const rirImportRunListSchema = z.object({
+  items: z.array(rirImportRunSchema),
+});
+
+export type RirImportRun = z.infer<typeof rirImportRunSchema>;
+export type RirImportRunListResponse = z.infer<typeof rirImportRunListSchema>;
 
 export const readyResponseSchema = z.object({
   status: z.enum(['ready', 'degraded', 'not_ready']),

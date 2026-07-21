@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ImportRun, RirDatasetStateResponse } from '@geoip/shared';
+import type { ImportRun, RirDatasetStateResponse, RirImportRun } from '@geoip/shared';
 import { api } from '@/lib/api';
 import { ui, importStatusLabel, importTriggerLabel } from '@/lib/ui-strings';
 import { QueryErrorNotice } from '@/components/QueryErrorNotice';
@@ -20,10 +20,35 @@ import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/format-datetime';
 import { DEFAULT_BROWSE_SEARCH } from '@/lib/table-query-state';
 import {
-  ianaSlice,
-  RIR_REGISTRY_IDS,
-  rirRegistriesSlice,
+  rirDatasetLoaded,
+  rirRegistryDetails,
+  RIR_DASHBOARD_REGISTRY_IDS,
 } from '@/lib/rir-dashboard-stats';
+
+type ImportPlane = 'grchc' | 'rir';
+
+type MergedImportRow = {
+  plane: ImportPlane;
+  id: string;
+  datasetDate: string | null;
+  status: string;
+  triggeredBy: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+type ImportDetailRun = {
+  id: string;
+  status: string;
+  errorMessage: string | null;
+  steps?: Array<{
+    name: string;
+    status: string;
+    durationMs: number | null;
+    rows: number | null;
+    message?: string | null;
+  }>;
+};
 
 function formatMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return '—';
@@ -65,7 +90,10 @@ function formatBytes(bytes: number | null | undefined): string {
 }
 
 export function DashboardPage() {
-  const [selectedImportId, setSelectedImportId] = useState<string | null>(null);
+  const [selectedImport, setSelectedImport] = useState<{
+    plane: ImportPlane;
+    id: string;
+  } | null>(null);
   const queryClient = useQueryClient();
 
   const {
@@ -98,6 +126,15 @@ export function DashboardPage() {
     refetchInterval: 15_000,
   });
   const {
+    data: rirImports,
+    isError: rirImportsError,
+    error: rirImportsErr,
+  } = useQuery({
+    queryKey: ['rir-imports'],
+    queryFn: () => api.rirImports(10),
+    refetchInterval: 15_000,
+  });
+  const {
     data: rirStatus,
     isError: rirStatusError,
     error: rirStatusErr,
@@ -113,17 +150,50 @@ export function DashboardPage() {
     }
   }, [imports?.items, queryClient]);
 
-  const rirSlice = useMemo(() => rirRegistriesSlice(rirStatus), [rirStatus]);
-  const iana = useMemo(() => ianaSlice(rirStatus), [rirStatus]);
+  const registryDetails = useMemo(() => rirRegistryDetails(rirStatus), [rirStatus]);
+  const rirLoaded = rirDatasetLoaded(rirStatus);
+
+  const mergedImports = useMemo((): MergedImportRow[] => {
+    const grchc: MergedImportRow[] = (imports?.items ?? []).map((run: ImportRun) => ({
+      plane: 'grchc' as const,
+      id: run.id,
+      datasetDate: run.datasetDate,
+      status: run.status,
+      triggeredBy: run.triggeredBy,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+    }));
+    const rir: MergedImportRow[] = (rirImports?.items ?? []).map((run: RirImportRun) => ({
+      plane: 'rir' as const,
+      id: run.id,
+      datasetDate: run.datasetDate,
+      status: run.status,
+      triggeredBy: run.triggeredBy,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+    }));
+    return [...grchc, ...rir].sort((a, b) => {
+      const at = a.startedAt ?? '';
+      const bt = b.startedAt ?? '';
+      return bt.localeCompare(at);
+    });
+  }, [imports?.items, rirImports?.items]);
+
   const {
     data: importDetail,
     isError: importDetailError,
     error: importDetailErr,
     isFetching: importDetailLoading,
   } = useQuery({
-    queryKey: ['import', selectedImportId],
-    queryFn: () => api.importById(selectedImportId!),
-    enabled: selectedImportId != null,
+    queryKey: ['import-detail', selectedImport?.plane, selectedImport?.id],
+    queryFn: async (): Promise<ImportDetailRun> => {
+      if (!selectedImport) throw new Error('No import selected');
+      if (selectedImport.plane === 'rir') {
+        return api.rirImportById(selectedImport.id);
+      }
+      return api.importById(selectedImport.id);
+    },
+    enabled: selectedImport != null,
   });
 
   const benchmark = metrics?.import.latestBenchmark;
@@ -133,18 +203,35 @@ export function DashboardPage() {
   const hasDatabaseVolume = Boolean(dataset?.databaseSizeBytes && dataset.databaseSizeBytes > 0);
   const mvStatus = metrics?.mvStatus ?? hookMvStatus;
   const volumes = dataset?.volumes;
-  const displayTimezone = dataset?.displayTimezone ?? DEFAULT_DISPLAY_TIMEZONE;
+  const displayTimezone =
+    dataset?.displayTimezone ?? rirStatus?.displayTimezone ?? DEFAULT_DISPLAY_TIMEZONE;
+  const rirDisplayTimezone = rirStatus?.displayTimezone ?? displayTimezone;
+  const hasRirVolume = Boolean(rirStatus?.tableSizeBytes && rirStatus.tableSizeBytes > 0);
 
-  const toggleImportDetail = (runId: string) => {
-    setSelectedImportId((current) => (current === runId ? null : runId));
+  const toggleImportDetail = (plane: ImportPlane, runId: string) => {
+    setSelectedImport((current) =>
+      current?.plane === plane && current.id === runId ? null : { plane, id: runId },
+    );
   };
 
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-auto">
       <SetupChecklistBanner />
-      {(datasetError || metricsError || importsError || importDetailError || rirStatusError) && (
+      {(datasetError ||
+        metricsError ||
+        importsError ||
+        rirImportsError ||
+        importDetailError ||
+        rirStatusError) && (
         <QueryErrorNotice
-          error={datasetErr ?? metricsErr ?? importsErr ?? importDetailErr ?? rirStatusErr}
+          error={
+            datasetErr ??
+            metricsErr ??
+            importsErr ??
+            rirImportsErr ??
+            importDetailErr ??
+            rirStatusErr
+          }
         />
       )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))] xl:grid-cols-[repeat(3,minmax(0,1fr))]">
@@ -200,34 +287,113 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <RirStatsCard
-          title={ui.dashboard.rirRegistries}
-          headlineRows={rirSlice.rowCount}
-          loaded={rirSlice.loaded}
-          state={rirStatus}
-          displayTimezone={displayTimezone}
-          registryOrder={[...RIR_REGISTRY_IDS]}
-          browseFilters={[{ field: 'registry', op: 'in', value: [...RIR_REGISTRY_IDS] }]}
-          testId="dashboard-rir-registries"
-        />
-        <RirStatsCard
-          title={ui.dashboard.ianaDelegated}
-          headlineRows={iana.rowCount}
-          loaded={iana.loaded}
-          state={rirStatus}
-          displayTimezone={displayTimezone}
-          registryOrder={['iana']}
-          browseFilters={[{ field: 'registry', op: 'in', value: ['iana'] }]}
-          testId="dashboard-iana"
-        />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(2,minmax(0,1fr))] xl:grid-cols-[repeat(3,minmax(0,1fr))]">
+        <Card title={ui.dashboard.rirRegistriesCard} summaryTitle>
+          <div data-testid="dashboard-rir-registries">
+            <SummaryHeadline className={rirImportStatusClass(rirStatus?.status, rirLoaded)}>
+              {rirLoaded ? formatCount(rirStatus?.rowCount) : ui.dashboard.rirNotLoaded}
+            </SummaryHeadline>
+            <SummaryDetails>
+              {registryDetails.map((reg) => (
+                <DetailItem
+                  key={reg.id}
+                  label={reg.label}
+                  value={`${formatCount(reg.rowCount)}${reg.snapshotDate ? ` · ${reg.snapshotDate}` : ''}`}
+                  title={
+                    reg.snapshotDate
+                      ? `${reg.label}: ${formatCount(reg.rowCount)} строк, снимок ${reg.snapshotDate}`
+                      : undefined
+                  }
+                />
+              ))}
+            </SummaryDetails>
+            <Link
+              to="/browse/rir"
+              search={{
+                ...DEFAULT_BROWSE_SEARCH,
+                filters: JSON.stringify([
+                  {
+                    field: 'registry',
+                    op: 'in',
+                    value: [...RIR_DASHBOARD_REGISTRY_IDS],
+                  },
+                ]),
+              }}
+              className="mt-3 inline-block text-sm text-primary hover:underline"
+            >
+              {ui.dashboard.rirBrowse}
+            </Link>
+          </div>
+        </Card>
+
+        <Card title={ui.dashboard.rirActiveDataset} summaryTitle>
+          <div data-testid="dashboard-rir-active-dataset">
+            <SummaryHeadline className={rirLoaded ? 'text-green-600' : 'text-red-600'}>
+              {rirStatus?.lastSnapshotDate ?? '—'}
+            </SummaryHeadline>
+            <SummaryDetails>
+              <DetailItem
+                label={ui.dashboard.rirImportStatus}
+                value={rirImportStatusLabel(rirStatus?.status)}
+                valueClassName={rirImportStatusClass(rirStatus?.status, rirLoaded)}
+              />
+              <DetailItem
+                label={ui.dashboard.activated}
+                value={formatDateTime(rirStatus?.lastSuccessAt, rirDisplayTimezone)}
+              />
+              <DetailItem
+                label={ui.dashboard.activeImport}
+                value={
+                  rirStatus?.activeImportRunId
+                    ? rirStatus.activeImportRunId.slice(0, 8)
+                    : '—'
+                }
+              />
+              <DetailItem
+                label={ui.dashboard.nextImport}
+                value={formatDateTime(rirStatus?.nextImportAt, rirDisplayTimezone)}
+              />
+              <DetailItem
+                label={ui.dashboard.serverTime}
+                value={formatDateTime(rirStatus?.serverNow, rirDisplayTimezone)}
+              />
+              {rirStatus?.lastError && (
+                <DetailItem
+                  label={ui.dashboard.rirLastError}
+                  value={rirStatus.lastError}
+                  title={rirStatus.lastError}
+                  valueClassName="text-red-600"
+                />
+              )}
+            </SummaryDetails>
+          </div>
+        </Card>
+
+        <Card title={ui.dashboard.rirDataVolume} summaryTitle>
+          <div data-testid="dashboard-rir-data-volume">
+            <SummaryHeadline className={hasRirVolume ? 'text-green-600' : 'text-red-600'}>
+              {formatBytes(rirStatus?.tableSizeBytes)}
+            </SummaryHeadline>
+            <SummaryDetails>
+              <DetailItem
+                label={ui.dashboard.rirTotalRows}
+                value={formatCount(rirStatus?.volumes?.totalRows ?? rirStatus?.rowCount)}
+              />
+              <DetailItem
+                label={ui.dashboard.ipv4Addresses}
+                value={formatBigCount(rirStatus?.volumes?.ipv4Addresses)}
+              />
+            </SummaryDetails>
+          </div>
+        </Card>
       </div>
 
       <Card title={ui.dashboard.recentImports}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted">
-              <th className="py-2">{ui.dashboard.colId}</th>
+              <th className="py-2">{ui.dashboard.colPlane}</th>
+              <th>{ui.dashboard.colId}</th>
               <th>{ui.dashboard.colDate}</th>
               <th>{ui.dashboard.colStatus}</th>
               <th>{ui.dashboard.colTrigger}</th>
@@ -237,9 +403,12 @@ export function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {(imports?.items ?? []).map((run: ImportRun) => (
-              <tr key={run.id} className="border-b border-border">
-                <td className="py-2 font-mono text-xs">{run.id.slice(0, 8)}</td>
+            {mergedImports.map((run) => (
+              <tr key={`${run.plane}-${run.id}`} className="border-b border-border">
+                <td className="py-2">
+                  {run.plane === 'rir' ? ui.dashboard.planeRir : ui.dashboard.planeGrchc}
+                </td>
+                <td className="font-mono text-xs">{run.id.slice(0, 8)}</td>
                 <td>{run.datasetDate ?? '—'}</td>
                 <td>{importStatusLabel(run.status)}</td>
                 <td>{importTriggerLabel(run.triggeredBy)}</td>
@@ -248,10 +417,12 @@ export function DashboardPage() {
                 <td className="text-right">
                   <button
                     type="button"
-                    onClick={() => toggleImportDetail(run.id)}
+                    onClick={() => toggleImportDetail(run.plane, run.id)}
                     className="text-primary hover:underline"
                   >
-                    {selectedImportId === run.id ? ui.dashboard.hideSteps : ui.dashboard.viewSteps}
+                    {selectedImport?.plane === run.plane && selectedImport.id === run.id
+                      ? ui.dashboard.hideSteps
+                      : ui.dashboard.viewSteps}
                   </button>
                 </td>
               </tr>
@@ -259,11 +430,11 @@ export function DashboardPage() {
           </tbody>
         </table>
 
-        {selectedImportId && (
+        {selectedImport && (
           <ImportDetailPanel
             run={importDetail}
             loading={importDetailLoading}
-            onClose={() => setSelectedImportId(null)}
+            onClose={() => setSelectedImport(null)}
           />
         )}
       </Card>
@@ -323,90 +494,12 @@ function rirImportStatusClass(
   return 'text-red-600';
 }
 
-function RirStatsCard({
-  title,
-  headlineRows,
-  loaded,
-  state,
-  displayTimezone,
-  registryOrder,
-  browseFilters,
-  testId,
-}: {
-  title: string;
-  headlineRows: number;
-  loaded: boolean;
-  state: RirDatasetStateResponse | undefined;
-  displayTimezone: string;
-  registryOrder: string[];
-  browseFilters: Array<{ field: string; op: 'in'; value: string[] }>;
-  testId: string;
-}) {
-  const browseSearch = {
-    ...DEFAULT_BROWSE_SEARCH,
-    filters: JSON.stringify(browseFilters),
-  };
-
-  return (
-    <Card title={title} summaryTitle>
-      <div data-testid={testId}>
-        <SummaryHeadline className={rirImportStatusClass(state?.status, loaded)}>
-          {loaded ? formatCount(headlineRows) : ui.dashboard.rirNotLoaded}
-        </SummaryHeadline>
-        <SummaryDetails>
-          <DetailItem
-            label={ui.dashboard.rirImportStatus}
-            value={rirImportStatusLabel(state?.status)}
-            valueClassName={rirImportStatusClass(state?.status, loaded)}
-          />
-          <DetailItem
-            label={ui.dashboard.rirSnapshot}
-            value={state?.lastSnapshotDate ?? '—'}
-          />
-          <DetailItem
-            label={ui.dashboard.rirLastSuccess}
-            value={formatDateTime(state?.lastSuccessAt, displayTimezone)}
-          />
-          <DetailItem label={ui.dashboard.rirRows} value={formatCount(headlineRows)} />
-          {state?.lastError && (
-            <DetailItem
-              label={ui.dashboard.rirLastError}
-              value={state.lastError}
-              title={state.lastError}
-              valueClassName="text-red-600"
-            />
-          )}
-        </SummaryDetails>
-        <div className="mt-3 space-y-1 text-sm">
-          <p className="text-muted">{ui.dashboard.rirByRegistry}</p>
-          <div className="grid grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)] gap-x-3 gap-y-0.5">
-            {registryOrder.map((id) => (
-              <DetailItem
-                key={id}
-                label={id}
-                value={formatCount(state?.rowsByRegistry[id] ?? 0)}
-              />
-            ))}
-          </div>
-        </div>
-        <Link
-          to="/browse/rir"
-          search={browseSearch}
-          className="mt-3 inline-block text-sm text-primary hover:underline"
-        >
-          {ui.dashboard.rirBrowse}
-        </Link>
-      </div>
-    </Card>
-  );
-}
-
 function ImportDetailPanel({
   run,
   loading,
   onClose,
 }: {
-  run: ImportRun | undefined;
+  run: ImportDetailRun | undefined;
   loading: boolean;
   onClose: () => void;
 }) {

@@ -39,7 +39,8 @@ describe('isExportOverRowLimit', () => {
 
 describe('formatExportRowLimitBlocked', () => {
   it('mentions admin export settings', () => {
-    expect(formatExportRowLimitBlocked(10_556_198, 5_000_000)).toContain('Admin → Export');
+    expect(formatExportRowLimitBlocked(10_556_198, 5_000_000)).toContain('Admin');
+    expect(formatExportRowLimitBlocked(10_556_198, 5_000_000)).not.toContain('Admin → Export');
   });
 });
 

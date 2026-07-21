@@ -6,7 +6,10 @@ import { from as copyFrom } from 'pg-copy-streams';
 import type { Logger } from 'pino';
 import type pg from 'pg';
 import { RIR_DELEGATED_SOURCES } from '@geoip/shared';
-import { withDirectPoolClient, query } from '../db/client.js';
+import { eq } from 'drizzle-orm';
+import { getDb, withDirectPoolClient, query } from '../db/client.js';
+import { rirImportRunSteps } from '../db/schema.js';
+import { computeRirDatasetVolumes } from '../repositories/rir-repository.js';
 import { fetchRirSourceResponse } from './rir-delegated-client.js';
 import { tryAcquireRirImportLock, releaseRirImportLock } from './rir-import-lock.js';
 import {
@@ -52,13 +55,15 @@ export function recordToCopyLine(rec: ParsedRirRecord): string {
   ].join('\t');
 }
 
-/** Contiguous $1..$5 — avoids PG "could not determine data type of parameter $1". */
+/** Contiguous $1..$7 — avoids PG "could not determine data type of parameter $1". */
 export function buildRirDatasetReadyUpdate(swapped: {
   snapshotDate: string | null;
   rowCount: number;
   rowsByRegistry: Record<string, number>;
   rowsByStatus: Record<string, number>;
   snapshotsByRegistry: Record<string, string>;
+  ipv4Addresses: string;
+  tableSizeBytes: number;
 }): { sql: string; params: unknown[] } {
   return {
     sql: `UPDATE rir_dataset_state
@@ -69,6 +74,8 @@ export function buildRirDatasetReadyUpdate(swapped: {
            rows_by_registry = $3::jsonb,
            rows_by_status = $4::jsonb,
            snapshots_by_registry = $5::jsonb,
+           ipv4_address_count = $6::numeric,
+           table_size_bytes = $7::bigint,
            last_error = NULL,
            active_import_run_id = NULL,
            updated_at = NOW()
@@ -79,8 +86,49 @@ export function buildRirDatasetReadyUpdate(swapped: {
       JSON.stringify(swapped.rowsByRegistry),
       JSON.stringify(swapped.rowsByStatus),
       JSON.stringify(swapped.snapshotsByRegistry),
+      swapped.ipv4Addresses,
+      swapped.tableSizeBytes,
     ],
   };
+}
+
+export async function recordRirStep(
+  importRunId: string,
+  name: string,
+  status: 'running' | 'succeeded' | 'failed',
+  extra?: { durationMs?: number; rows?: number; message?: string },
+): Promise<number> {
+  const db = getDb();
+  const now = new Date();
+
+  if (status === 'running') {
+    const [step] = await db
+      .insert(rirImportRunSteps)
+      .values({ importRunId, name, status, startedAt: now })
+      .returning({ id: rirImportRunSteps.id });
+    return step?.id ?? 0;
+  }
+
+  const steps = await db
+    .select()
+    .from(rirImportRunSteps)
+    .where(eq(rirImportRunSteps.importRunId, importRunId));
+
+  const step = steps.find((s) => s.name === name);
+  if (!step) return 0;
+
+  await db
+    .update(rirImportRunSteps)
+    .set({
+      status,
+      finishedAt: now,
+      durationMs: extra?.durationMs,
+      rows: extra?.rows,
+      message: extra?.message,
+    })
+    .where(eq(rirImportRunSteps.id, step.id));
+
+  return step.id;
 }
 
 async function* linesFromResponse(res: Response): AsyncGenerator<string> {
@@ -261,8 +309,29 @@ export async function runRirImportPipeline(
       [importRunId],
     );
 
+    let stepStart = Date.now();
+    let currentStep = 'load_sources';
+    await recordRirStep(importRunId, currentStep, 'running');
     const rowsByFile = await loadAllSourcesToStaging(log, fetchImpl);
+    const loadRows = Object.values(rowsByFile).reduce((sum, n) => sum + n, 0);
+    await recordRirStep(importRunId, currentStep, 'succeeded', {
+      durationMs: Date.now() - stepStart,
+      rows: loadRows,
+    });
+
+    stepStart = Date.now();
+    currentStep = 'swap';
+    await recordRirStep(importRunId, currentStep, 'running');
     const swapped = await swapStagingToProduction(log);
+    await recordRirStep(importRunId, currentStep, 'succeeded', {
+      durationMs: Date.now() - stepStart,
+      rows: swapped.rowCount,
+    });
+
+    stepStart = Date.now();
+    currentStep = 'finalize';
+    await recordRirStep(importRunId, currentStep, 'running');
+    const volumes = await computeRirDatasetVolumes();
 
     await query(
       `UPDATE rir_import_runs
@@ -274,12 +343,30 @@ export async function runRirImportPipeline(
        WHERE id = $1::uuid`,
       [importRunId, swapped.rowCount, JSON.stringify(rowsByFile), swapped.snapshotDate],
     );
-    const readyUpdate = buildRirDatasetReadyUpdate(swapped);
+    const readyUpdate = buildRirDatasetReadyUpdate({
+      ...swapped,
+      ipv4Addresses: volumes.ipv4Addresses,
+      tableSizeBytes: volumes.tableSizeBytes,
+    });
     await query(readyUpdate.sql, readyUpdate.params);
+    await recordRirStep(importRunId, currentStep, 'succeeded', {
+      durationMs: Date.now() - stepStart,
+      rows: swapped.rowCount,
+    });
     log.info({ importRunId, rowCount: swapped.rowCount }, 'RIR import succeeded');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error({ err, importRunId }, 'RIR import failed');
+    try {
+      await query(
+        `UPDATE rir_import_run_steps
+         SET status = 'failed', finished_at = NOW(), message = $2
+         WHERE import_run_id = $1::uuid AND status = 'running'`,
+        [importRunId, message],
+      );
+    } catch {
+      // best-effort step failure mark
+    }
     await query(
       `UPDATE rir_import_runs
        SET status = 'failed', finished_at = NOW(), error_code = 'import_failed', error_message = $2

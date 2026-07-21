@@ -1,4 +1,6 @@
-import { query } from '../db/client.js';
+import { desc, eq } from 'drizzle-orm';
+import { getDb, query } from '../db/client.js';
+import { rirImportRunSteps, rirImportRuns } from '../db/schema.js';
 
 export type RirDatasetState = {
   status: 'ready' | 'importing' | 'failed' | 'unavailable';
@@ -10,11 +12,35 @@ export type RirDatasetState = {
   snapshotsByRegistry: Record<string, string>;
   lastError: string | null;
   activeImportRunId: string | null;
+  tableSizeBytes: number | null;
+  volumes: {
+    totalRows: number;
+    ipv4Addresses: string;
+  };
 };
 
 export type RirImportRunRef = {
   id: string;
   status: 'queued' | 'running' | 'succeeded' | 'failed';
+};
+
+export type RirImportRun = {
+  id: string;
+  datasetDate: string | null;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  triggeredBy: 'manual' | 'cron' | 'api';
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  rowCount: number;
+  steps?: Array<{
+    name: string;
+    status: 'pending' | 'running' | 'succeeded' | 'failed';
+    durationMs: number | null;
+    rows: number | null;
+    message: string | null;
+  }>;
 };
 
 function asRecord(value: unknown): Record<string, number> {
@@ -60,6 +86,43 @@ async function loadSnapshotsByRegistry(stored: unknown): Promise<Record<string, 
   return out;
 }
 
+/** Compute IPv4 address total and table size for rir_delegations. */
+export async function computeRirDatasetVolumes(): Promise<{
+  ipv4Addresses: string;
+  tableSizeBytes: number;
+}> {
+  const [ipv4Result, sizeResult] = await Promise.all([
+    query<{ total: string }>(
+      `SELECT COALESCE(SUM(host_count), 0)::text AS total
+       FROM rir_delegations
+       WHERE resource_type = 'ipv4'`,
+    ),
+    query<{ size: string }>(
+      `SELECT pg_total_relation_size('rir_delegations')::text AS size`,
+    ),
+  ]);
+  return {
+    ipv4Addresses: ipv4Result.rows[0]?.total ?? '0',
+    tableSizeBytes: Number(sizeResult.rows[0]?.size ?? 0) || 0,
+  };
+}
+
+async function backfillRirVolumesIfNeeded(): Promise<{
+  ipv4Addresses: string;
+  tableSizeBytes: number;
+}> {
+  const volumes = await computeRirDatasetVolumes();
+  await query(
+    `UPDATE rir_dataset_state
+     SET ipv4_address_count = $1::numeric,
+         table_size_bytes = $2::bigint,
+         updated_at = NOW()
+     WHERE id = 1`,
+    [volumes.ipv4Addresses, volumes.tableSizeBytes],
+  );
+  return volumes;
+}
+
 export async function getRirDatasetState(): Promise<RirDatasetState> {
   const result = await query<{
     status: RirDatasetState['status'];
@@ -71,6 +134,8 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
     snapshots_by_registry: unknown;
     last_error: string | null;
     active_import_run_id: string | null;
+    ipv4_address_count: string | null;
+    table_size_bytes: string | number | null;
   }>('SELECT * FROM rir_dataset_state WHERE id = 1');
 
   const row = result.rows[0];
@@ -85,25 +150,98 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
       snapshotsByRegistry: {},
       lastError: null,
       activeImportRunId: null,
+      tableSizeBytes: null,
+      volumes: { totalRows: 0, ipv4Addresses: '0' },
     };
+  }
+
+  const rowCount = Number(row.row_count);
+  let tableSizeBytes =
+    row.table_size_bytes != null ? Number(row.table_size_bytes) : null;
+  let ipv4Addresses = row.ipv4_address_count ?? '0';
+
+  if (rowCount > 0 && tableSizeBytes == null) {
+    const filled = await backfillRirVolumesIfNeeded();
+    ipv4Addresses = filled.ipv4Addresses;
+    tableSizeBytes = filled.tableSizeBytes;
   }
 
   return {
     status: row.status,
     lastSuccessAt: row.last_success_at ? new Date(row.last_success_at).toISOString() : null,
     lastSnapshotDate: row.last_snapshot_date,
-    rowCount: Number(row.row_count),
+    rowCount,
     rowsByRegistry: asRecord(row.rows_by_registry),
     rowsByStatus: asRecord(row.rows_by_status),
     snapshotsByRegistry: await loadSnapshotsByRegistry(row.snapshots_by_registry),
     lastError: row.last_error,
     activeImportRunId: row.active_import_run_id,
+    tableSizeBytes,
+    volumes: {
+      totalRows: rowCount,
+      ipv4Addresses,
+    },
   };
 }
 
 export async function isRirDatasetReady(): Promise<boolean> {
   const state = await getRirDatasetState();
   return state.status === 'ready' && state.rowCount > 0;
+}
+
+export async function listRirImportRuns(limit = 10): Promise<{ items: RirImportRun[] }> {
+  const db = getDb();
+  const capped = Math.min(Math.max(limit, 1), 100);
+  const items = await db
+    .select()
+    .from(rirImportRuns)
+    .orderBy(desc(rirImportRuns.startedAt), desc(rirImportRuns.queuedAt))
+    .limit(capped);
+
+  return {
+    items: items.map((run) => ({
+      id: run.id,
+      datasetDate: run.snapshotDate ?? null,
+      status: run.status,
+      triggeredBy: run.triggeredBy,
+      startedAt: run.startedAt?.toISOString() ?? null,
+      finishedAt: run.finishedAt?.toISOString() ?? null,
+      errorCode: run.errorCode,
+      errorMessage: run.errorMessage,
+      rowCount: run.rowCount,
+    })),
+  };
+}
+
+export async function getRirImportRunById(id: string): Promise<RirImportRun | null> {
+  const db = getDb();
+  const [run] = await db.select().from(rirImportRuns).where(eq(rirImportRuns.id, id)).limit(1);
+  if (!run) return null;
+
+  const steps = await db
+    .select()
+    .from(rirImportRunSteps)
+    .where(eq(rirImportRunSteps.importRunId, id))
+    .orderBy(rirImportRunSteps.id);
+
+  return {
+    id: run.id,
+    datasetDate: run.snapshotDate ?? null,
+    status: run.status,
+    triggeredBy: run.triggeredBy,
+    startedAt: run.startedAt?.toISOString() ?? null,
+    finishedAt: run.finishedAt?.toISOString() ?? null,
+    errorCode: run.errorCode,
+    errorMessage: run.errorMessage,
+    rowCount: run.rowCount,
+    steps: steps.map((s) => ({
+      name: s.name,
+      status: s.status,
+      durationMs: s.durationMs,
+      rows: s.rows,
+      message: s.message,
+    })),
+  };
 }
 
 export async function getBlockingRirImport(): Promise<RirImportRunRef | null> {

@@ -87,22 +87,28 @@ describe('recordToCopyLine', () => {
 });
 
 describe('buildRirDatasetReadyUpdate', () => {
-  it('uses contiguous $1..$5 placeholders with typed casts', () => {
+  it('uses contiguous $1..$7 placeholders with typed casts', () => {
     const { sql, params } = buildRirDatasetReadyUpdate({
       snapshotDate: '2026-07-20',
       rowCount: 3,
       rowsByRegistry: { iana: 1, apnic: 2 },
       rowsByStatus: { reserved: 1 },
       snapshotsByRegistry: { iana: '2026-07-20', apnic: '2026-07-20' },
+      ipv4Addresses: '1024',
+      tableSizeBytes: 4096,
     });
     const placeholders = [...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1]));
-    expect(placeholders).toEqual([1, 2, 3, 4, 5]);
+    expect(placeholders).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(sql).toContain('$1::date');
     expect(sql).toContain('$2::bigint');
     expect(sql).toContain('$5::jsonb');
-    expect(params).toHaveLength(5);
+    expect(sql).toContain('$6::numeric');
+    expect(sql).toContain('$7::bigint');
+    expect(params).toHaveLength(7);
     expect(params[0]).toBe('2026-07-20');
     expect(params[1]).toBe(3);
+    expect(params[5]).toBe('1024');
+    expect(params[6]).toBe(4096);
   });
 });
 

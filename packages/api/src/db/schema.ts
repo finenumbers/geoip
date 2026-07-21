@@ -237,6 +237,20 @@ export const rirImportRuns = pgTable('rir_import_runs', {
   snapshotDate: date('snapshot_date'),
 });
 
+export const rirImportRunSteps = pgTable('rir_import_run_steps', {
+  id: serial('id').primaryKey(),
+  importRunId: uuid('import_run_id')
+    .notNull()
+    .references(() => rirImportRuns.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  status: stepStatusEnum('status').notNull().default('pending'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  durationMs: integer('duration_ms'),
+  rows: integer('rows'),
+  message: text('message'),
+});
+
 export const rirDatasetState = pgTable('rir_dataset_state', {
   id: integer('id').primaryKey().default(1),
   status: rirDatasetStatusEnum('status').notNull().default('unavailable'),
@@ -246,6 +260,8 @@ export const rirDatasetState = pgTable('rir_dataset_state', {
   rowsByRegistry: jsonb('rows_by_registry').notNull().default(sql`'{}'::jsonb`),
   rowsByStatus: jsonb('rows_by_status').notNull().default(sql`'{}'::jsonb`),
   snapshotsByRegistry: jsonb('snapshots_by_registry').notNull().default(sql`'{}'::jsonb`),
+  ipv4AddressCount: numeric('ipv4_address_count', { precision: 50, scale: 0 }).notNull().default('0'),
+  tableSizeBytes: bigint('table_size_bytes', { mode: 'number' }),
   lastError: text('last_error'),
   activeImportRunId: uuid('active_import_run_id').references(() => rirImportRuns.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
