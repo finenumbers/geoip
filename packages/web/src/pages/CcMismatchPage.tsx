@@ -7,14 +7,27 @@ import { ui } from '@/lib/ui-strings';
 import { DataTable } from '@/components/DataTable';
 import { ColumnTextFilter } from '@/components/ColumnTextFilter';
 import { ColumnFacetFilter } from '@/components/ColumnFacetFilter';
+import { ActiveFiltersBar } from '@/components/ActiveFiltersBar';
 import { formatDateTime } from '@/lib/format-datetime';
 import {
+  expandFilterChips,
   getMultiFilterValues,
   getTextFilterValue,
+  removeMultiFilterValue,
   setMultiFilter,
   setTextFilter,
   type TableFilter,
 } from '@/lib/browse-filters';
+
+const FILTER_CHIP_LABELS: Record<string, string> = {
+  network: ui.ccMismatch.network,
+  range_text: ui.ccMismatch.rangeText,
+  asn: ui.ccMismatch.asn,
+  asn_org: ui.ccMismatch.asnOrg,
+  grchc_cc: ui.ccMismatch.grchcCc,
+  rir_cc: ui.ccMismatch.rirCc,
+  registry: ui.ccMismatch.registry,
+};
 
 const PAGE_SIZE = 100;
 const MAX_LOADED_ROWS = 5000;
@@ -133,6 +146,22 @@ export function CcMismatchPage() {
 
   const clearTextFilter = useCallback((field: string) => {
     setFilters((prev) => setTextFilter(prev, field, ''));
+  }, []);
+
+  const activeFilterChips = useMemo(
+    () =>
+      expandFilterChips(filters).map((chip) => ({
+        ...chip,
+        label: FILTER_CHIP_LABELS[chip.field] ?? chip.label,
+      })),
+    [filters],
+  );
+
+  const removeFilter = useCallback((field: string, removeValue?: string) => {
+    setFilters((prev) => {
+      if (removeValue != null) return removeMultiFilterValue(prev, field, removeValue);
+      return prev.filter((f) => f.field !== field);
+    });
   }, []);
 
   const facetContext = useCallback(
@@ -354,6 +383,12 @@ export function CcMismatchPage() {
           </div>
         )}
       </div>
+
+      {activeFilterChips.length > 0 && (
+        <div className="shrink-0">
+          <ActiveFiltersBar filters={activeFilterChips} onRemove={removeFilter} />
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col" data-testid="cc-mismatch-table">
         <DataTable

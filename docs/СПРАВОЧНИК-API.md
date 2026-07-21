@@ -259,14 +259,36 @@ Probe доступности 6 delegated latest-файлов (5 RIR + IANA) бе
 
 ---
 
+### POST `/admin/data/wipe`
+
+Полная очистка датасетов ГРЧЦ + RIR, истории import/export, ZIP cache, `rir_rdap_cache` и таблицы расхождений CC (`geo_rir_cc_mismatches` → state `never`). Config/secrets и схема сохраняются. Требует admin session. Сериализуется с rebuild расхождений через advisory lock.
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ "ok": true, "grchcImportRunsDeleted", "rirImportRunsDeleted", "exportJobsDeleted", "exportFilesRemoved", "zipCacheCleared" }` |
+
+После wipe нужны повторные импорты; сравнение CC пересоберётся автоматически при готовности обоих слоёв.
+
+---
+
 ## Data plane (API key if enabled)
 
 Все endpoint'ы ниже используют `verifyApiKeyIfEnabled` — при `authEnabled=true` требуют `X-API-Key`.
 
-Table city/country требуют готовые MV (`ensureMaterializedViewsReady`) — иначе **503**.  
-`/table/rir` требует `rir_dataset_state` ready — иначе **503** `RirNotReady` (GeoIP `/ready` не зависит от RIR).
+**Готовность по плоскостям:**
+
+| Endpoint | Требование | Иначе |
+|----------|------------|-------|
+| `/table/city`, `/table/country`, `/table/asn` | MV ГРЧЦ ready | **503** |
+| `/table/rir` | `rir_dataset_state` ready | **503** `RirNotReady` |
+| `/table/cc-mismatch*` | нет (данные читаются даже при `never`/`failed`) | — |
+| `POST /exports/table` + `tableType` city/country/asn | MV ready | **503** |
+| `POST /exports/table` + `tableType` rir | RIR ready | **503** |
+
+GeoIP `/ready` **не** зависит от RIR и от слоя расхождений CC.
 
 ---
+
 
 ### POST `/lookup`
 
@@ -347,10 +369,18 @@ Import status: `queued`, `running`, `validating`, `swapping`, `refreshing_mv`, `
 
 ### GET `/table/country`
 
+### GET `/table/asn`
+
 ### GET `/table/rir`
 
-Browse table с pagination.  
-`/table/rir` — NRO delegated stats (отдельный data plane); готовность `rir_dataset_state`, не MV ГРЧЦ. При пустом снимке — **503** `RirNotReady`.
+Browse table с pagination (keyset или offset).
+
+| Path | Data plane | Готовность |
+|------|------------|------------|
+| `/table/city`, `/table/country`, `/table/asn` | MV / ASN mapping ГРЧЦ | MV ready → иначе **503** |
+| `/table/rir` | `rir_delegations` (NRO delegated + IANA) | RIR ready → иначе **503** `RirNotReady` |
+
+UI разделяет RIR на `/browse/rir` (ipv4+ipv6) и `/browse/rir-asn` (asn) через locked filter `resource_type`; API один — `/table/rir`.
 
 **Query (основные):**
 
@@ -368,15 +398,71 @@ Filter operators: `eq`, `neq`, `contains`, `startsWith`, `in`, `gt`, `gte`, `lt`
 
 ---
 
-### GET `/table/metadata/facet`
+### GET `/table/cc-mismatch`
 
-Значения для facet-фильтров.
+Таблица материализованных расхождений ISO country block ГРЧЦ vs covering RIR CC.  
+Только mismatches; совпадения не хранятся. Auth: API key (если включён). **Без** gate MV/RIR readiness.
+
+**Query:** те же параметры pagination/sort/filters, что у Browse (`page`, `pageSize`, `sort`, `filters`, `afterId`, `afterSortValue`).
+
+**Поля строки (camelCase):** `id`, `countryBlockId`, `network`, `grchcCc`, `rirCc`, `registry`, `rangeText`, `asn`, `asnOrg`, `rebuiltAt`.
+
+**Фильтры:** `network`, `grchc_cc`, `rir_cc`, `registry`, `range_text`, `asn`, `asn_org`.  
+**Sort:** те же + `id`. Пустой sort → `network ASC`.  
+**Keyset:** при одноколоночном sort; для `asn` курсор — `integer` / `NULL` (не text).
+
+**Response 200:** `rows`, `pagination`, `meta` (в т.ч. `paginationMode`, `nextCursor`, `rebuildStatus`, `rebuiltAt`, `rebuildDurationMs`, `rebuildError`, `browseView: "geo_rir_cc_mismatches"`, `countSource: "exact"`).
+
+---
+
+### GET `/table/cc-mismatch/state`
+
+Статус job пересчёта расхождений.
+
+**Response 200:**
+
+```json
+{
+  "status": "ready",
+  "rowCount": 12345,
+  "rebuiltAt": "2026-07-21T12:00:00.000Z",
+  "durationMs": 420000,
+  "lastError": null
+}
+```
+
+`status`: `never` | `running` | `ready` | `failed`.
+
+Пересчёт: после успешного импорта ГРЧЦ или RIR; при старте API (backfill `never`/`failed`/stale `running`); только если оба датасета ready. Ошибка rebuild не валит импорт.
+
+---
+
+### GET `/table/cc-mismatch/facet`
+
+Facet-значения для UI фильтров страницы расхождений.
 
 **Query:**
 
 | Param | Описание |
 |-------|----------|
-| `tableType` | `city` \| `country` \| `rir` |
+| `field` | `grchc_cc` \| `rir_cc` \| `registry` \| `asn_org` (default `grchc_cc`) |
+| `search` | Поиск по значениям |
+| `limit` | 1–100 (default 50) |
+| `contextFilters` | JSON FilterClause[] |
+
+**Response 200:** `{ "items": [{ "value", "count" }], "meta": { "source": "index" } }`
+
+---
+
+### GET `/table/metadata/facet`
+
+Значения для facet-фильтров Browse (ГРЧЦ / RIR / ASN).
+
+**Query:**
+
+| Param | Описание |
+|-------|----------|
+| `tableType` | `city` \| `country` \| `rir` \| `asn` |
 | `field` | Имя поля facet |
 | `search` | Поиск по значениям |
 | `limit` | 1–100 (default 50) |
@@ -384,11 +470,13 @@ Filter operators: `eq`, `neq`, `contains`, `startsWith`, `in`, `gt`, `gte`, `lt`
 
 **Response 200:** `{ "items": [{ "value", "count" }], "meta": { "source", "timedOut" } }`
 
+Для facet страницы расхождений используйте `/table/cc-mismatch/facet`, не этот endpoint.
+
 ---
 
 ### POST `/exports/table`
 
-Создать async export job.
+Создать async export job. `tableType` для расхождений CC **не поддерживается**.
 
 **Body:**
 
@@ -400,13 +488,18 @@ Filter operators: `eq`, `neq`, `contains`, `startsWith`, `in`, `gt`, `gte`, `lt`
 }
 ```
 
+`tableType`: `city` | `country` | `rir` | `asn`.
+
 | HTTP | Описание |
 |------|----------|
 | 202 | `{ "id", "status": "queued", "tableType", "createdAt", "estimatedRows" }` |
 | 422 | Validation / row limit exceeded |
-| 503 | MV refreshing |
+| 503 | MV refreshing (city/country/asn) **или** RIR dataset not ready (`tableType=rir`) |
+
+ZIP entry: `geoip-{tableType}-export.csv`.
 
 ---
+
 
 ### GET `/exports/:id`
 

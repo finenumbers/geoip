@@ -1,6 +1,6 @@
 # GeoIP Analytics
 
-Веб-сервис аналитики и поиска по официальным CSV-выгрузкам ГРЧЦ РФ (GeoIP): browse, facet-фильтры, IP lookup, экспорт CSV.
+Веб-сервис аналитики и поиска по официальным CSV-выгрузкам ГРЧЦ РФ (GeoIP) и снимкам RIR/IANA delegated: browse с facet-фильтрами, IP lookup, экспорт CSV, сравнение **ГРЧЦ ≠ RIR CC**.
 
 **Репозиторий:** [github.com/finenumbers/geoip](https://github.com/finenumbers/geoip)
 
@@ -16,7 +16,7 @@ Node.js · TypeScript · Fastify · PostgreSQL · React · Docker Compose · NGI
 | Роль | Начните здесь |
 |------|---------------|
 | **Оператор** (деплой, Admin, import) | [docs/БЫСТРЫЙ-СТАРТ.md](docs/БЫСТРЫЙ-СТАРТ.md) |
-| **Пользователь UI** (Dashboard, таблицы, lookup) | [docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md](docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md) |
+| **Пользователь UI** (Dashboard, Browse ГРЧЦ/RIR, расхождения CC, lookup) | [docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md](docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md) |
 | **Интегратор** (внешний API, NPM) | [docs/ПЕРИМЕТР-И-HTTPS.md](docs/ПЕРИМЕТР-И-HTTPS.md) · [docs/СПРАВОЧНИК-API.md](docs/СПРАВОЧНИК-API.md) |
 | **Разработчик** | [docs/РАЗРАБОТКА-И-БЕЗОПАСНОСТЬ.md](docs/РАЗРАБОТКА-И-БЕЗОПАСНОСТЬ.md) |
 | **Архитектор** | [docs/АРХИТЕКТУРА.md](docs/АРХИТЕКТУРА.md) |
@@ -29,7 +29,7 @@ Node.js · TypeScript · Fastify · PostgreSQL · React · Docker Compose · NGI
 | [docs/РАЗВЁРТЫВАНИЕ.md](docs/РАЗВЁРТЫВАНИЕ.md) | Portainer, Docker Compose CLI, volumes, backup, обновление |
 | [docs/ПЕРИМЕТР-И-HTTPS.md](docs/ПЕРИМЕТР-И-HTTPS.md) | NPM, HTTPS, Access List, External IP Lookup API |
 | [docs/АДМИНИСТРИРОВАНИЕ.md](docs/АДМИНИСТРИРОВАНИЕ.md) | Admin UI, config store, import, все секции настроек |
-| [docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md](docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md) | Dashboard, Browse, Lookup, Export, `/api-docs` |
+| [docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md](docs/РУКОВОДСТВО-ПОЛЬЗОВАТЕЛЯ.md) | Dashboard, Browse (ГРЧЦ/RIR), ГРЧЦ ≠ RIR, Lookup, Export, `/api-docs` |
 | [docs/СПРАВОЧНИК-API.md](docs/СПРАВОЧНИК-API.md) | Полный список HTTP endpoint'ов |
 | [docs/АРХИТЕКТУРА.md](docs/АРХИТЕКТУРА.md) | Data plane, workers, config store, security model |
 | [docs/РАЗРАБОТКА-И-БЕЗОПАСНОСТЬ.md](docs/РАЗРАБОТКА-И-БЕЗОПАСНОСТЬ.md) | Локальная разработка, безопасность, troubleshooting |
