@@ -174,7 +174,8 @@ proxy_set_header X-GeoIP-Client-Auth 1;
 
 Таблицы, export, metrics тоже требуют `X-API-Key` при `authEnabled=true`. Для M2M интеграций используйте тот же External IP Lookup key. Полный список: [СПРАВОЧНИК-API.md](СПРАВОЧНИК-API.md).
 
-UI-документация: страница `/api-docs` (за NPM Access List).
+UI-документация: страница `/api-docs` (за NPM Access List **и** admin-логином; примеры содержат ваш API-ключ).  
+Дополнительно: `POST /api/v1/rir/lookup` (snapshot RIR) и `POST /api/v1/rir/enrich` (RDAP) — см. [СПРАВОЧНИК-API.md](СПРАВОЧНИК-API.md).
 
 ### Безопасность ключа
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AdminAuthShell } from '@/components/AdminAuthShell';
 import { adminApi } from '@/lib/admin-api';
@@ -7,6 +7,7 @@ import { ui } from '@/lib/ui-strings';
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
+  const { redirect } = useSearch({ from: '/admin/login' });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,11 @@ export function AdminLoginPage() {
     onSuccess: async () => {
       try {
         await adminApi.me();
-        void navigate({ to: '/admin' });
+        if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+          void navigate({ href: redirect });
+        } else {
+          void navigate({ to: '/admin' });
+        }
       } catch {
         setError(
           'Вход выполнен, но сессия не сохранилась. Откройте сайт по HTTPS или обновите образ после деплоя.',

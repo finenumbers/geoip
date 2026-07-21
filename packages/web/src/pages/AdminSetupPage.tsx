@@ -20,7 +20,7 @@ export function AdminSetupPage() {
 
   useEffect(() => {
     if (status?.setupComplete) {
-      void navigate({ to: '/admin/login' });
+      void navigate({ to: '/admin/login', search: { redirect: undefined } });
     }
   }, [status, navigate]);
 

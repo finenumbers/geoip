@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { rirLookupRequestSchema } from '@geoip/shared';
 import { enrichRirDelegation } from '../services/rir-enrichment-service.js';
+import { lookupRirByIp } from '../sql/rir-lookup.js';
 
 const enrichBodySchema = z.object({
   registry: z.string().min(1),
@@ -12,6 +14,22 @@ const enrichBodySchema = z.object({
 });
 
 export async function registerRirEnrichmentRoutes(app: FastifyInstance): Promise<void> {
+  app.post(
+    '/api/v1/rir/lookup',
+    { preHandler: [app.verifyApiKeyIfEnabled, app.ensureRirDatasetReady] },
+    async (request, reply) => {
+      const parsed = rirLookupRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(422).send({ error: 'Validation error', details: parsed.error.flatten() });
+      }
+      const result = await lookupRirByIp(parsed.data.ip);
+      if ('error' in result) {
+        return reply.status(400).send({ error: 'Bad request', message: result.error });
+      }
+      return result;
+    },
+  );
+
   app.post(
     '/api/v1/rir/enrich',
     { preHandler: [app.verifyApiKeyIfEnabled] },

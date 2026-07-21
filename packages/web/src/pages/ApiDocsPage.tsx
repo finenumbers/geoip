@@ -1,10 +1,10 @@
-import { Link } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { HelpBox } from '@/components/HelpBox';
+import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
-
-const API_KEY_PLACEHOLDER = '<API_KEY>';
 
 function useBaseUrl(): string {
   return useMemo(() => {
@@ -61,66 +61,131 @@ function DocSection({
   );
 }
 
-export function ApiDocsPage() {
-  const baseUrl = useBaseUrl();
-  const endpoint = `${baseUrl}/api/v1/lookup`;
+function EndpointBadge({ method, path }: { method: string; path: string }) {
+  return (
+    <p className="text-sm">
+      <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
+        {method}
+      </span>{' '}
+      <code className="break-all text-sm">{path}</code>
+    </p>
+  );
+}
 
-  const curlExample = `curl -sS -X POST '${endpoint}' \\
+export function ApiDocsPage() {
+  const navigate = useNavigate();
+  const baseUrl = useBaseUrl();
+
+  const { data: me, isError: meError, isLoading: meLoading } = useQuery({
+    queryKey: ['admin-me'],
+    queryFn: adminApi.me,
+    retry: false,
+  });
+
+  const { data: keyData, isLoading: keyLoading } = useQuery({
+    queryKey: ['admin-external-api-key'],
+    queryFn: adminApi.getExternalApiKey,
+    enabled: Boolean(me),
+  });
+
+  useEffect(() => {
+    if (meError) {
+      void navigate({ to: '/admin/login', search: { redirect: '/api-docs' } });
+    }
+  }, [meError, navigate]);
+
+  const apiKey = keyData?.apiKey?.trim() ?? '';
+  const keyForExamples = apiKey || '<API_KEY>';
+
+  const lookupUrl = `${baseUrl}/api/v1/lookup`;
+  const rirLookupUrl = `${baseUrl}/api/v1/rir/lookup`;
+  const enrichUrl = `${baseUrl}/api/v1/rir/enrich`;
+
+  const lookupCurl = `curl -sS -X POST '${lookupUrl}' \\
   -H 'Content-Type: application/json' \\
-  -H 'X-API-Key: ${API_KEY_PLACEHOLDER}' \\
+  -H 'X-API-Key: ${keyForExamples}' \\
   -d '{"ip":"8.8.8.8","include":["city","country","asn"]}'`;
 
-  const fetchExample = `const response = await fetch('${endpoint}', {
+  const lookupFetch = `const response = await fetch('${lookupUrl}', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-API-Key': '${API_KEY_PLACEHOLDER}',
+    'X-API-Key': '${keyForExamples}',
   },
   body: JSON.stringify({
     ip: '8.8.8.8',
     include: ['city', 'country', 'asn'],
   }),
 });
+const data = await response.json();`;
 
-if (!response.ok) {
-  throw new Error(\`HTTP \${response.status}\`);
-}
-
-const data = await response.json();
-console.log(data);`;
-
-  const pythonExample = `import requests
+  const lookupPython = `import requests
 
 response = requests.post(
-    '${endpoint}',
+    '${lookupUrl}',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': '${API_KEY_PLACEHOLDER}',
+        'X-API-Key': '${keyForExamples}',
     },
-    json={
-        'ip': '8.8.8.8',
-        'include': ['city', 'country', 'asn'],
-    },
+    json={'ip': '8.8.8.8', 'include': ['city', 'country', 'asn']},
     timeout=30,
 )
-response.raise_for_status()
 print(response.json())`;
 
-  const requestBodyExample = `{
+  const rirCurl = `curl -sS -X POST '${rirLookupUrl}' \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-API-Key: ${keyForExamples}' \\
+  -d '{"ip":"8.8.8.8"}'`;
+
+  const rirFetch = `const response = await fetch('${rirLookupUrl}', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': '${keyForExamples}',
+  },
+  body: JSON.stringify({ ip: '8.8.8.8' }),
+});
+const data = await response.json();`;
+
+  const enrichCurl = `curl -sS -X POST '${enrichUrl}' \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-API-Key: ${keyForExamples}' \\
+  -d '{"registry":"apnic","resourceType":"ipv4","rangeText":"1.1.1.0/24","network":"1.1.1.0/24"}'`;
+
+  const lookupResponse = `{
   "ip": "8.8.8.8",
-  "include": ["city", "country", "asn"]
+  "city": { "network": "…", "countryIsoCode": "US", "cityName": "…", "latitude": 37.4, "longitude": -122.1 },
+  "country": { "network": "…", "countryIsoCode": "US", "countryName": "…" },
+  "asn": { "network": "…", "asn": 15169, "organization": "GOOGLE" },
+  "meta": { "datasetDate": "20260701", "queriedAt": "…" }
 }`;
 
-  const responseExample = `{
+  const rirResponse = `{
   "ip": "8.8.8.8",
-  "city": { "network": "...", "countryName": "...", "cityName": "...", ... },
-  "country": { "network": "...", "countryIsoCode": "...", ... },
-  "asn": { "network": "...", "asn": 15169, "organization": "..." },
-  "meta": {
-    "datasetDate": "2026-06-01",
-    "queriedAt": "2026-06-20T12:00:00.000Z"
-  }
+  "delegation": {
+    "registry": "arin",
+    "cc": "US",
+    "status": "allocated",
+    "resourceType": "ipv4",
+    "rangeText": "…",
+    "network": "…",
+    "prefixLen": 24,
+    "ipFamily": 4,
+    "allocatedAt": "…",
+    "opaqueId": "…",
+    "startAsn": null,
+    "asnCount": null
+  },
+  "meta": { "snapshotDate": "2026-07-01", "queriedAt": "…" }
 }`;
+
+  if (meLoading || meError || !me) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-muted">
+        {ui.apiDocs.loading}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-2">
@@ -129,67 +194,91 @@ print(response.json())`;
         <p className="mt-1 text-sm text-muted">{ui.apiDocs.subtitle}</p>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-2 xl:items-start">
-        <div className="space-y-6">
-          <HelpBox title={ui.apiDocs.authTitle}>
-            <p>{ui.apiDocs.authBody}</p>
-            <p>
+      <HelpBox title={ui.apiDocs.authTitle}>
+        <p className="text-sm">{ui.apiDocs.authBody}</p>
+        <div className="mt-3 space-y-2">
+          <p className="text-sm font-medium">{ui.apiDocs.authKeyLabel}</p>
+          {keyLoading ? (
+            <p className="text-sm text-muted">{ui.apiDocs.loading}</p>
+          ) : apiKey ? (
+            <CodeBlock code={apiKey} />
+          ) : (
+            <p className="text-sm text-amber-900">
+              {ui.apiDocs.authKeyMissing}{' '}
               <Link to="/admin" search={{ section: 'api' }} className="font-medium underline">
                 {ui.apiDocs.adminLink}
               </Link>
             </p>
-          </HelpBox>
+          )}
+        </div>
+      </HelpBox>
 
-          <DocSection title={ui.apiDocs.endpointTitle}>
-            <p className="text-sm">
-              <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
-                POST
-              </span>{' '}
-              <code className="break-all text-sm">{endpoint}</code>
-            </p>
-          </DocSection>
-
-          <DocSection title={ui.apiDocs.requestTitle}>
-            <p className="text-sm text-muted">{ui.apiDocs.requestIntro}</p>
-            <dl className="grid gap-2 text-sm sm:grid-cols-[8rem_1fr]">
+      <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
+        <div className="space-y-6">
+          <DocSection title={ui.apiDocs.sectionGrchc}>
+            <p className="text-sm text-muted">{ui.apiDocs.grchcHint}</p>
+            <EndpointBadge method="POST" path={lookupUrl} />
+            <dl className="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
               <dt className="font-medium">ip</dt>
               <dd>{ui.apiDocs.fieldIp}</dd>
               <dt className="font-medium">include</dt>
               <dd>{ui.apiDocs.fieldInclude}</dd>
             </dl>
-            <CodeBlock code={requestBodyExample} />
+            <p className="text-sm font-medium">{ui.apiDocs.responseTitle}</p>
+            <CodeBlock code={lookupResponse} />
+            <p className="text-sm font-medium">{ui.apiDocs.exampleCurl}</p>
+            <CodeBlock code={lookupCurl} />
+            <p className="text-sm font-medium">{ui.apiDocs.exampleFetch}</p>
+            <CodeBlock code={lookupFetch} />
+            <p className="text-sm font-medium">{ui.apiDocs.examplePython}</p>
+            <CodeBlock code={lookupPython} />
           </DocSection>
 
-          <DocSection title={ui.apiDocs.responseTitle}>
-            <p className="text-sm text-muted">{ui.apiDocs.responseIntro}</p>
-            <CodeBlock code={responseExample} />
-          </DocSection>
-
-          <DocSection title={ui.apiDocs.errorsTitle}>
+          <DocSection title={ui.apiDocs.sectionErrors}>
             <ul className="list-inside list-disc space-y-1 text-sm text-muted">
               <li>{ui.apiDocs.error401}</li>
               <li>{ui.apiDocs.error400}</li>
               <li>{ui.apiDocs.error422}</li>
               <li>{ui.apiDocs.error429}</li>
+              <li>{ui.apiDocs.error503Rir}</li>
+              <li>{ui.apiDocs.error502Enrich}</li>
             </ul>
           </DocSection>
         </div>
 
         <div className="space-y-6">
-          <DocSection title={ui.apiDocs.examplesTitle}>
-            <h3 className="text-sm font-medium">curl</h3>
-            <CodeBlock code={curlExample} />
-            <h3 className="text-sm font-medium">JavaScript (fetch)</h3>
-            <CodeBlock code={fetchExample} />
-            <h3 className="text-sm font-medium">Python (requests)</h3>
-            <CodeBlock code={pythonExample} />
+          <DocSection title={ui.apiDocs.sectionRir}>
+            <p className="text-sm text-muted">{ui.apiDocs.rirHint}</p>
+            <EndpointBadge method="POST" path={rirLookupUrl} />
+            <dl className="grid gap-2 text-sm sm:grid-cols-[7rem_1fr]">
+              <dt className="font-medium">ip</dt>
+              <dd>{ui.apiDocs.fieldIp}</dd>
+            </dl>
+            <p className="text-sm font-medium">{ui.apiDocs.responseTitle}</p>
+            <CodeBlock code={rirResponse} />
+            <p className="text-sm font-medium">{ui.apiDocs.exampleCurl}</p>
+            <CodeBlock code={rirCurl} />
+            <p className="text-sm font-medium">{ui.apiDocs.exampleFetch}</p>
+            <CodeBlock code={rirFetch} />
           </DocSection>
 
-          <DocSection title={ui.apiDocs.adminOpsTitle}>
+          <DocSection title={ui.apiDocs.sectionEnrich}>
+            <p className="text-sm text-muted">{ui.apiDocs.enrichHint}</p>
+            <EndpointBadge method="POST" path={enrichUrl} />
+            <p className="text-sm text-muted">
+              Тело: <code>registry</code>, <code>resourceType</code>, <code>rangeText</code>, опционально{' '}
+              <code>network</code>, <code>startAsn</code>, <code>opaqueId</code> — из ответа{' '}
+              <code>/rir/lookup</code>.
+            </p>
+            <p className="text-sm font-medium">{ui.apiDocs.exampleCurl}</p>
+            <CodeBlock code={enrichCurl} />
+          </DocSection>
+
+          <DocSection title={ui.apiDocs.sectionOps}>
             <ul className="list-inside list-disc space-y-1 text-sm text-muted">
-              <li>{ui.apiDocs.adminOpsAuth}</li>
-              <li>{ui.apiDocs.adminOpsNpm}</li>
-              <li>{ui.apiDocs.adminOpsRateLimit}</li>
+              <li>{ui.apiDocs.opsPlanes}</li>
+              <li>{ui.apiDocs.opsAuth}</li>
+              <li>{ui.apiDocs.opsRateLimit}</li>
             </ul>
           </DocSection>
         </div>

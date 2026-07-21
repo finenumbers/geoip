@@ -269,6 +269,12 @@ Probe доступности 6 delegated latest-файлов (5 RIR + IANA) бе
 
 После wipe нужны повторные импорты; сравнение CC пересоберётся автоматически при готовности обоих слоёв.
 
+### GET `/admin/config/api-key`
+
+Plaintext External API key для страницы `/api-docs`. Только admin session.
+
+**Response 200:** `{ "apiKey": "…" }` (пустая строка, если ключ не задан).
+
 ---
 
 ## Data plane (API key if enabled)
@@ -280,19 +286,19 @@ Probe доступности 6 delegated latest-файлов (5 RIR + IANA) бе
 | Endpoint | Требование | Иначе |
 |----------|------------|-------|
 | `/table/city`, `/table/country`, `/table/asn` | MV ГРЧЦ ready | **503** |
-| `/table/rir` | `rir_dataset_state` ready | **503** `RirNotReady` |
+| `/table/rir`, `POST /rir/lookup` | `rir_dataset_state` ready | **503** `RirNotReady` |
 | `/table/cc-mismatch*` | нет (данные читаются даже при `never`/`failed`) | — |
 | `POST /exports/table` + `tableType` city/country/asn | MV ready | **503** |
 | `POST /exports/table` + `tableType` rir | RIR ready | **503** |
 
-GeoIP `/ready` **не** зависит от RIR и от слоя расхождений CC.
+GeoIP `/ready` **не** зависит от RIR и от слоя расхождений CC.  
+UI `/api-docs` требует **admin session** (не API key); примеры на странице подставляют ключ из `GET /admin/config/api-key`.
 
 ---
 
-
 ### POST `/lookup`
 
-IP lookup (longest-prefix match).
+IP lookup ГРЧЦ (longest-prefix match по city/country/asn blocks).
 
 **Body:**
 
@@ -322,6 +328,38 @@ IP lookup (longest-prefix match).
   "meta": { "datasetDate": "20260601", "queriedAt": "2026-06-20T12:00:00.000Z" }
 }
 ```
+
+---
+
+### POST `/rir/lookup`
+
+Single-IP lookup в снимке RIR: покрывающий `ipv4`/`ipv6` CIDR (`network >>= ip`, longest prefix). Только PostgreSQL — без RDAP.
+
+**Body:** `{ "ip": "8.8.8.8" }`
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ ip, delegation, meta: { snapshotDate, queriedAt } }` — `delegation` может быть `null` |
+| 400 | Invalid IP |
+| 503 | `RirNotReady` |
+
+Поля `delegation`: `registry`, `cc`, `status`, `resourceType`, `rangeText`, `network`, `prefixLen`, `ipFamily`, `allocatedAt`, `opaqueId`, `startAsn`, `asnCount`.  
+Семантика `cc` — legal country of holder, не ISO геолокации ГРЧЦ.
+
+---
+
+### POST `/rir/enrich`
+
+Live RDAP (+ PeeringDB для ASN) по известной delegation-строке. Обычно после `/rir/lookup`. Кэш ~7 дней.
+
+**Body:** `{ "registry", "resourceType", "rangeText", "network?", "startAsn?", "opaqueId?" }`
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ rdap, peeringdb }` (ошибки RDAP часто в `rdap.errorMessage`, не 5xx) |
+| 502 | `EnrichmentFailed` |
+
+Не включайте enrich в hot-path массовых lookup.
 
 ---
 
@@ -545,6 +583,6 @@ Operational metrics (latency P95, import benchmark, pg_stat_statements).
 
 - [ПЕРИМЕТР-И-HTTPS.md](ПЕРИМЕТР-И-HTTPS.md) — NPM, external lookup
 - [АДМИНИСТРИРОВАНИЕ.md](АДМИНИСТРИРОВАНИЕ.md) — rate limits, API keys
-- UI: `/api-docs`
+- UI: `/api-docs` (admin session; примеры с реальным ключом)
 
 **Finenumbers** · [finenumbers.com](https://finenumbers.com) · apps@finenumbers.com

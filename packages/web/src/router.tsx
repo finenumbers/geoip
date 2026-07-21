@@ -108,6 +108,9 @@ const adminLoginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin/login',
   component: AdminLoginPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: typeof search.redirect === 'string' && search.redirect.startsWith('/') ? search.redirect : undefined,
+  }),
 });
 
 const adminSetupRoute = createRoute({

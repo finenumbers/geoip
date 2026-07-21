@@ -64,6 +64,7 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(patch),
     }),
+  getExternalApiKey: () => adminRequest<{ apiKey: string }>('/config/api-key'),
   reloadStatus: () => adminRequest<AdminReloadStatus>('/config/reload-status'),
   testGrchc: () =>
     adminRequest<{ ok: boolean; downloadCount: number; latestDate: string | null }>(

@@ -43,7 +43,7 @@ export function AdminSetupApiKeyPage() {
 
   useEffect(() => {
     if (meError) {
-      void navigate({ to: '/admin/login' });
+      void navigate({ to: '/admin/login', search: { redirect: undefined } });
     }
   }, [meError, navigate]);
 

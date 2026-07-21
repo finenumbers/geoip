@@ -137,6 +137,12 @@ export async function registerAdminConfigRoutes(app: FastifyInstance): Promise<v
       pendingReload: getReloadHints(),
     };
   });
+
+  /** Plaintext External API key for authenticated ApiDocs examples (admin session only). */
+  app.get('/api/v1/admin/config/api-key', { preHandler: [app.requireAdminSession] }, async () => {
+    const config = loadRuntimeConfig();
+    return { apiKey: config.secrets.api.apiKey ?? '' };
+  });
 }
 
 export async function registerAdminOpsRoutes(app: FastifyInstance): Promise<void> {

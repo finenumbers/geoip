@@ -65,7 +65,7 @@ export function AdminPage() {
 
   useEffect(() => {
     if (meError) {
-      void navigate({ to: '/admin/login' });
+      void navigate({ to: '/admin/login', search: { redirect: undefined } });
     }
   }, [meError, navigate]);
 
@@ -206,7 +206,7 @@ export function AdminPage() {
       queryClient.removeQueries({ queryKey: ['admin-config'] });
       queryClient.removeQueries({ queryKey: ['admin-reload-status'] });
       queryClient.removeQueries({ queryKey: ['setup-checklist'] });
-      void navigate({ to: '/admin/login' });
+      void navigate({ to: '/admin/login', search: { redirect: undefined } });
     },
   });
 

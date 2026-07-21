@@ -118,6 +118,34 @@ export const lookupResponseSchema = z.object({
   }),
 });
 
+export const rirLookupRequestSchema = z.object({
+  ip: z.string().min(1),
+});
+
+export const rirDelegationLookupSchema = z.object({
+  registry: z.string(),
+  cc: z.string().nullable(),
+  status: z.string(),
+  resourceType: z.string(),
+  rangeText: z.string(),
+  network: z.string().nullable(),
+  prefixLen: z.number().nullable(),
+  ipFamily: z.number().nullable(),
+  allocatedAt: z.string().nullable(),
+  opaqueId: z.string().nullable(),
+  startAsn: z.number().nullable(),
+  asnCount: z.number().nullable(),
+});
+
+export const rirLookupResponseSchema = z.object({
+  ip: z.string(),
+  delegation: rirDelegationLookupSchema.nullable(),
+  meta: z.object({
+    snapshotDate: z.string().nullable(),
+    queriedAt: z.string().datetime(),
+  }),
+});
+
 export const filterClauseSchema = z.object({
   field: z.string(),
   op: z.enum(FILTER_OPERATORS),
@@ -332,7 +360,9 @@ export const metricsResponseSchema = z.object({
 export type ImportRun = z.infer<typeof importRunSchema>;
 export type DatasetState = z.infer<typeof datasetStateSchema>;
 export type LookupResponse = z.infer<typeof lookupResponseSchema>;
+export type RirLookupResponse = z.infer<typeof rirLookupResponseSchema>;
 export type FilterClause = z.infer<typeof filterClauseSchema>;
+
 export type SortClause = z.infer<typeof sortClauseSchema>;
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
 export type ExportCreateResponse = z.infer<typeof exportCreateResponseSchema>;
