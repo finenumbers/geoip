@@ -22,6 +22,8 @@ interface ColumnFacetFilterProps {
   searchRequired?: boolean;
   /** Max facet values returned by API (default 100). */
   resultLimit?: number;
+  /** When set, only these facet values are shown (e.g. ipv4/ipv6 on RIR IP). */
+  allowedValues?: string[];
   compact?: boolean;
   className?: string;
 }
@@ -61,6 +63,7 @@ export function ColumnFacetFilter({
   contextFilters = [],
   searchRequired = false,
   resultLimit = 100,
+  allowedValues,
   compact = false,
   className,
 }: ColumnFacetFilterProps) {
@@ -88,7 +91,9 @@ export function ColumnFacetFilter({
     staleTime: 60_000,
   });
 
-  const items = data?.items ?? [];
+  const items = (data?.items ?? []).filter(
+    (item) => !allowedValues || allowedValues.includes(item.value),
+  );
   const facetMeta = data?.meta;
 
   const updatePosition = () => {

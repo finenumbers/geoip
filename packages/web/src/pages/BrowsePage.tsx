@@ -687,6 +687,7 @@ export function BrowsePage({ tableType, rirMode }: BrowsePageProps) {
               tableType="rir"
               selectedValues={getMultiFilterValues(activeFilters, 'resource_type')}
               contextFilters={facetContext('resource_type')}
+              allowedValues={['ipv4', 'ipv6']}
               compact
               onChange={(values) => {
                 const next = values.filter((v) => v === 'ipv4' || v === 'ipv6');
