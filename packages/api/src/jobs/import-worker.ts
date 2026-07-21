@@ -45,10 +45,19 @@ function scheduleImportCron(): void {
   const env = loadEnv();
   if (!env.IMPORT_CRON_CRON) return;
 
+  if (!env.IMPORT_CRON_ENABLED) {
+    logger.info('Import cron disabled in settings');
+    return;
+  }
+
   cronTask = cron.schedule(
     env.IMPORT_CRON_CRON,
     async () => {
       const config = loadRuntimeConfig();
+      if (!config.settings.import.enabled) {
+        logger.debug('Cron import skipped — disabled in settings');
+        return;
+      }
       if (!isGrchcConfigured(config.secrets)) {
         logger.debug('Cron import skipped — GRChC credentials not configured');
         return;

@@ -57,6 +57,16 @@ const nav: NavItem[] = [
   },
 ];
 
+const DATASET_MENU_ROWS: Array<{ label: string; registry?: string }> = [
+  { label: ui.datasetMenu.grchc },
+  { label: ui.datasetMenu.ripe, registry: 'ripencc' },
+  { label: ui.datasetMenu.arin, registry: 'arin' },
+  { label: ui.datasetMenu.apnic, registry: 'apnic' },
+  { label: ui.datasetMenu.afrinic, registry: 'afrinic' },
+  { label: ui.datasetMenu.lacnic, registry: 'lacnic' },
+  { label: ui.datasetMenu.iana, registry: 'iana' },
+];
+
 export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { datasetDate, datasetError } = useSystemReadyStatus();
@@ -64,6 +74,12 @@ export function AppLayout() {
     queryKey: ['setup-checklist'],
     queryFn: api.setupChecklist,
     refetchInterval: 30_000,
+  });
+  const { data: rirStatus } = useQuery({
+    queryKey: ['rir-status'],
+    queryFn: api.rirStatus,
+    refetchInterval: 30_000,
+    retry: false,
   });
   const { data: clientIpData, isFetching: clientIpLoading } = useQuery({
     queryKey: ['client-public-ip'],
@@ -128,11 +144,36 @@ export function AppLayout() {
             {datasetError && (
               <span className="font-bold text-red-600">{ui.systemBanner.datasetError}</span>
             )}
-            {!datasetError && datasetDate && (
-              <span>
-                {ui.datasetBadge}:{' '}
-                <span className="font-bold text-foreground">{datasetDate}</span>
-              </span>
+            {!datasetError && (
+              <div className="group relative">
+                <span className="cursor-default">
+                  {ui.datasetBadge}
+                  {datasetDate ? (
+                    <>
+                      :{' '}
+                      <span className="font-bold text-foreground">{datasetDate}</span>
+                    </>
+                  ) : null}
+                </span>
+                <div
+                  className="pointer-events-none absolute right-0 top-full z-40 mt-1 hidden min-w-[16rem] rounded-md border border-border bg-card p-3 text-sm shadow-md group-hover:block"
+                  role="tooltip"
+                >
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                    {DATASET_MENU_ROWS.map((row) => {
+                      const value = row.registry
+                        ? (rirStatus?.snapshotsByRegistry?.[row.registry] ?? '—')
+                        : (datasetDate ?? '—');
+                      return (
+                        <div key={row.label} className="contents">
+                          <dt className="text-muted">{row.label}:</dt>
+                          <dd className="text-right font-medium text-foreground">{value}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </div>
+              </div>
             )}
           </div>
         </header>

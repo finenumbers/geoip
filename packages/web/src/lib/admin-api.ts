@@ -96,6 +96,7 @@ export const adminApi = {
       rowCount: number;
       rowsByRegistry: Record<string, number>;
       rowsByStatus: Record<string, number>;
+      snapshotsByRegistry: Record<string, string>;
       lastError: string | null;
       activeImport: { id: string; status: string } | null;
     }>('/rir/status'),

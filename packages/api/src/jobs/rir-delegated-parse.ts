@@ -32,13 +32,26 @@ export type DelegatedFileParseResult = {
 const STATUSES = new Set<string>(['available', 'allocated', 'assigned', 'reserved']);
 const RESOURCE_TYPES = new Set<string>(['ipv4', 'ipv6', 'asn']);
 
-function parseAllocatedAt(raw: string): string | null {
+/** NRO dates are YYYYMMDD; day/month 00 and other invalid calendars → null. */
+export function parseAllocatedAt(raw: string): string | null {
   if (!raw || raw === '00000000' || raw === '0000/00/00') return null;
   if (!/^\d{8}$/.test(raw)) return null;
-  const y = raw.slice(0, 4);
-  const m = raw.slice(4, 6);
-  const d = raw.slice(6, 8);
-  return `${y}-${m}-${d}`;
+  const year = Number(raw.slice(0, 4));
+  const month = Number(raw.slice(4, 6));
+  const day = Number(raw.slice(6, 8));
+  if (!Number.isInteger(year) || year < 1 || year > 9999) return null;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+  // Reject non-calendar dates (e.g. 2008-04-00 already caught; also 2008-02-30).
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() !== month - 1 ||
+    dt.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 function ipv4ToInt(ip: string): number {

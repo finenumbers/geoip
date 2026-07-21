@@ -7,6 +7,7 @@ export type RirDatasetState = {
   rowCount: number;
   rowsByRegistry: Record<string, number>;
   rowsByStatus: Record<string, number>;
+  snapshotsByRegistry: Record<string, string>;
   lastError: string | null;
   activeImportRunId: string | null;
 };
@@ -26,6 +27,39 @@ function asRecord(value: unknown): Record<string, number> {
   return out;
 }
 
+function asStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === 'string' && v.length > 0) out[k] = v;
+  }
+  return out;
+}
+
+async function loadSnapshotsByRegistry(stored: unknown): Promise<Record<string, string>> {
+  const fromJson = asStringRecord(stored);
+  if (Object.keys(fromJson).length > 0) return fromJson;
+
+  const result = await query<{ registry: string; d: string }>(
+    `SELECT registry, MAX(snapshot_date)::text AS d
+     FROM rir_delegations
+     GROUP BY registry`,
+  );
+  const out: Record<string, string> = {};
+  for (const row of result.rows) {
+    if (row.d) out[row.registry] = row.d;
+  }
+  if (Object.keys(out).length > 0) {
+    await query(
+      `UPDATE rir_dataset_state
+       SET snapshots_by_registry = $1::jsonb, updated_at = NOW()
+       WHERE id = 1`,
+      [JSON.stringify(out)],
+    );
+  }
+  return out;
+}
+
 export async function getRirDatasetState(): Promise<RirDatasetState> {
   const result = await query<{
     status: RirDatasetState['status'];
@@ -34,6 +68,7 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
     row_count: string | number;
     rows_by_registry: unknown;
     rows_by_status: unknown;
+    snapshots_by_registry: unknown;
     last_error: string | null;
     active_import_run_id: string | null;
   }>('SELECT * FROM rir_dataset_state WHERE id = 1');
@@ -47,6 +82,7 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
       rowCount: 0,
       rowsByRegistry: {},
       rowsByStatus: {},
+      snapshotsByRegistry: {},
       lastError: null,
       activeImportRunId: null,
     };
@@ -59,6 +95,7 @@ export async function getRirDatasetState(): Promise<RirDatasetState> {
     rowCount: Number(row.row_count),
     rowsByRegistry: asRecord(row.rows_by_registry),
     rowsByStatus: asRecord(row.rows_by_status),
+    snapshotsByRegistry: await loadSnapshotsByRegistry(row.snapshots_by_registry),
     lastError: row.last_error,
     activeImportRunId: row.active_import_run_id,
   };

@@ -2,14 +2,13 @@ export const IMPORT_LOCK_KEY = 0x47454f4950; // 'GEOIP'
 /** Advisory lock for RIR delegated import (independent of GRChC). */
 export const RIR_IMPORT_LOCK_KEY = 0x52495249; // 'RIRI'
 
-/** Daily dataset import schedule — fixed, not editable in Admin. */
+/** Default daily GRChC import schedule (Admin → Общие; TZ = displayTimezone). */
 export const FIXED_IMPORT_CRON = '0 10 * * *';
 export const FIXED_IMPORT_TIMEZONE = 'Europe/Moscow';
 export const DEFAULT_DISPLAY_TIMEZONE = 'Europe/Moscow';
 
-/** Daily RIR delegated-extended import — fixed UTC, separate from GRChC. */
+/** Default daily RIR+IANA import schedule (Admin → Общие; TZ = displayTimezone). */
 export const FIXED_RIR_IMPORT_CRON = '0 6 * * *';
-export const FIXED_RIR_IMPORT_TIMEZONE = 'UTC';
 
 /** Latest NRO/RIR delegated stats sources (HTTPS). */
 export const RIR_DELEGATED_SOURCES = [

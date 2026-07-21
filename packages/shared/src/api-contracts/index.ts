@@ -233,6 +233,7 @@ export const rirDatasetStateResponseSchema = z.object({
   rowCount: z.number(),
   rowsByRegistry: z.record(z.number()),
   rowsByStatus: z.record(z.number()),
+  snapshotsByRegistry: z.record(z.string()).default({}),
   lastError: z.string().nullable(),
 });
 

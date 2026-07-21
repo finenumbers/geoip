@@ -1,7 +1,35 @@
 import { z } from 'zod';
-import { DEFAULT_DISPLAY_TIMEZONE, FIXED_IMPORT_TIMEZONE } from './constants.js';
+import {
+  DEFAULT_DISPLAY_TIMEZONE,
+  FIXED_IMPORT_CRON,
+  FIXED_IMPORT_TIMEZONE,
+  FIXED_RIR_IMPORT_CRON,
+} from './constants.js';
 
 export const DEFAULT_GEOIP_LK_BASE_URL = 'https://geoip.noc.gov.ru';
+
+/** Parse daily cron `M H * * *` → `HH:MM` for Admin time inputs. */
+export function dailyCronToTime(cron: string): string {
+  const parts = cron.trim().split(/\s+/);
+  const minute = Number(parts[0] ?? 0);
+  const hour = Number(parts[1] ?? 0);
+  if (!Number.isInteger(minute) || !Number.isInteger(hour) || minute < 0 || minute > 59 || hour < 0 || hour > 23) {
+    return '00:00';
+  }
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+/** Build daily cron `M H * * *` from `HH:MM` (or `H:MM`). */
+export function timeToDailyCron(time: string): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return FIXED_IMPORT_CRON;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return FIXED_IMPORT_CRON;
+  }
+  return `${minute} ${hour} * * *`;
+}
 
 export const runtimeSettingsSchema = z.object({
   general: z
@@ -16,7 +44,8 @@ export const runtimeSettingsSchema = z.object({
     .default({}),
   import: z
     .object({
-      cron: z.string().min(1).default('0 10 * * *'),
+      enabled: z.boolean().default(true),
+      cron: z.string().min(1).default(FIXED_IMPORT_CRON),
       cronTimezone: z.string().default(FIXED_IMPORT_TIMEZONE),
       pollIntervalMs: z.number().int().positive().default(5000),
       staleMinutes: z.number().int().min(5).max(120).default(20),
@@ -25,6 +54,13 @@ export const runtimeSettingsSchema = z.object({
       skipUnchangedDataset: z.boolean().default(false),
       stagingSnapshotEnabled: z.boolean().default(true),
       historyLimit: z.number().int().min(1).max(100).default(10),
+    })
+    .default({}),
+  rirImport: z
+    .object({
+      enabled: z.boolean().default(true),
+      cron: z.string().min(1).default(FIXED_RIR_IMPORT_CRON),
+      cronTimezone: z.string().default(FIXED_IMPORT_TIMEZONE),
     })
     .default({}),
   export: z

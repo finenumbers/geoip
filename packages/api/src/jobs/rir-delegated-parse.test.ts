@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ipv4RangeToCidr,
+  parseAllocatedAt,
   parseDelegatedFileContent,
   parseDelegatedRecordLine,
 } from './rir-delegated-parse.js';
@@ -58,6 +59,19 @@ describe('parseDelegatedRecordLine', () => {
     expect(asn?.rangeText).toBe('AS1');
     expect(asn?.allocatedAt).toBeNull();
     expect(asn?.status).toBe('reserved');
+  });
+
+  it('nulls invalid allocated_at like 20080400', () => {
+    expect(parseAllocatedAt('20080400')).toBeNull();
+    expect(parseAllocatedAt('20080230')).toBeNull();
+    expect(parseAllocatedAt('20110412')).toBe('2011-04-12');
+    const rec = parseDelegatedRecordLine(
+      'arin|US|ipv4|10.0.0.0|256|20080400|allocated|X',
+      'f',
+      '2026-07-21',
+    );
+    expect(rec?.allocatedAt).toBeNull();
+    expect(rec?.network).toBe('10.0.0.0/24');
   });
 
   it('accepts asn_count above signed int32', () => {

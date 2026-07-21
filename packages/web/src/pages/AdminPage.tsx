@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearch, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminConfigPatch, AdminConfigResponse } from '@geoip/shared';
-import { DISPLAY_TIMEZONE_OPTIONS, DEFAULT_DISPLAY_TIMEZONE } from '@geoip/shared';
+import {
+  DISPLAY_TIMEZONE_OPTIONS,
+  DEFAULT_DISPLAY_TIMEZONE,
+  dailyCronToTime,
+  timeToDailyCron,
+} from '@geoip/shared';
 import { adminApi } from '@/lib/admin-api';
 import { ui } from '@/lib/ui-strings';
 import { cn } from '@/lib/utils';
@@ -230,17 +235,30 @@ export function AdminPage() {
           <Section title={ui.admin.sections.overview}>
             <SetupChecklistPanel className="mb-4" />
             <p className="text-sm text-muted">{ui.admin.overviewHint}</p>
-            <div className="flex flex-wrap gap-2 pt-2">
-              <ActionButton onClick={() => testGrchc.mutate()} loading={testGrchc.isPending}>
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <ActionButton
+                variant="probe"
+                onClick={() => testGrchc.mutate()}
+                loading={testGrchc.isPending}
+              >
                 {ui.admin.testGrchc}
               </ActionButton>
-              <ActionButton onClick={() => testRir.mutate()} loading={testRir.isPending}>
-                {testRir.isPending ? ui.admin.rirProbeInProgress : ui.admin.testRir}
-              </ActionButton>
-              <ActionButton onClick={() => triggerImport.mutate()} loading={triggerImport.isPending}>
+              <ActionButton
+                variant="import"
+                onClick={() => triggerImport.mutate()}
+                loading={triggerImport.isPending}
+              >
                 {ui.admin.triggerImport}
               </ActionButton>
               <ActionButton
+                variant="probe"
+                onClick={() => testRir.mutate()}
+                loading={testRir.isPending}
+              >
+                {testRir.isPending ? ui.admin.rirProbeInProgress : ui.admin.testRir}
+              </ActionButton>
+              <ActionButton
+                variant="import"
                 onClick={() => triggerRirImport.mutate()}
                 loading={triggerRirImport.isPending}
               >
@@ -276,14 +294,63 @@ export function AdminPage() {
                 ))}
               </select>
             </Field>
+            <p className="text-xs text-muted">{ui.admin.autoImportHint}</p>
+            <Toggle
+              label={ui.admin.importCronEnabled}
+              checked={form.importCronEnabled}
+              onChange={form.setImportCronEnabled}
+            />
+            <Field label={ui.admin.importTime}>
+              <input
+                type="time"
+                className="field-input"
+                value={form.importCronTime}
+                onChange={(e) => form.setImportCronTime(e.target.value)}
+              />
+            </Field>
+            <Toggle
+              label={ui.admin.rirImportCronEnabled}
+              checked={form.rirImportCronEnabled}
+              onChange={form.setRirImportCronEnabled}
+            />
+            <Field label={ui.admin.rirImportTime}>
+              <input
+                type="time"
+                className="field-input"
+                value={form.rirImportCronTime}
+                onChange={(e) => form.setRirImportCronTime(e.target.value)}
+              />
+            </Field>
+            <Toggle
+              label={ui.admin.skipUnchangedDataset}
+              checked={form.skipUnchanged}
+              onChange={form.setSkipUnchanged}
+            />
+            <Toggle
+              label={ui.admin.zipCacheEnabled}
+              checked={form.zipCacheEnabled}
+              onChange={form.setZipCacheEnabled}
+            />
             <SaveButton
               loading={save.isPending}
               onClick={() =>
                 save.mutate({
                   settings: {
-                    general: { displayTimezone: form.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE },
+                    general: {
+                      displayTimezone: form.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE,
+                    },
+                    import: {
+                      enabled: form.importCronEnabled,
+                      cron: timeToDailyCron(form.importCronTime),
+                      zipCacheEnabled: form.zipCacheEnabled,
+                      skipUnchangedDataset: form.skipUnchanged,
+                    },
+                    rirImport: {
+                      enabled: form.rirImportCronEnabled,
+                      cron: timeToDailyCron(form.rirImportCronTime),
+                    },
                   },
-                })
+                } as AdminConfigPatch)
               }
             />
           </Section>
@@ -291,7 +358,6 @@ export function AdminPage() {
 
         {section === 'rir' && (
           <Section title={ui.admin.sections.rir}>
-            <p className="mb-3 text-sm text-muted">{ui.rir.subtitle}</p>
             {rirStatus ? (
               <div className="mb-4 space-y-1 text-sm">
                 <p>
@@ -385,17 +451,6 @@ export function AdminPage() {
                 onChange={(e) => form.setGeoipLkBaseUrl(e.target.value)}
               />
             </Field>
-            <p className="text-sm text-muted">{ui.admin.importScheduleFixed}</p>
-            <Toggle
-              label="ZIP cache"
-              checked={form.zipCacheEnabled}
-              onChange={form.setZipCacheEnabled}
-            />
-            <Toggle
-              label="Skip unchanged dataset"
-              checked={form.skipUnchanged}
-              onChange={form.setSkipUnchanged}
-            />
             <Toggle
               label="Staging snapshot"
               checked={form.stagingSnapshot}
@@ -408,8 +463,6 @@ export function AdminPage() {
                   settings: {
                     geoipLk: { baseUrl: form.geoipLkBaseUrl },
                     import: {
-                      zipCacheEnabled: form.zipCacheEnabled,
-                      skipUnchangedDataset: form.skipUnchanged,
                       stagingSnapshotEnabled: form.stagingSnapshot,
                     },
                   },
@@ -693,6 +746,10 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
   const [geoipLkPassword, setGeoipLkPassword] = useState('');
   const [geoipLkBaseUrl, setGeoipLkBaseUrl] = useState('');
   const [displayTimezone, setDisplayTimezone] = useState(DEFAULT_DISPLAY_TIMEZONE);
+  const [importCronEnabled, setImportCronEnabled] = useState(true);
+  const [importCronTime, setImportCronTime] = useState('10:00');
+  const [rirImportCronEnabled, setRirImportCronEnabled] = useState(true);
+  const [rirImportCronTime, setRirImportCronTime] = useState('06:00');
   const [zipCacheEnabled, setZipCacheEnabled] = useState(true);
   const [skipUnchanged, setSkipUnchanged] = useState(false);
   const [stagingSnapshot, setStagingSnapshot] = useState(true);
@@ -724,6 +781,10 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
     setGeoipLkEmail(config.secrets.geoipLk.email);
     setGeoipLkBaseUrl(config.settings.geoipLk.baseUrl);
     setDisplayTimezone(config.settings.general.displayTimezone);
+    setImportCronEnabled(config.settings.import.enabled);
+    setImportCronTime(dailyCronToTime(config.settings.import.cron));
+    setRirImportCronEnabled(config.settings.rirImport.enabled);
+    setRirImportCronTime(dailyCronToTime(config.settings.rirImport.cron));
     setZipCacheEnabled(config.settings.import.zipCacheEnabled);
     setSkipUnchanged(config.settings.import.skipUnchangedDataset);
     setStagingSnapshot(config.settings.import.stagingSnapshotEnabled);
@@ -756,6 +817,14 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
       setGeoipLkBaseUrl,
       displayTimezone,
       setDisplayTimezone,
+      importCronEnabled,
+      setImportCronEnabled,
+      importCronTime,
+      setImportCronTime,
+      rirImportCronEnabled,
+      setRirImportCronEnabled,
+      rirImportCronTime,
+      setRirImportCronTime,
       zipCacheEnabled,
       setZipCacheEnabled,
       skipUnchanged,
@@ -812,6 +881,10 @@ function useAdminForm(config: AdminConfigResponse | undefined) {
       geoipLkPassword,
       geoipLkBaseUrl,
       displayTimezone,
+      importCronEnabled,
+      importCronTime,
+      rirImportCronEnabled,
+      rirImportCronTime,
       zipCacheEnabled,
       skipUnchanged,
       stagingSnapshot,
@@ -914,18 +987,21 @@ function ActionButton({
   children,
   loading,
   onClick,
+  variant = 'secondary',
 }: {
   children: React.ReactNode;
   loading?: boolean;
   onClick: () => void;
+  variant?: 'secondary' | 'probe' | 'import';
 }) {
+  const className =
+    variant === 'probe'
+      ? 'btn-probe'
+      : variant === 'import'
+        ? 'btn-import'
+        : 'btn-secondary rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50';
   return (
-    <button
-      type="button"
-      disabled={loading}
-      className="btn-secondary rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50"
-      onClick={onClick}
-    >
+    <button type="button" disabled={loading} className={className} onClick={onClick}>
       {children}
     </button>
   );

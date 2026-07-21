@@ -3,8 +3,7 @@ import {
   adminSetupSchema,
   runtimeSecretsSchema,
   runtimeSettingsSchema,
-  FIXED_IMPORT_CRON,
-  FIXED_IMPORT_TIMEZONE,
+  DEFAULT_DISPLAY_TIMEZONE,
   type AdminConfigPatch,
   type RuntimeSecrets,
   type RuntimeSettings,
@@ -12,6 +11,15 @@ import {
 import { persistRuntimeConfig, resetRuntimeConfigCache, loadRuntimeConfig, completeAdminSetupUnderLock } from '../config/runtime-config.js';
 import { resetEnvCache } from '../config/env.js';
 import { hashAdminPassword, verifyAdminPassword } from './admin-password.js';
+
+function syncCronTimezones(settings: RuntimeSettings): RuntimeSettings {
+  const tz = settings.general.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE;
+  return runtimeSettingsSchema.parse({
+    ...settings,
+    import: { ...settings.import, cronTimezone: tz },
+    rirImport: { ...settings.rirImport, cronTimezone: tz },
+  });
+}
 
 function deepMergeSettings(
   base: RuntimeSettings,
@@ -23,6 +31,7 @@ function deepMergeSettings(
     general: { ...base.general, ...patch.general },
     geoipLk: { ...base.geoipLk, ...patch.geoipLk },
     import: { ...base.import, ...patch.import },
+    rirImport: { ...base.rirImport, ...patch.rirImport },
     export: { ...base.export, ...patch.export },
     api: { ...base.api, ...patch.api },
     table: { ...base.table, ...patch.table },
@@ -30,14 +39,7 @@ function deepMergeSettings(
     asnMap: { ...base.asnMap, ...patch.asnMap },
     logging: { ...base.logging, ...patch.logging },
   });
-  return runtimeSettingsSchema.parse({
-    ...merged,
-    import: {
-      ...merged.import,
-      cron: FIXED_IMPORT_CRON,
-      cronTimezone: FIXED_IMPORT_TIMEZONE,
-    },
-  });
+  return syncCronTimezones(merged);
 }
 
 function applySecretsPatch(

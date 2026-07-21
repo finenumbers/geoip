@@ -229,7 +229,7 @@ Probe ЛК ГРЧЦ без import.
 
 Статус параллельного слоя NRO delegated (`rir_dataset_state`).
 
-**Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `lastError`.
+**Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `snapshotsByRegistry`, `lastError`.
 
 ### POST `/admin/rir/test`
 
@@ -315,7 +315,7 @@ IP lookup (longest-prefix match).
 
 Read-only статус снимка NRO delegated (для Dashboard). Не влияет на GeoIP `/ready`.
 
-**Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `lastError`.
+**Response 200:** `status`, `lastSuccessAt`, `lastSnapshotDate`, `rowCount`, `rowsByRegistry`, `rowsByStatus`, `snapshotsByRegistry`, `lastError`.
 
 ---
 

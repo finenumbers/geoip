@@ -700,11 +700,6 @@ export function BrowsePage({ tableType }: BrowsePageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      {tableType === 'rir' && (
-        <p className="shrink-0 text-sm text-muted" data-testid="browse-rir-subtitle">
-          {ui.rir.subtitle}
-        </p>
-      )}
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg border border-border p-1 text-sm">
           <Link

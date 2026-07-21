@@ -141,6 +141,7 @@ async function swapStagingToProduction(log: Logger): Promise<{
   rowCount: number;
   rowsByRegistry: Record<string, number>;
   rowsByStatus: Record<string, number>;
+  snapshotsByRegistry: Record<string, string>;
   snapshotDate: string | null;
 }> {
   return withDirectPoolClient(async (client) => {
@@ -171,19 +172,30 @@ async function swapStagingToProduction(log: Logger): Promise<{
       const byStatus = await client.query<{ status: string; c: string }>(
         `SELECT status, COUNT(*)::text AS c FROM rir_delegations GROUP BY status`,
       );
+      const bySnap = await client.query<{ registry: string; d: string }>(
+        `SELECT registry, MAX(snapshot_date)::text AS d FROM rir_delegations GROUP BY registry`,
+      );
 
       const rowsByRegistry: Record<string, number> = {};
       for (const row of byReg.rows) rowsByRegistry[row.registry] = Number(row.c);
       const rowsByStatus: Record<string, number> = {};
       for (const row of byStatus.rows) rowsByStatus[row.status] = Number(row.c);
+      const snapshotsByRegistry: Record<string, string> = {};
+      for (const row of bySnap.rows) {
+        if (row.d) snapshotsByRegistry[row.registry] = row.d;
+      }
 
       await client.query('COMMIT');
       const rowCount = Number(countRes.rows[0]?.row_count ?? 0);
-      log.info({ rowCount, rowsByRegistry, rowsByStatus }, 'Swapped RIR staging to production');
+      log.info(
+        { rowCount, rowsByRegistry, rowsByStatus, snapshotsByRegistry },
+        'Swapped RIR staging to production',
+      );
       return {
         rowCount,
         rowsByRegistry,
         rowsByStatus,
+        snapshotsByRegistry,
         snapshotDate: countRes.rows[0]?.snapshot_date ?? null,
       };
     } catch (err) {
@@ -239,6 +251,7 @@ export async function runRirImportPipeline(
            row_count = $3,
            rows_by_registry = $4::jsonb,
            rows_by_status = $5::jsonb,
+           snapshots_by_registry = $6::jsonb,
            last_error = NULL,
            active_import_run_id = NULL,
            updated_at = NOW()
@@ -249,6 +262,7 @@ export async function runRirImportPipeline(
         swapped.rowCount,
         JSON.stringify(swapped.rowsByRegistry),
         JSON.stringify(swapped.rowsByStatus),
+        JSON.stringify(swapped.snapshotsByRegistry),
       ],
     );
     log.info({ importRunId, rowCount: swapped.rowCount }, 'RIR import succeeded');

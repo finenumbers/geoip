@@ -353,7 +353,6 @@ function RirStatsCard({
         <SummaryHeadline className={rirImportStatusClass(state?.status, loaded)}>
           {loaded ? formatCount(headlineRows) : ui.dashboard.rirNotLoaded}
         </SummaryHeadline>
-        <p className="mt-1 text-xs text-muted">{ui.dashboard.rirNote}</p>
         <SummaryDetails>
           <DetailItem
             label={ui.dashboard.rirImportStatus}

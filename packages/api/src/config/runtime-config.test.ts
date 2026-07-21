@@ -53,18 +53,23 @@ describe('runtime-config', () => {
     expect(config.settings.logging.accessLogEnabled).toBe(true);
   });
 
-  it('persists patches and enforces fixed import schedule', () => {
+  it('persists import cron and syncs cron timezones to displayTimezone', () => {
     loadRuntimeConfig();
     const updated = persistRuntimeConfig(
       {
         ...loadRuntimeConfig().settings,
+        general: { displayTimezone: 'Asia/Vladivostok' },
         import: { ...loadRuntimeConfig().settings.import, cron: '0 8 * * *' },
+        rirImport: { ...loadRuntimeConfig().settings.rirImport, cron: '30 5 * * *' },
       },
       loadRuntimeConfig().secrets,
     );
-    expect(updated.settings.import.cron).toBe('0 10 * * *');
+    expect(updated.settings.import.cron).toBe('0 8 * * *');
+    expect(updated.settings.rirImport.cron).toBe('30 5 * * *');
+    expect(updated.settings.import.cronTimezone).toBe('Asia/Vladivostok');
+    expect(updated.settings.rirImport.cronTimezone).toBe('Asia/Vladivostok');
     resetRuntimeConfigCache();
-    expect(loadRuntimeConfig().settings.import.cron).toBe('0 10 * * *');
+    expect(loadRuntimeConfig().settings.import.cron).toBe('0 8 * * *');
   });
 
   it('rejects partial config store', () => {

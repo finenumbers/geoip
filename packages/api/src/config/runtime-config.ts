@@ -7,11 +7,10 @@ import {
   type AdminConfigResponse,
   type MaskedSecretField,
   DEFAULT_RUNTIME_SETTINGS,
+  DEFAULT_DISPLAY_TIMEZONE,
   applyEnvironmentProfile,
   createFreshSecrets,
   generateRandomKey,
-  FIXED_IMPORT_CRON,
-  FIXED_IMPORT_TIMEZONE,
 } from '@geoip/shared';
 import { loadBootstrapEnv } from './bootstrap-env.js';
 import {
@@ -49,8 +48,12 @@ export type EnvCompat = {
   IMPORT_API_KEY: string;
   API_KEY: string;
   API_AUTH_ENABLED: boolean;
+  IMPORT_CRON_ENABLED: boolean;
   IMPORT_CRON_CRON: string;
   IMPORT_CRON_TZ: string;
+  RIR_IMPORT_CRON_ENABLED: boolean;
+  RIR_IMPORT_CRON_CRON: string;
+  RIR_IMPORT_CRON_TZ: string;
   IMPORT_DOWNLOAD_DIR: string;
   EXPORT_DIR: string;
   IMPORT_ZIP_CACHE_ENABLED: boolean;
@@ -92,23 +95,25 @@ function ensureApiKeys(secrets: RuntimeSecrets): RuntimeSecrets {
   return runtimeSecretsSchema.parse(next);
 }
 
+function syncCronTimezones(settings: RuntimeSettings): RuntimeSettings {
+  const tz = settings.general.displayTimezone.trim() || DEFAULT_DISPLAY_TIMEZONE;
+  return runtimeSettingsSchema.parse({
+    ...settings,
+    import: { ...settings.import, cronTimezone: tz },
+    rirImport: { ...settings.rirImport, cronTimezone: tz },
+  });
+}
+
 function enforceProductionSettings(
   settings: RuntimeSettings,
   nodeEnv: 'development' | 'production' | 'test',
 ): RuntimeSettings {
-  const withFixedImport = runtimeSettingsSchema.parse({
-    ...settings,
-    import: {
-      ...settings.import,
-      cron: FIXED_IMPORT_CRON,
-      cronTimezone: FIXED_IMPORT_TIMEZONE,
-    },
-  });
-  if (nodeEnv !== 'production') return withFixedImport;
+  const synced = syncCronTimezones(settings);
+  if (nodeEnv !== 'production') return synced;
   return runtimeSettingsSchema.parse({
-    ...withFixedImport,
-    api: { ...withFixedImport.api, authEnabled: true },
-    logging: { ...withFixedImport.logging, accessLogEnabled: true },
+    ...synced,
+    api: { ...synced.api, authEnabled: true },
+    logging: { ...synced.logging, accessLogEnabled: true },
   });
 }
 
@@ -265,8 +270,12 @@ export function toEnvCompat(config: RuntimeConfig): EnvCompat {
     IMPORT_API_KEY: importApiKey,
     API_KEY: apiKey,
     API_AUTH_ENABLED: s.api.authEnabled,
+    IMPORT_CRON_ENABLED: s.import.enabled,
     IMPORT_CRON_CRON: s.import.cron,
     IMPORT_CRON_TZ: s.import.cronTimezone,
+    RIR_IMPORT_CRON_ENABLED: s.rirImport.enabled,
+    RIR_IMPORT_CRON_CRON: s.rirImport.cron,
+    RIR_IMPORT_CRON_TZ: s.rirImport.cronTimezone,
     IMPORT_DOWNLOAD_DIR: s.import.downloadDir,
     EXPORT_DIR: s.export.dir,
     IMPORT_ZIP_CACHE_ENABLED: s.import.zipCacheEnabled,

@@ -1,9 +1,10 @@
-import {
-  FIXED_RIR_IMPORT_CRON,
-  FIXED_RIR_IMPORT_TIMEZONE,
-} from '@geoip/shared';
 import cron, { type ScheduledTask } from 'node-cron';
-import { loadEnv } from '../config/env.js';
+import { loadEnv, resetEnvCache } from '../config/env.js';
+import {
+  loadRuntimeConfig,
+  subscribeConfigChanges,
+} from '../config/runtime-config.js';
+import { watchConfigFileChanges } from '../config/config-reload-watcher.js';
 import { logger, createChildLogger } from '../config/logger.js';
 import { migrate } from '../db/migrate.js';
 import { query } from '../db/client.js';
@@ -26,6 +27,7 @@ const STALE_MINUTES = 30;
 
 let pollInProgress = false;
 let cronTask: ScheduledTask | null = null;
+let restartPoll: ((intervalMs: number) => void) | null = null;
 
 /** Clear orphaned running rows when we can take the advisory lock (no live owner). */
 async function recoverOrphanedImportsIfLockFree(): Promise<void> {
@@ -70,11 +72,24 @@ function scheduleRirImportCron(): void {
     cronTask = null;
   }
 
+  const env = loadEnv();
+  if (!env.RIR_IMPORT_CRON_ENABLED) {
+    logger.info('RIR import cron disabled in settings');
+    return;
+  }
+  if (!env.RIR_IMPORT_CRON_CRON) return;
+
   cronTask = cron.schedule(
-    FIXED_RIR_IMPORT_CRON,
+    env.RIR_IMPORT_CRON_CRON,
     async () => {
+      const config = loadRuntimeConfig();
+      if (!config.settings.rirImport.enabled) {
+        logger.debug('Cron RIR import skipped — disabled in settings');
+        return;
+      }
+      const current = loadEnv();
       logger.info(
-        { tz: FIXED_RIR_IMPORT_TIMEZONE, cron: FIXED_RIR_IMPORT_CRON },
+        { tz: current.RIR_IMPORT_CRON_TZ, cron: current.RIR_IMPORT_CRON_CRON },
         'Cron RIR import triggered',
       );
       const result = await createRirImportRun('cron');
@@ -84,12 +99,20 @@ function scheduleRirImportCron(): void {
         logger.info({ importRunId: result.importRunId }, 'Cron RIR import skipped — already running');
       }
     },
-    { timezone: FIXED_RIR_IMPORT_TIMEZONE },
+    { timezone: env.RIR_IMPORT_CRON_TZ },
   );
   logger.info(
-    { cron: FIXED_RIR_IMPORT_CRON, tz: FIXED_RIR_IMPORT_TIMEZONE },
+    { cron: env.RIR_IMPORT_CRON_CRON, tz: env.RIR_IMPORT_CRON_TZ },
     'RIR import cron scheduled',
   );
+}
+
+function applyRuntimeConfigReload(): void {
+  resetEnvCache();
+  const env = loadEnv();
+  restartPoll?.(env.IMPORT_POLL_INTERVAL_MS);
+  scheduleRirImportCron();
+  logger.info('RIR import worker reloaded runtime config');
 }
 
 async function main(): Promise<void> {
@@ -112,7 +135,7 @@ async function main(): Promise<void> {
   });
 
   const env = loadEnv();
-  startWorkerPoll(async () => {
+  restartPoll = startWorkerPoll(async () => {
     try {
       await pollQueuedRirImports();
     } catch (err) {
@@ -121,6 +144,8 @@ async function main(): Promise<void> {
   }, env.IMPORT_POLL_INTERVAL_MS);
 
   scheduleRirImportCron();
+  subscribeConfigChanges(applyRuntimeConfigReload);
+  watchConfigFileChanges();
 
   const state = await getRirDatasetState();
   if (state.rowCount === 0 && state.status !== 'importing') {

@@ -16,6 +16,14 @@ const sample: RirDatasetStateResponse = {
     iana: 10,
   },
   rowsByStatus: { allocated: 80, reserved: 20 },
+  snapshotsByRegistry: {
+    ripencc: '2026-07-20',
+    arin: '2026-07-20',
+    apnic: '2026-07-20',
+    lacnic: '2026-07-20',
+    afrinic: '2026-07-20',
+    iana: '2026-07-20',
+  },
   lastError: null,
 };
 

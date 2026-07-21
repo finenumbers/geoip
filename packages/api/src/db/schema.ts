@@ -245,6 +245,7 @@ export const rirDatasetState = pgTable('rir_dataset_state', {
   rowCount: bigint('row_count', { mode: 'number' }).notNull().default(0),
   rowsByRegistry: jsonb('rows_by_registry').notNull().default(sql`'{}'::jsonb`),
   rowsByStatus: jsonb('rows_by_status').notNull().default(sql`'{}'::jsonb`),
+  snapshotsByRegistry: jsonb('snapshots_by_registry').notNull().default(sql`'{}'::jsonb`),
   lastError: text('last_error'),
   activeImportRunId: uuid('active_import_run_id').references(() => rirImportRuns.id),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
