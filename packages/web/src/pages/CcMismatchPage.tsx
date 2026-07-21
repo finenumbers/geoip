@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef, type SortingState } from '@tanstack/react-table';
+import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { ui } from '@/lib/ui-strings';
 import { DataTable } from '@/components/DataTable';
@@ -40,7 +41,18 @@ type PageParam = {
   afterSortValue?: string;
 };
 
+function formatDurationMs(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  if (ms < 1000) return `${ms} мс`;
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec} с`;
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem ? `${min} мин ${rem} с` : `${min} мин`;
+}
+
 export function CcMismatchPage() {
+  const queryClient = useQueryClient();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [filters, setFilters] = useState<TableFilter[]>([]);
 
@@ -59,7 +71,11 @@ export function CcMismatchPage() {
   const stateQuery = useQuery({
     queryKey: ['cc-mismatch-state'],
     queryFn: api.ccMismatchState,
-    refetchInterval: (q) => (q.state.data?.status === 'running' ? 5_000 : 60_000),
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      if (s === 'running' || s === 'never') return 5_000;
+      return 60_000;
+    },
   });
 
   const tableQuery = useInfiniteQuery({
@@ -201,6 +217,31 @@ export function CcMismatchPage() {
   }, [rowCapReached, tableQuery]);
 
   const status = stateQuery.data?.status ?? 'never';
+
+  useEffect(() => {
+    if (status === 'ready') {
+      void queryClient.invalidateQueries({ queryKey: ['cc-mismatch-table'] });
+    }
+  }, [status, queryClient]);
+
+  const statusLabel =
+    status === 'running'
+      ? ui.ccMismatch.statusRunning
+      : status === 'ready'
+        ? ui.ccMismatch.statusReady
+        : status === 'failed'
+          ? ui.ccMismatch.statusFailed
+          : ui.ccMismatch.statusNever;
+
+  const statusBannerClass =
+    status === 'running'
+      ? 'border-amber-500/40 bg-amber-500/10 text-amber-900'
+      : status === 'ready'
+        ? 'border-green-600/30 bg-green-600/10 text-green-900'
+        : status === 'failed'
+          ? 'border-red-500/40 bg-red-500/10 text-red-900'
+          : 'border-border bg-muted/40 text-foreground';
+
   const emptyMessage = (() => {
     if (status === 'never') return ui.ccMismatch.emptyNever;
     if (status === 'running') return ui.ccMismatch.emptyRunning;
@@ -215,22 +256,52 @@ export function CcMismatchPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0">
-        <h1 className="text-lg font-semibold">{ui.ccMismatch.title}</h1>
-        <p className="mt-1 text-sm text-muted">{ui.ccMismatch.hint}</p>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-          <span>
-            {ui.ccMismatch.rowCount}:{' '}
-            <span className="font-medium text-foreground">
-              {(stateQuery.data?.rowCount ?? totalRows).toLocaleString('ru')}
+      <div className="shrink-0 space-y-2">
+        <div>
+          <h1 className="text-lg font-semibold">{ui.ccMismatch.title}</h1>
+          <p className="mt-1 text-sm text-muted">{ui.ccMismatch.hint}</p>
+        </div>
+
+        <div
+          className={cn('rounded border px-3 py-2 text-sm', statusBannerClass)}
+          data-testid="cc-mismatch-status"
+        >
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span>
+              {ui.ccMismatch.statusLabel}:{' '}
+              <span className="font-medium">{statusLabel}</span>
             </span>
-          </span>
-          <span>
-            {ui.ccMismatch.rebuiltAt}:{' '}
-            <span className="font-medium text-foreground">
-              {formatDateTime(stateQuery.data?.rebuiltAt)}
+            <span>
+              {ui.ccMismatch.rowCount}:{' '}
+              <span className="font-medium">
+                {(stateQuery.data?.rowCount ?? totalRows).toLocaleString('ru')}
+              </span>
             </span>
-          </span>
+            <span>
+              {ui.ccMismatch.rebuiltAt}:{' '}
+              <span className="font-medium">{formatDateTime(stateQuery.data?.rebuiltAt)}</span>
+            </span>
+            {(status === 'ready' || status === 'failed') && (
+              <span>
+                {ui.ccMismatch.durationMs}:{' '}
+                <span className="font-medium">
+                  {formatDurationMs(stateQuery.data?.durationMs)}
+                </span>
+              </span>
+            )}
+          </div>
+          {status === 'never' && (
+            <p className="mt-1 text-muted">{ui.ccMismatch.statusNeverHint}</p>
+          )}
+          {status === 'running' && (
+            <p className="mt-1">{ui.ccMismatch.statusRunningHint}</p>
+          )}
+          {status === 'failed' && (
+            <p className="mt-1">
+              {ui.ccMismatch.statusFailedHint}{' '}
+              {stateQuery.data?.lastError ?? '—'}
+            </p>
+          )}
         </div>
       </div>
 

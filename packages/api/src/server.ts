@@ -9,6 +9,7 @@ import { recoverStaleImportRuns } from './jobs/import-orphan-recovery.js';
 import { ensureAsnMappingsInBackground } from './sql/asn-backfill.js';
 import { ensureDatasetCachesInBackground } from './sql/filter-count-cache-ensure.js';
 import { ensureDatasetVolumesInBackground } from './sql/dataset-volumes-backfill.js';
+import { ensureCcMismatchRebuildInBackground } from './jobs/geo-rir-cc-mismatch-rebuild.js';
 import { subscribeConfigChanges } from './config/runtime-config.js';
 import { watchConfigFileChanges } from './config/config-reload-watcher.js';
 
@@ -46,6 +47,7 @@ async function main(): Promise<void> {
 
   await app.listen({ port: env.API_PORT, host: '0.0.0.0' });
   logger.info({ port: env.API_PORT }, 'API server started');
+  ensureCcMismatchRebuildInBackground(logger);
 }
 
 main().catch((err) => {

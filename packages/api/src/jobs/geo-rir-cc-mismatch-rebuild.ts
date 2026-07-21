@@ -1,18 +1,56 @@
 import type { Logger } from 'pino';
-import { withDirectPoolClient } from '../db/client.js';
+import { query, withDirectPoolClient } from '../db/client.js';
+import { isRirDatasetReady } from '../repositories/rir-repository.js';
+
+let ensureRunning = false;
+
+async function isGrchcCountryReady(): Promise<boolean> {
+  const result = await query<{ ready: boolean }>(
+    `SELECT (mv_status = 'ready' AND country_row_count > 0) AS ready
+     FROM dataset_state
+     WHERE id = 1`,
+  );
+  return Boolean(result.rows[0]?.ready);
+}
+
+async function getCcMismatchStatus(): Promise<string | null> {
+  const result = await query<{ status: string }>(
+    `SELECT status FROM geo_rir_cc_mismatch_state WHERE id = 1`,
+  );
+  return result.rows[0]?.status ?? null;
+}
 
 /**
  * Full GRChC country-block ISO vs covering RIR delegated CC.
  * Materializes only mismatches into geo_rir_cc_mismatches.
+ *
+ * @param force when false, only claim + rebuild if status is never/failed (startup backfill).
  */
-export async function rebuildGeoRirCcMismatches(log: Logger): Promise<{ rowCount: number }> {
+export async function rebuildGeoRirCcMismatches(
+  log: Logger,
+  options: { force?: boolean } = {},
+): Promise<{ rowCount: number } | null> {
+  const force = options.force !== false;
   const started = Date.now();
   return withDirectPoolClient(async (client) => {
-    await client.query(
-      `UPDATE geo_rir_cc_mismatch_state
-       SET status = 'running', last_error = NULL, updated_at = NOW()
-       WHERE id = 1`,
-    );
+    if (force) {
+      await client.query(
+        `UPDATE geo_rir_cc_mismatch_state
+         SET status = 'running', last_error = NULL, updated_at = NOW()
+         WHERE id = 1`,
+      );
+    } else {
+      const claimed = await client.query(
+        `UPDATE geo_rir_cc_mismatch_state
+         SET status = 'running', last_error = NULL, updated_at = NOW()
+         WHERE id = 1 AND status IN ('never', 'failed')
+         RETURNING id`,
+      );
+      if ((claimed.rowCount ?? 0) === 0) {
+        log.info('CC mismatch rebuild skipped — already running or ready');
+        return null;
+      }
+    }
 
     try {
       await client.query('TRUNCATE geo_rir_cc_mismatches RESTART IDENTITY');
@@ -75,4 +113,36 @@ export async function rebuildGeoRirCcMismatches(log: Logger): Promise<{ rowCount
       throw err;
     }
   });
+}
+
+/** Post-deploy backfill when both datasets are ready but mismatch table was never built. */
+export function ensureCcMismatchRebuildInBackground(log: Logger): void {
+  if (ensureRunning) return;
+  ensureRunning = true;
+
+  void (async () => {
+    try {
+      const status = await getCcMismatchStatus();
+      if (status !== 'never' && status !== 'failed') return;
+
+      const [grchcReady, rirReady] = await Promise.all([
+        isGrchcCountryReady(),
+        isRirDatasetReady(),
+      ]);
+      if (!grchcReady || !rirReady) {
+        log.info(
+          { grchcReady, rirReady, status },
+          'CC mismatch backfill deferred — datasets not ready',
+        );
+        return;
+      }
+
+      log.info({ status }, 'Starting CC mismatch background rebuild');
+      await rebuildGeoRirCcMismatches(log, { force: false });
+    } catch (err) {
+      log.warn({ err }, 'CC mismatch background rebuild failed');
+    } finally {
+      ensureRunning = false;
+    }
+  })();
 }
