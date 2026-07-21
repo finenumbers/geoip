@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema.js';
 import { loadEnv } from '../config/env.js';
+import { logger } from '../config/logger.js';
 
 let pool: pg.Pool | null = null;
 let directPool: pg.Pool | null = null;
@@ -22,20 +23,31 @@ function appendPgOptions(connectionString: string, option: string): string {
   return url.toString();
 }
 
+/** Idle client errors (e.g. Postgres stop) must be handled or node-postgres can crash the process. */
+function attachPoolErrorHandler(next: pg.Pool, label: string): pg.Pool {
+  next.on('error', (err) => {
+    logger.error({ err, pool: label }, 'Unexpected idle Postgres client error');
+  });
+  return next;
+}
+
 export function getPool(): pg.Pool {
   if (!pool) {
     const env = loadEnv();
     const viaPgbouncer = usesPgbouncer(env.DATABASE_URL);
-    pool = new pg.Pool({
-      connectionString: viaPgbouncer
-        ? env.DATABASE_URL
-        : appendPgOptions(
-            env.DATABASE_URL,
-            `-c statement_timeout=${env.STATEMENT_TIMEOUT_MS}`,
-          ),
-      max: env.DATABASE_POOL_MAX,
-      idleTimeoutMillis: 30_000,
-    });
+    pool = attachPoolErrorHandler(
+      new pg.Pool({
+        connectionString: viaPgbouncer
+          ? env.DATABASE_URL
+          : appendPgOptions(
+              env.DATABASE_URL,
+              `-c statement_timeout=${env.STATEMENT_TIMEOUT_MS}`,
+            ),
+        max: env.DATABASE_POOL_MAX,
+        idleTimeoutMillis: 30_000,
+      }),
+      'app',
+    );
   }
   return pool;
 }
@@ -44,11 +56,17 @@ export function getPool(): pg.Pool {
 export function getDirectPool(): pg.Pool {
   if (!directPool) {
     const env = loadEnv();
-    directPool = new pg.Pool({
-      connectionString: appendPgOptions(env.DATABASE_DIRECT_URL ?? env.DATABASE_URL, '-c statement_timeout=0'),
-      max: 2,
-      idleTimeoutMillis: 30_000,
-    });
+    directPool = attachPoolErrorHandler(
+      new pg.Pool({
+        connectionString: appendPgOptions(
+          env.DATABASE_DIRECT_URL ?? env.DATABASE_URL,
+          '-c statement_timeout=0',
+        ),
+        max: 2,
+        idleTimeoutMillis: 30_000,
+      }),
+      'direct',
+    );
   }
   return directPool;
 }

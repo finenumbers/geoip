@@ -17,6 +17,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: geoip_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: geoip
       POSTGRES_PASSWORD: geoip
@@ -34,6 +35,7 @@ services:
   pgbouncer:
     image: edoburu/pgbouncer:1.22.1-p0
     container_name: geoip_pgbouncer
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +54,7 @@ services:
   api:
     image: ghcr.io/finenumbers/geoip-api:latest
     container_name: geoip_api
+    restart: unless-stopped
     environment:
       <<: *api-database-env
       CONFIG_DATA_DIR: /data/geoip/config
@@ -73,6 +76,7 @@ services:
   import:
     image: ghcr.io/finenumbers/geoip-api:latest
     container_name: geoip_import
+    restart: unless-stopped
     command: ["node", "dist/jobs/import-worker.js"]
     environment:
       <<: *api-database-env
@@ -89,6 +93,7 @@ services:
   export:
     image: ghcr.io/finenumbers/geoip-api:latest
     container_name: geoip_export
+    restart: unless-stopped
     command: ["node", "dist/jobs/export-worker.js"]
     environment:
       <<: *api-database-env
@@ -105,6 +110,7 @@ services:
   web:
     image: ghcr.io/finenumbers/geoip-web:latest
     container_name: geoip_web
+    restart: unless-stopped
     environment:
       CONFIG_DATA_DIR: /data/geoip/config
     volumes:
