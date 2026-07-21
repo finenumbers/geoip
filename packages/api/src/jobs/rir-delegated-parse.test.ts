@@ -84,12 +84,63 @@ describe('parseDelegatedRecordLine', () => {
     expect(asn?.rangeText).toBe('AS1-AS4199595619');
   });
 
+  it('keeps real IANA large ASN row and nulls 20080400 date', () => {
+    const asn = parseDelegatedRecordLine(
+      'iana|ZZ|asn|404381|4199595619|20260720|available|iana|iana',
+      'delegated-iana-latest',
+      '2026-07-20',
+    );
+    expect(asn?.startAsn).toBe(404381);
+    expect(asn?.asnCount).toBe(4199595619);
+    expect(asn?.opaqueId).toBe('iana');
+    expect(asn?.status).toBe('available');
+
+    const v6 = parseDelegatedRecordLine(
+      'iana|ZZ|ipv6|3ffe:0000::|16|20080400|reserved|ietf|iana',
+      'delegated-iana-latest',
+      '2026-07-20',
+    );
+    expect(v6?.resourceType).toBe('ipv6');
+    expect(v6?.prefixLen).toBe(16);
+    expect(v6?.allocatedAt).toBeNull();
+    expect(v6?.opaqueId).toBe('ietf');
+  });
+
+  it('parses RIPE 7-field rows without opaque and empty date', () => {
+    const rec = parseDelegatedRecordLine(
+      'ripencc||ipv4|5.134.16.0|2048||reserved',
+      'delegated-ripencc-extended-latest',
+      '2026-07-20',
+    );
+    expect(rec?.registry).toBe('ripencc');
+    expect(rec?.cc).toBeNull();
+    expect(rec?.allocatedAt).toBeNull();
+    expect(rec?.opaqueId).toBeNull();
+    expect(rec?.status).toBe('reserved');
+    expect(rec?.hostCount).toBe('2048');
+  });
+
+  it('parses IANA 9-field opaque and ignores trailing extension', () => {
+    const rec = parseDelegatedRecordLine(
+      'iana|ZZ|asn|0|1|19830101|reserved|ietf|iana',
+      'delegated-iana-latest',
+      '2026-07-20',
+    );
+    expect(rec?.opaqueId).toBe('ietf');
+    expect(rec?.allocatedAt).toBe('1983-01-01');
+    expect(rec?.rangeText).toBe('AS0');
+  });
+
   it('skips summary and header-like lines', () => {
     expect(
       parseDelegatedRecordLine('apnic|*|ipv4|*|123|summary', 'f', '2026-07-21'),
     ).toBeNull();
+    expect(
+      parseDelegatedRecordLine('2|iana|20260720|683|19810901|20260720|+0000', 'f', '2026-07-20'),
+    ).toBeNull();
   });
 });
+
 
 describe('parseDelegatedFileContent', () => {
   it('reads snapshot date from version header and parses records', () => {

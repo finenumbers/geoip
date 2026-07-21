@@ -25,8 +25,11 @@ export function SystemInitializingBanner({
       )}
       data-testid="system-initializing-banner"
     >
-      <p className="font-medium">{ui.dashboard.statusInitializing}</p>
-      <p className="mt-1 text-sky-900">{ui.dashboard.initializingBanner}</p>
+      <p className="font-medium">{ui.systemBanner.titleInitializing}</p>
+      <p className="mt-1 text-sky-900">{ui.systemBanner.initializingHint}</p>
+      <ul className="mt-2 list-inside list-disc space-y-0.5 text-sky-900">
+        <li>{ui.systemBanner.processGrchcMv}</li>
+      </ul>
     </div>
   );
 }

@@ -20,7 +20,7 @@ async function getLockClient(): Promise<pg.Client> {
 export async function tryAcquireRirImportLock(): Promise<boolean> {
   const client = await getLockClient();
   const result = await client.query<{ acquired: boolean }>(
-    'SELECT pg_try_advisory_lock($1) AS acquired',
+    'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
     [RIR_IMPORT_LOCK_KEY],
   );
   return result.rows[0]?.acquired ?? false;
@@ -29,7 +29,7 @@ export async function tryAcquireRirImportLock(): Promise<boolean> {
 export async function releaseRirImportLock(): Promise<void> {
   if (!lockClient) return;
   try {
-    await lockClient.query('SELECT pg_advisory_unlock($1)', [RIR_IMPORT_LOCK_KEY]);
+    await lockClient.query('SELECT pg_advisory_unlock($1::bigint)', [RIR_IMPORT_LOCK_KEY]);
   } catch {
     // ignore unlock errors during shutdown
   }
@@ -41,7 +41,7 @@ export async function releaseOrphanedRirImportLock(): Promise<void> {
   const client = new pg.Client({ connectionString: directDatabaseUrl() });
   await client.connect();
   try {
-    await client.query('SELECT pg_advisory_unlock($1)', [RIR_IMPORT_LOCK_KEY]);
+    await client.query('SELECT pg_advisory_unlock($1::bigint)', [RIR_IMPORT_LOCK_KEY]);
   } finally {
     await client.end().catch(() => undefined);
   }

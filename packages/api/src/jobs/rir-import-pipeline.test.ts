@@ -4,7 +4,7 @@ import {
   processDelegatedLine,
   createDelegatedParseState,
 } from './rir-delegated-parse.js';
-import { recordToCopyLine } from './rir-import-pipeline.js';
+import { buildRirDatasetReadyUpdate, recordToCopyLine } from './rir-import-pipeline.js';
 
 const SAMPLE = `
 2.3|apnic|123|2|20200101|20260720|+1000
@@ -85,3 +85,24 @@ describe('recordToCopyLine', () => {
     expect(line.split('\t')[9]).toBe('4199595619');
   });
 });
+
+describe('buildRirDatasetReadyUpdate', () => {
+  it('uses contiguous $1..$5 placeholders with typed casts', () => {
+    const { sql, params } = buildRirDatasetReadyUpdate({
+      snapshotDate: '2026-07-20',
+      rowCount: 3,
+      rowsByRegistry: { iana: 1, apnic: 2 },
+      rowsByStatus: { reserved: 1 },
+      snapshotsByRegistry: { iana: '2026-07-20', apnic: '2026-07-20' },
+    });
+    const placeholders = [...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1]));
+    expect(placeholders).toEqual([1, 2, 3, 4, 5]);
+    expect(sql).toContain('$1::date');
+    expect(sql).toContain('$2::bigint');
+    expect(sql).toContain('$5::jsonb');
+    expect(params).toHaveLength(5);
+    expect(params[0]).toBe('2026-07-20');
+    expect(params[1]).toBe(3);
+  });
+});
+

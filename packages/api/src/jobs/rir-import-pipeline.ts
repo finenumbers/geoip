@@ -52,6 +52,37 @@ export function recordToCopyLine(rec: ParsedRirRecord): string {
   ].join('\t');
 }
 
+/** Contiguous $1..$5 — avoids PG "could not determine data type of parameter $1". */
+export function buildRirDatasetReadyUpdate(swapped: {
+  snapshotDate: string | null;
+  rowCount: number;
+  rowsByRegistry: Record<string, number>;
+  rowsByStatus: Record<string, number>;
+  snapshotsByRegistry: Record<string, string>;
+}): { sql: string; params: unknown[] } {
+  return {
+    sql: `UPDATE rir_dataset_state
+       SET status = 'ready',
+           last_success_at = NOW(),
+           last_snapshot_date = $1::date,
+           row_count = $2::bigint,
+           rows_by_registry = $3::jsonb,
+           rows_by_status = $4::jsonb,
+           snapshots_by_registry = $5::jsonb,
+           last_error = NULL,
+           active_import_run_id = NULL,
+           updated_at = NOW()
+       WHERE id = 1`,
+    params: [
+      swapped.snapshotDate,
+      swapped.rowCount,
+      JSON.stringify(swapped.rowsByRegistry),
+      JSON.stringify(swapped.rowsByStatus),
+      JSON.stringify(swapped.snapshotsByRegistry),
+    ],
+  };
+}
+
 async function* linesFromResponse(res: Response): AsyncGenerator<string> {
   if (!res.body) {
     const text = await res.text();
@@ -220,12 +251,12 @@ export async function runRirImportPipeline(
     await query(
       `UPDATE rir_import_runs
        SET status = 'running', started_at = COALESCE(started_at, NOW()), error_code = NULL, error_message = NULL
-       WHERE id = $1`,
+       WHERE id = $1::uuid`,
       [importRunId],
     );
     await query(
       `UPDATE rir_dataset_state
-       SET status = 'importing', active_import_run_id = $1, last_error = NULL, updated_at = NOW()
+       SET status = 'importing', active_import_run_id = $1::uuid, last_error = NULL, updated_at = NOW()
        WHERE id = 1`,
       [importRunId],
     );
@@ -237,34 +268,14 @@ export async function runRirImportPipeline(
       `UPDATE rir_import_runs
        SET status = 'succeeded',
            finished_at = NOW(),
-           row_count = $2,
+           row_count = $2::int,
            rows_by_file = $3::jsonb,
            snapshot_date = $4::date
-       WHERE id = $1`,
+       WHERE id = $1::uuid`,
       [importRunId, swapped.rowCount, JSON.stringify(rowsByFile), swapped.snapshotDate],
     );
-    await query(
-      `UPDATE rir_dataset_state
-       SET status = 'ready',
-           last_success_at = NOW(),
-           last_snapshot_date = $2::date,
-           row_count = $3,
-           rows_by_registry = $4::jsonb,
-           rows_by_status = $5::jsonb,
-           snapshots_by_registry = $6::jsonb,
-           last_error = NULL,
-           active_import_run_id = NULL,
-           updated_at = NOW()
-       WHERE id = 1`,
-      [
-        importRunId,
-        swapped.snapshotDate,
-        swapped.rowCount,
-        JSON.stringify(swapped.rowsByRegistry),
-        JSON.stringify(swapped.rowsByStatus),
-        JSON.stringify(swapped.snapshotsByRegistry),
-      ],
-    );
+    const readyUpdate = buildRirDatasetReadyUpdate(swapped);
+    await query(readyUpdate.sql, readyUpdate.params);
     log.info({ importRunId, rowCount: swapped.rowCount }, 'RIR import succeeded');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -272,7 +283,7 @@ export async function runRirImportPipeline(
     await query(
       `UPDATE rir_import_runs
        SET status = 'failed', finished_at = NOW(), error_code = 'import_failed', error_message = $2
-       WHERE id = $1`,
+       WHERE id = $1::uuid`,
       [importRunId, message],
     );
     await query(

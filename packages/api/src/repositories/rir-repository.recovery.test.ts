@@ -25,9 +25,10 @@ describe('rir import recovery helpers', () => {
     const n = await recoverStaleRirImportRuns(30);
     expect(n).toBe(2);
     expect(query.mock.calls[0]?.[1]).toEqual([
-      '30',
+      30,
       'RIR import abandoned after 30m without progress',
     ]);
+    expect(String(query.mock.calls[0]?.[0])).toContain('make_interval(mins => $1::int)');
     expect(String(query.mock.calls[0]?.[0])).toContain('queued_at');
     expect(String(query.mock.calls[1]?.[0])).toContain("status = 'importing'");
   });

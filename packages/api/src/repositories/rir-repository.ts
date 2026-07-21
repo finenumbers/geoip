@@ -156,8 +156,8 @@ export async function recoverStaleRirImportRuns(staleMinutes = 30): Promise<numb
          error_code = 'stale',
          error_message = $2
      WHERE status IN ('queued', 'running')
-       AND COALESCE(started_at, queued_at) < NOW() - ($1 || ' minutes')::interval`,
-    [String(staleMinutes), `RIR import abandoned after ${staleMinutes}m without progress`],
+       AND COALESCE(started_at, queued_at) < NOW() - make_interval(mins => $1::int)`,
+    [staleMinutes, `RIR import abandoned after ${staleMinutes}m without progress`],
   );
 
   await query(

@@ -4,6 +4,10 @@ import { isSetupComplete } from '@geoip/shared';
 import { useSystemReadyStatus } from '@/hooks/useSystemReadyStatus';
 import { api } from '@/lib/api';
 import {
+  dataPlaneHasIssues,
+  dataPlaneHasProgress,
+} from '@/lib/data-plane-processes';
+import {
   formatSystemCheckLabel,
   formatSystemCheckStatus,
   shouldHideSystemBannerForSetupPage,
@@ -18,7 +22,7 @@ export function SystemStatusBanner() {
     checks,
     isReadyError,
     isReadyLoading,
-    isInitializing,
+    processes,
     failedChecks,
   } = useSystemReadyStatus();
   const { data: checklist } = useQuery({
@@ -43,18 +47,23 @@ export function SystemStatusBanner() {
     );
   }
 
-  if (isReadyLoading && !status) {
+  if (isReadyLoading && !status && processes.length === 0) {
     return null;
   }
 
-  if (isInitializing) {
+  const hasProgress = dataPlaneHasProgress(processes);
+  const hasIssues = dataPlaneHasIssues(processes);
+
+  if (hasProgress) {
     return (
       <StatusBanner
         variant="initializing"
-        title={ui.dashboard.statusInitializing}
-        body={ui.dashboard.initializingBanner}
+        title={ui.systemBanner.titleInitializing}
+        body={ui.systemBanner.initializingHint}
         testId="system-status-banner"
-      />
+      >
+        <ProcessList processes={processes} />
+      </StatusBanner>
     );
   }
 
@@ -77,19 +86,25 @@ export function SystemStatusBanner() {
             })}
           </ul>
         )}
+        {processes.length > 0 && <ProcessList processes={processes} />}
       </StatusBanner>
     );
   }
 
-  if (status === 'degraded') {
-    const reasons: string[] = [];
-    if (checks?.importRunning) {
-      reasons.push(ui.systemBanner.importRunning);
+  if (status === 'degraded' || hasIssues) {
+    const legacyReasons: string[] = [];
+    if (status === 'degraded' && checks?.importRunning) {
+      // Covered by processes when present; keep fallback if processes empty.
+      if (!processes.some((p) => p.id === 'grchc-import')) {
+        legacyReasons.push(ui.systemBanner.importRunning);
+      }
     }
-    if (checks && !checks.asnMapping) {
-      reasons.push(
-        `${formatSystemCheckLabel('asnMapping')}: ${formatSystemCheckStatus('asnMapping', false).text}`,
-      );
+    if (status === 'degraded' && checks && !checks.asnMapping) {
+      if (!processes.some((p) => p.id === 'grchc-asn')) {
+        legacyReasons.push(
+          `${formatSystemCheckLabel('asnMapping')}: ${formatSystemCheckStatus('asnMapping', false).text}`,
+        );
+      }
     }
 
     return (
@@ -98,9 +113,12 @@ export function SystemStatusBanner() {
         title={ui.systemBanner.titleDegraded}
         testId="system-status-banner"
       >
-        {reasons.length > 0 && (
+        {(processes.length > 0 || legacyReasons.length > 0) && (
           <ul className="mt-2 list-inside list-disc space-y-0.5">
-            {reasons.map((reason) => (
+            {processes.map((process) => (
+              <li key={process.id}>{process.text}</li>
+            ))}
+            {legacyReasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>
@@ -110,6 +128,21 @@ export function SystemStatusBanner() {
   }
 
   return null;
+}
+
+function ProcessList({
+  processes,
+}: {
+  processes: Array<{ id: string; text: string }>;
+}) {
+  if (processes.length === 0) return null;
+  return (
+    <ul className="mt-2 list-inside list-disc space-y-0.5">
+      {processes.map((process) => (
+        <li key={process.id}>{process.text}</li>
+      ))}
+    </ul>
+  );
 }
 
 function StatusBanner({
