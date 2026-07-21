@@ -177,6 +177,10 @@ export function AdminPage() {
 
   const wipeData = useMutation({
     mutationFn: adminApi.wipeData,
+    onMutate: () => {
+      setError(null);
+      setMessage(ui.admin.wipeDataProgress);
+    },
     onSuccess: (data) => {
       setMessage(
         `${ui.admin.wipeDataDone}: GRChC runs ${data.grchcImportRunsDeleted}, RIR runs ${data.rirImportRunsDeleted}, exports ${data.exportJobsDeleted}`,
@@ -187,6 +191,7 @@ export function AdminPage() {
       void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['status'] });
+      void queryClient.invalidateQueries({ queryKey: ['ready'] });
     },
     onError: (err: Error) => {
       setMessage(null);
@@ -276,6 +281,11 @@ export function AdminPage() {
             </div>
             <div className="mt-4 space-y-2">
               <p className="text-sm text-muted">{ui.admin.wipeDataHint}</p>
+              {wipeData.isPending && (
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  {ui.admin.wipeDataProgress}
+                </p>
+              )}
               <ActionButton
                 variant="danger"
                 loading={wipeData.isPending}
@@ -284,7 +294,7 @@ export function AdminPage() {
                   wipeData.mutate();
                 }}
               >
-                {ui.admin.wipeData}
+                {wipeData.isPending ? ui.admin.wipeDataInProgress : ui.admin.wipeData}
               </ActionButton>
             </div>
             {reloadStatus && (

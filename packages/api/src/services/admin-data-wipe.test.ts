@@ -7,8 +7,13 @@ vi.mock('../config/env.js', () => ({
   })),
 }));
 
+const clientQuery = vi.fn(async () => ({ rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] }));
+
 vi.mock('../db/client.js', () => ({
   query: vi.fn(async () => ({ rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] })),
+  withDirectPoolClient: vi.fn(async (fn: (client: { query: typeof clientQuery }) => Promise<unknown>) =>
+    fn({ query: clientQuery }),
+  ),
 }));
 
 vi.mock('../config/logger.js', () => ({
@@ -35,10 +40,6 @@ vi.mock('../sql/asn-mapping-status.js', () => ({
   invalidateAsnMappingCache: vi.fn(),
 }));
 
-vi.mock('../sql/swap.js', () => ({
-  relaxStagingBlockForeignKeys: vi.fn(async () => undefined),
-}));
-
 vi.mock('./ready-cache.js', () => ({
   invalidateReadyCache: vi.fn(),
 }));
@@ -56,7 +57,7 @@ vi.mock('node:fs', async () => {
   };
 });
 
-const { query } = await import('../db/client.js');
+const { query, withDirectPoolClient } = await import('../db/client.js');
 const { wipeAllDatasets } = await import('./admin-data-wipe.js');
 const { recreateMaterializedViewsFromProduction } = await import('../sql/recreate-materialized-views.js');
 const { invalidateDatasetStateCache } = await import('../repositories/dataset-repository.js');
@@ -66,7 +67,16 @@ const { invalidateAsnMappingCache } = await import('../sql/asn-mapping-status.js
 describe('wipeAllDatasets', () => {
   beforeEach(() => {
     vi.mocked(query).mockReset();
+    clientQuery.mockReset();
+    vi.mocked(withDirectPoolClient).mockClear();
     vi.mocked(query).mockResolvedValue({
+      rows: [],
+      rowCount: 0,
+      command: 'SELECT',
+      oid: 0,
+      fields: [],
+    });
+    clientQuery.mockResolvedValue({
       rows: [],
       rowCount: 0,
       command: 'SELECT',
@@ -102,18 +112,21 @@ describe('wipeAllDatasets', () => {
       exportFilesRemoved: 0,
       zipCacheCleared: true,
     });
+    expect(withDirectPoolClient).toHaveBeenCalled();
     expect(recreateMaterializedViewsFromProduction).toHaveBeenCalled();
     expect(invalidateDatasetStateCache).toHaveBeenCalled();
     expect(invalidateReadyCache).toHaveBeenCalled();
     expect(invalidateAsnMappingCache).toHaveBeenCalled();
 
+    const heavySql = clientQuery.mock.calls.map(([sql]) => String(sql));
+    expect(heavySql.some((sql) => sql.includes('TRUNCATE') && sql.includes('geo_city_blocks'))).toBe(
+      true,
+    );
+    expect(heavySql.some((sql) => sql.includes('TRUNCATE') && sql.includes('rir_delegations'))).toBe(
+      true,
+    );
+
     const sqlCalls = vi.mocked(query).mock.calls.map(([sql]) => String(sql));
-    expect(sqlCalls.some((sql) => sql.includes('TRUNCATE') && sql.includes('geo_city_blocks'))).toBe(
-      true,
-    );
-    expect(sqlCalls.some((sql) => sql.includes('TRUNCATE') && sql.includes('rir_delegations'))).toBe(
-      true,
-    );
     expect(sqlCalls.some((sql) => sql.includes('UPDATE dataset_state'))).toBe(true);
     expect(sqlCalls.some((sql) => sql.includes('UPDATE rir_dataset_state'))).toBe(true);
   });

@@ -1,7 +1,8 @@
 import { promises as fs, unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type pg from 'pg';
 import { loadEnv } from '../config/env.js';
-import { query } from '../db/client.js';
+import { query, withDirectPoolClient } from '../db/client.js';
 import { logger } from '../config/logger.js';
 import { releaseOrphanedImportLock } from '../jobs/import-lock.js';
 import { releaseOrphanedRirImportLock } from '../jobs/rir-import-lock.js';
@@ -9,7 +10,6 @@ import { invalidateDatasetStateCache } from '../repositories/dataset-repository.
 import { recreateMaterializedViewsFromProduction } from '../sql/recreate-materialized-views.js';
 import { invalidateAsnMappingCache } from '../sql/asn-mapping-status.js';
 import { DATASET_CACHE_VERSION } from '../sql/dataset-cache-version.js';
-import { relaxStagingBlockForeignKeys } from '../sql/swap.js';
 import { resolveExportZipPath } from './export-archive.js';
 import { invalidateReadyCache } from './ready-cache.js';
 
@@ -67,6 +67,36 @@ async function clearExportJobs(): Promise<{ deleted: number; filesRemoved: numbe
   };
 }
 
+async function wipeDataTables(client: pg.PoolClient): Promise<void> {
+  await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_ru');
+  await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_analytics');
+  await client.query('DROP MATERIALIZED VIEW IF EXISTS mv_country_blocks_analytics');
+
+  await client.query(`
+    TRUNCATE
+      geo_city_block_asn,
+      geo_country_block_asn,
+      geo_city_blocks,
+      geo_country_blocks,
+      geo_asn_blocks,
+      geo_city_locations,
+      geo_country_locations,
+      stg_geo_city_locations,
+      stg_geo_country_locations,
+      stg_geo_city_blocks,
+      stg_geo_country_blocks,
+      stg_geo_asn_blocks
+    RESTART IDENTITY CASCADE
+  `);
+
+  await client.query(`
+    ALTER TABLE stg_geo_city_blocks DROP CONSTRAINT IF EXISTS geo_city_blocks_geoname_id_fkey;
+    ALTER TABLE stg_geo_country_blocks DROP CONSTRAINT IF EXISTS geo_country_blocks_geoname_id_fkey;
+  `);
+
+  await client.query(`TRUNCATE stg_rir_delegations, rir_delegations RESTART IDENTITY`);
+}
+
 /**
  * Destructive admin op: wipe GRChC + RIR datasets, import/export history, and ZIP cache.
  * Keeps admin config/secrets and schema intact.
@@ -102,30 +132,10 @@ export async function wipeAllDatasets(): Promise<AdminDataWipeResult> {
     logger.warn({ err }, 'Failed to release orphaned RIR import lock during wipe');
   });
 
-  // Drop MVs before truncating base tables, then recreate empty views.
-  await query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_ru');
-  await query('DROP MATERIALIZED VIEW IF EXISTS mv_city_blocks_analytics');
-  await query('DROP MATERIALIZED VIEW IF EXISTS mv_country_blocks_analytics');
-
-  await query(`
-    TRUNCATE
-      geo_city_block_asn,
-      geo_country_block_asn,
-      geo_city_blocks,
-      geo_country_blocks,
-      geo_asn_blocks,
-      geo_city_locations,
-      geo_country_locations,
-      stg_geo_city_locations,
-      stg_geo_country_locations,
-      stg_geo_city_blocks,
-      stg_geo_country_blocks,
-      stg_geo_asn_blocks
-    RESTART IDENTITY CASCADE
-  `);
-  await relaxStagingBlockForeignKeys();
-
-  await query(`TRUNCATE stg_rir_delegations, rir_delegations RESTART IDENTITY`);
+  // Heavy TRUNCATE/DROP can exceed the default statement_timeout on large datasets.
+  await withDirectPoolClient(async (client) => {
+    await wipeDataTables(client);
+  });
 
   await recreateMaterializedViewsFromProduction();
 
