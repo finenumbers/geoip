@@ -26,7 +26,7 @@ const ALLOWED_SORT = new Set([
   'asn_org',
   'id',
 ]);
-const FACET_FIELDS = new Set(['grchc_cc', 'rir_cc', 'registry']);
+const FACET_FIELDS = new Set(['grchc_cc', 'rir_cc', 'registry', 'asn_org']);
 
 function supportsCcMismatchKeyset(sort: SortClause[]): boolean {
   if (sort.length === 0) return true;

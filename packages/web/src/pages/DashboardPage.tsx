@@ -379,7 +379,37 @@ export function DashboardPage() {
                     ? formatCount(ccMismatchState.rowCount)
                     : ccMismatchState?.status === 'running'
                       ? ui.dashboard.rirCcMismatchesRunning
-                      : '—'
+                      : ccMismatchState?.status === 'failed'
+                        ? ui.dashboard.rirCcMismatchFailed
+                        : '—'
+                }
+                title={
+                  ccMismatchState?.status === 'failed'
+                    ? (ccMismatchState.lastError ?? undefined)
+                    : undefined
+                }
+                valueClassName={
+                  ccMismatchState?.status === 'failed' ? 'text-red-600' : undefined
+                }
+              />
+              <DetailItem
+                label={ui.dashboard.rirCcMismatchRebuiltAt}
+                value={
+                  ccMismatchState?.status === 'ready'
+                    ? formatDateTime(ccMismatchState.rebuiltAt, displayTimezone)
+                    : ccMismatchState?.status === 'running'
+                      ? ui.dashboard.rirCcMismatchesRunning
+                      : ccMismatchState?.status === 'failed'
+                        ? ui.dashboard.rirCcMismatchFailed
+                        : '—'
+                }
+                title={
+                  ccMismatchState?.status === 'failed'
+                    ? (ccMismatchState.lastError ?? undefined)
+                    : undefined
+                }
+                valueClassName={
+                  ccMismatchState?.status === 'failed' ? 'text-red-600' : undefined
                 }
               />
             </SummaryDetails>

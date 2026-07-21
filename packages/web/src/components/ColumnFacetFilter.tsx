@@ -14,7 +14,7 @@ interface FacetItem {
 interface ColumnFacetFilterProps {
   label: string;
   field: string;
-  tableType?: 'city' | 'country' | 'rir' | 'asn';
+  tableType?: 'city' | 'country' | 'rir' | 'asn' | 'cc-mismatch';
   selectedValues: string[];
   onChange: (values: string[]) => void;
   onClear: () => void;
@@ -77,7 +77,10 @@ export function ColumnFacetFilter({
   const { data, isLoading, isFetching, isError } = useQuery({
     queryKey: ['facet', tableType, field, debouncedSearch, contextFilters],
     queryFn: async ({ signal }) => {
-      const result = await api.facetValues(
+      if (tableType === 'cc-mismatch') {
+        return api.ccMismatchFacet(field, debouncedSearch, resultLimit, contextFilters, signal);
+      }
+      return api.facetValues(
         tableType,
         field,
         debouncedSearch,
@@ -85,7 +88,6 @@ export function ColumnFacetFilter({
         contextFilters,
         signal,
       );
-      return result;
     },
     enabled: open && (!searchRequired || debouncedSearch.trim().length >= 2),
     staleTime: 60_000,

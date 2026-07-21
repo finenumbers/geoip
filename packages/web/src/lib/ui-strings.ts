@@ -163,6 +163,8 @@ export const ui = {
     rirTotalRows: 'Всего диапазонов',
     rirCcMismatches: 'Расхождения ГРЧЦ ≠ RIR CC',
     rirCcMismatchesRunning: 'Пересчёт…',
+    rirCcMismatchRebuiltAt: 'Время расчета расхождений',
+    rirCcMismatchFailed: 'Ошибка',
     rirRegistryRipencc: 'RIPE NCC',
     rirRegistryArin: 'ARIN',
     rirRegistryApnic: 'APNIC',

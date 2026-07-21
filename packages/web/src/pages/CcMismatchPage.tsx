@@ -6,9 +6,12 @@ import { api } from '@/lib/api';
 import { ui } from '@/lib/ui-strings';
 import { DataTable } from '@/components/DataTable';
 import { ColumnTextFilter } from '@/components/ColumnTextFilter';
+import { ColumnFacetFilter } from '@/components/ColumnFacetFilter';
 import { formatDateTime } from '@/lib/format-datetime';
 import {
+  getMultiFilterValues,
   getTextFilterValue,
+  setMultiFilter,
   setTextFilter,
   type TableFilter,
 } from '@/lib/browse-filters';
@@ -132,6 +135,11 @@ export function CcMismatchPage() {
     setFilters((prev) => setTextFilter(prev, field, ''));
   }, []);
 
+  const facetContext = useCallback(
+    (excludeField: string) => filters.filter((f) => f.field !== excludeField),
+    [filters],
+  );
+
   const columns = useMemo<ColumnDef<CcMismatchRow>[]>(
     () => [
       {
@@ -190,11 +198,15 @@ export function CcMismatchPage() {
         meta: {
           sortable: true,
           headerFilter: (
-            <ColumnTextFilter
-              placeholder={ui.ccMismatch.asnOrg}
-              value={getTextFilterValue(filters, 'asn_org')}
-              onApply={(value) => applyTextFilter('asn_org', value)}
-              onClear={() => clearTextFilter('asn_org')}
+            <ColumnFacetFilter
+              label={ui.ccMismatch.asnOrg}
+              field="asn_org"
+              tableType="cc-mismatch"
+              selectedValues={getMultiFilterValues(filters, 'asn_org')}
+              contextFilters={facetContext('asn_org')}
+              compact
+              onChange={(values) => setFilters((prev) => setMultiFilter(prev, 'asn_org', values))}
+              onClear={() => setFilters((prev) => setMultiFilter(prev, 'asn_org', []))}
             />
           ),
         },
@@ -245,7 +257,7 @@ export function CcMismatchPage() {
         },
       },
     ],
-    [filters, applyTextFilter, clearTextFilter],
+    [filters, applyTextFilter, clearTextFilter, facetContext],
   );
 
   const loadMore = useCallback(() => {
@@ -263,23 +275,20 @@ export function CcMismatchPage() {
     }
   }, [status, queryClient]);
 
+  const showStatusBanner = status !== 'ready';
   const statusLabel =
     status === 'running'
       ? ui.ccMismatch.statusRunning
-      : status === 'ready'
-        ? ui.ccMismatch.statusReady
-        : status === 'failed'
-          ? ui.ccMismatch.statusFailed
-          : ui.ccMismatch.statusNever;
+      : status === 'failed'
+        ? ui.ccMismatch.statusFailed
+        : ui.ccMismatch.statusNever;
 
   const statusBannerClass =
     status === 'running'
       ? 'border-amber-500/40 bg-amber-500/10 text-amber-900'
-      : status === 'ready'
-        ? 'border-green-600/30 bg-green-600/10 text-green-900'
-        : status === 'failed'
-          ? 'border-red-500/40 bg-red-500/10 text-red-900'
-          : 'border-border bg-muted/40 text-foreground';
+      : status === 'failed'
+        ? 'border-red-500/40 bg-red-500/10 text-red-900'
+        : 'border-border bg-muted/40 text-foreground';
 
   const emptyMessage = (() => {
     if (status === 'never') return ui.ccMismatch.emptyNever;
@@ -301,47 +310,49 @@ export function CcMismatchPage() {
           <p className="mt-1 text-sm text-muted">{ui.ccMismatch.hint}</p>
         </div>
 
-        <div
-          className={cn('rounded border px-3 py-2 text-sm', statusBannerClass)}
-          data-testid="cc-mismatch-status"
-        >
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span>
-              {ui.ccMismatch.statusLabel}:{' '}
-              <span className="font-medium">{statusLabel}</span>
-            </span>
-            <span>
-              {ui.ccMismatch.rowCount}:{' '}
-              <span className="font-medium">
-                {(stateQuery.data?.rowCount ?? totalRows).toLocaleString('ru')}
-              </span>
-            </span>
-            <span>
-              {ui.ccMismatch.rebuiltAt}:{' '}
-              <span className="font-medium">{formatDateTime(stateQuery.data?.rebuiltAt)}</span>
-            </span>
-            {(status === 'ready' || status === 'failed') && (
+        {showStatusBanner && (
+          <div
+            className={cn('rounded border px-3 py-2 text-sm', statusBannerClass)}
+            data-testid="cc-mismatch-status"
+          >
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
               <span>
-                {ui.ccMismatch.durationMs}:{' '}
+                {ui.ccMismatch.statusLabel}:{' '}
+                <span className="font-medium">{statusLabel}</span>
+              </span>
+              <span>
+                {ui.ccMismatch.rowCount}:{' '}
                 <span className="font-medium">
-                  {formatDurationMs(stateQuery.data?.durationMs)}
+                  {(stateQuery.data?.rowCount ?? totalRows).toLocaleString('ru')}
                 </span>
               </span>
+              <span>
+                {ui.ccMismatch.rebuiltAt}:{' '}
+                <span className="font-medium">{formatDateTime(stateQuery.data?.rebuiltAt)}</span>
+              </span>
+              {status === 'failed' && (
+                <span>
+                  {ui.ccMismatch.durationMs}:{' '}
+                  <span className="font-medium">
+                    {formatDurationMs(stateQuery.data?.durationMs)}
+                  </span>
+                </span>
+              )}
+            </div>
+            {status === 'never' && (
+              <p className="mt-1 text-muted">{ui.ccMismatch.statusNeverHint}</p>
+            )}
+            {status === 'running' && (
+              <p className="mt-1">{ui.ccMismatch.statusRunningHint}</p>
+            )}
+            {status === 'failed' && (
+              <p className="mt-1">
+                {ui.ccMismatch.statusFailedHint}{' '}
+                {stateQuery.data?.lastError ?? '—'}
+              </p>
             )}
           </div>
-          {status === 'never' && (
-            <p className="mt-1 text-muted">{ui.ccMismatch.statusNeverHint}</p>
-          )}
-          {status === 'running' && (
-            <p className="mt-1">{ui.ccMismatch.statusRunningHint}</p>
-          )}
-          {status === 'failed' && (
-            <p className="mt-1">
-              {ui.ccMismatch.statusFailedHint}{' '}
-              {stateQuery.data?.lastError ?? '—'}
-            </p>
-          )}
-        </div>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col" data-testid="cc-mismatch-table">

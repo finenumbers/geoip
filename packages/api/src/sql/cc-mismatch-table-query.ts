@@ -136,7 +136,7 @@ export function buildCcMismatchFacetQuery(
   limit: number,
   contextFilters: FilterClause[],
 ): { sql: string; params: unknown[] } {
-  const allowed = new Set(['grchc_cc', 'rir_cc', 'registry']);
+  const allowed = new Set(['grchc_cc', 'rir_cc', 'registry', 'asn_org']);
   if (!allowed.has(field)) {
     throw new Error(`Unsupported CC mismatch facet field: ${field}`);
   }
