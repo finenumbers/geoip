@@ -68,8 +68,31 @@ jobs:
       - name: Docker build smoke
         run: docker compose -f docker-compose.yml -f docker-compose.build.yml build api web
 
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-chromium
+
       - name: Install Playwright Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 8
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: pnpm exec playwright install chromium --with-deps
 
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: pnpm exec playwright install-deps chromium
+
       - name: E2E smoke
+        timeout-minutes: 10
         run: pnpm e2e
