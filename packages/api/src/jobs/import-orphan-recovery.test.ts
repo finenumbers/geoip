@@ -1,23 +1,89 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-function resolveStaleMinutesFromEnv(raw: string | undefined): number {
-  const DEFAULT_STALE_MINUTES = 20;
-  const envMinutes = Number(raw ?? DEFAULT_STALE_MINUTES);
-  if (!Number.isFinite(envMinutes) || envMinutes < 5) return DEFAULT_STALE_MINUTES;
-  return Math.min(Math.floor(envMinutes), 120);
-}
+const mocks = vi.hoisted(() => ({
+  query: vi.fn(),
+  withImportLockIfFree: vi.fn(),
+  invalidateDatasetStateCache: vi.fn(),
+  invalidateReadyCache: vi.fn(),
+  warn: vi.fn(),
+}));
 
-describe('import orphan stale threshold', () => {
-  it('defaults to 20 minutes', () => {
-    expect(resolveStaleMinutesFromEnv(undefined)).toBe(20);
+vi.mock('../db/client.js', () => ({
+  query: mocks.query,
+}));
+
+vi.mock('./import-lock.js', () => ({
+  withImportLockIfFree: mocks.withImportLockIfFree,
+}));
+
+vi.mock('../repositories/dataset-repository.js', () => ({
+  invalidateDatasetStateCache: mocks.invalidateDatasetStateCache,
+}));
+
+vi.mock('../services/ready-cache.js', () => ({
+  invalidateReadyCache: mocks.invalidateReadyCache,
+}));
+
+vi.mock('../config/logger.js', () => ({
+  logger: { warn: mocks.warn, error: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
+import {
+  recoverOrphanedGrchcImportsIfLockFree,
+  resetStuckGrchcImports,
+} from './import-orphan-recovery.js';
+
+describe('recoverOrphanedGrchcImportsIfLockFree', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('clamps invalid values to default', () => {
-    expect(resolveStaleMinutesFromEnv('2')).toBe(20);
-    expect(resolveStaleMinutesFromEnv('abc')).toBe(20);
+  it('does not touch runs when lock is held', async () => {
+    mocks.withImportLockIfFree.mockResolvedValue(null);
+
+    const result = await recoverOrphanedGrchcImportsIfLockFree();
+
+    expect(result).toEqual({ clearedIds: [], lockHeld: true });
+    expect(mocks.query).not.toHaveBeenCalled();
   });
 
-  it('caps at 120 minutes', () => {
-    expect(resolveStaleMinutesFromEnv('999')).toBe(120);
+  it('fails active runs while lock is held by probe', async () => {
+    mocks.withImportLockIfFree.mockImplementation(async (fn: () => Promise<string[]>) => fn());
+    mocks.query
+      .mockResolvedValueOnce({ rows: [{ id: 'run-1' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await recoverOrphanedGrchcImportsIfLockFree();
+
+    expect(result).toEqual({ clearedIds: ['run-1'], lockHeld: false });
+    expect(mocks.query.mock.calls[0]?.[1]).toEqual([
+      'WORKER_ORPHAN',
+      'Import abandoned: advisory lock free (worker lost ownership)',
+    ]);
+    expect(String(mocks.query.mock.calls[0]?.[0])).toContain("status IN ('running'");
+    expect(mocks.invalidateReadyCache).toHaveBeenCalled();
+  });
+});
+
+describe('resetStuckGrchcImports', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fails active and queued runs', async () => {
+    mocks.query
+      .mockResolvedValueOnce({ rows: [{ id: 'active-1' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: 'queued-1' }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await resetStuckGrchcImports();
+
+    expect(result).toEqual({ clearedRuns: 2 });
+    expect(mocks.query.mock.calls[0]?.[1]?.[0]).toBe('manual_reset');
+    expect(String(mocks.query.mock.calls[3]?.[0])).toContain("status = 'queued'");
+    expect(mocks.invalidateReadyCache).toHaveBeenCalled();
   });
 });

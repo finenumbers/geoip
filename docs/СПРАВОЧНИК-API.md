@@ -223,6 +223,16 @@ Probe ЛК ГРЧЦ без import.
 | 200 | `{ "ok": true, "importRunId": "uuid" }` |
 | 409 | ImportAlreadyRunning |
 
+### POST `/admin/imports/reset`
+
+Сброс зависших `queued` / `running|validating|swapping|refreshing_mv` runs ГРЧЦ (ops без SQL). Если advisory lock ещё удерживается живым worker — в ответе `lockHeld: true` (нужен рестарт контейнера `import`).
+
+| HTTP | Описание |
+|------|----------|
+| 200 | `{ "ok": true, "clearedRuns": N, "lockHeld": boolean }` |
+
+API также периодически (≈30 с) снимает orphan-runs, когда advisory lock свободен (worker умер без рестарта).
+
 ---
 
 ### GET `/admin/rir/status`

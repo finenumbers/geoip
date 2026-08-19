@@ -490,4 +490,12 @@ async function failImport(
       sourceFileManifest: manifest ?? null,
     })
     .where(eq(importRuns.id, id));
+
+  await db
+    .update(datasetState)
+    .set({ mvStatus: 'unavailable' })
+    .where(and(eq(datasetState.id, 1), eq(datasetState.mvStatus, 'refreshing')));
+
+  invalidateDatasetStateCache();
+  invalidateReadyCache();
 }

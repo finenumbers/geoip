@@ -89,6 +89,10 @@ export const adminApi = {
     adminRequest<{ ok: boolean; importRunId?: string }>('/imports/trigger', {
       method: 'POST',
     }),
+  resetImport: () =>
+    adminRequest<{ ok: boolean; clearedRuns: number; lockHeld: boolean }>('/imports/reset', {
+      method: 'POST',
+    }),
   rirStatus: () =>
     adminRequest<{
       status: string;

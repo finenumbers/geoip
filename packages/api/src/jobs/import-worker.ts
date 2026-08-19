@@ -3,9 +3,7 @@ import { loadEnv } from '../config/env.js';
 import { loadRuntimeConfig } from '../config/runtime-config.js';
 import { logger, createChildLogger } from '../config/logger.js';
 import { migrate } from '../db/migrate.js';
-import { recoverStaleImportRuns } from './import-orphan-recovery.js';
-import { releaseOrphanedImportLock } from './import-lock.js';
-import { getRunningImport } from '../repositories/dataset-repository.js';
+import { recoverOrphanedGrchcImportsIfLockFree } from './import-orphan-recovery.js';
 import { getQueuedImports } from '../services/import-service.js';
 import { runImportPipeline } from './import-pipeline.js';
 import cron, { type ScheduledTask } from 'node-cron';
@@ -14,10 +12,18 @@ import { registerWorkerShutdown, startWorkerPoll } from './worker-lifecycle.js';
 import { subscribeConfigChanges } from '../config/runtime-config.js';
 import { watchConfigFileChanges } from '../config/config-reload-watcher.js';
 import { resetEnvCache } from '../config/env.js';
+import { ensureAsnMappingsInBackground } from '../sql/asn-backfill.js';
 
 let pollInProgress = false;
 let cronTask: ScheduledTask | null = null;
 let restartPoll: ((intervalMs: number) => void) | null = null;
+
+async function recoverOrphansAndMaybeBackfillAsn(): Promise<void> {
+  const { clearedIds } = await recoverOrphanedGrchcImportsIfLockFree();
+  if (clearedIds.length > 0) {
+    ensureAsnMappingsInBackground(logger);
+  }
+}
 
 async function pollQueuedImports(): Promise<void> {
   if (pollInProgress) {
@@ -26,6 +32,7 @@ async function pollQueuedImports(): Promise<void> {
   }
   pollInProgress = true;
   try {
+    await recoverOrphansAndMaybeBackfillAsn();
     const queued = await getQueuedImports();
     for (const job of queued) {
       const childLogger = createChildLogger({ importRunId: job.id });
@@ -89,12 +96,7 @@ async function main(): Promise<void> {
   logger.info('Import worker starting');
 
   await migrate();
-  await recoverStaleImportRuns();
-  const running = await getRunningImport();
-  if (!running) {
-    await releaseOrphanedImportLock();
-    logger.info('Released orphaned import advisory lock on startup');
-  }
+  await recoverOrphansAndMaybeBackfillAsn();
 
   registerWorkerShutdown(async () => {
     cronTask?.stop();

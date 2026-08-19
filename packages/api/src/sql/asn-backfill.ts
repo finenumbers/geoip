@@ -1,6 +1,8 @@
 import type { Logger } from 'pino';
+import { getRunningImport } from '../repositories/dataset-repository.js';
 import { populateBlockAsnMappings } from '../sql/asn-mapping.js';
 import { isAsnMappingReady, markAsnMappingReady } from '../sql/asn-mapping-status.js';
+import { isImportLockFree } from '../jobs/import-lock.js';
 
 let backfillRunning = false;
 
@@ -8,6 +10,18 @@ let backfillRunning = false;
 export async function ensureAsnMappingsInBackground(logger: Logger): Promise<void> {
   if (backfillRunning) return;
   if (await isAsnMappingReady()) return;
+
+  const running = await getRunningImport();
+  if (running) {
+    logger.debug({ importRunId: running.id }, 'ASN backfill skipped — import running');
+    return;
+  }
+
+  const lockFree = await isImportLockFree();
+  if (!lockFree) {
+    logger.debug('ASN backfill skipped — import advisory lock held');
+    return;
+  }
 
   backfillRunning = true;
   logger.info('ASN mapping tables empty — starting background backfill');

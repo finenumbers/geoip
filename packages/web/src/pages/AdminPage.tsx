@@ -152,6 +152,20 @@ export function AdminPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const resetImport = useMutation({
+    mutationFn: adminApi.resetImport,
+    onSuccess: (data) => {
+      const base = `${ui.admin.resetImportDone} (${data.clearedRuns})`;
+      setMessage(data.lockHeld ? `${base}. ${ui.admin.resetImportLockHeld}` : base);
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['setup-checklist'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['status'] });
+      void queryClient.invalidateQueries({ queryKey: ['ready'] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const triggerRirImport = useMutation({
     mutationFn: adminApi.triggerRirImport,
     onSuccess: (data) => {
@@ -263,6 +277,13 @@ export function AdminPage() {
                 loading={triggerImport.isPending}
               >
                 {ui.admin.triggerImport}
+              </ActionButton>
+              <ActionButton
+                variant="probe"
+                onClick={() => resetImport.mutate()}
+                loading={resetImport.isPending}
+              >
+                {ui.admin.resetImport}
               </ActionButton>
               <ActionButton
                 variant="probe"

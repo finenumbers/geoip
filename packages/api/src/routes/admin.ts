@@ -191,6 +191,22 @@ export async function registerAdminOpsRoutes(app: FastifyInstance): Promise<void
     return { ok: true, importRunId: result.importRunId };
   });
 
+  app.post('/api/v1/admin/imports/reset', { preHandler: [app.requireAdminSession] }, async () => {
+    const { resetStuckGrchcImports } = await import('../jobs/import-orphan-recovery.js');
+    const { isImportLockFree } = await import('../jobs/import-lock.js');
+    const { ensureAsnMappingsInBackground } = await import('../sql/asn-backfill.js');
+    const { logger } = await import('../config/logger.js');
+
+    const lockFree = await isImportLockFree();
+    const { clearedRuns } = await resetStuckGrchcImports();
+    ensureAsnMappingsInBackground(logger);
+    return {
+      ok: true as const,
+      clearedRuns,
+      lockHeld: !lockFree,
+    };
+  });
+
   app.post('/api/v1/admin/data/wipe', { preHandler: [app.requireAdminSession] }, async (_request, reply) => {
     try {
       const { wipeAllDatasets } = await import('../services/admin-data-wipe.js');

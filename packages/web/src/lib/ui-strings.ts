@@ -298,6 +298,10 @@ export const ui = {
     testGrchc: 'Проверить ГРЧЦ',
     testRir: 'Проверить RIR+IANA',
     triggerImport: 'Импортировать ГРЧЦ',
+    resetImport: 'Сбросить зависший импорт ГРЧЦ',
+    resetImportDone: 'Зависший импорт ГРЧЦ сброшен',
+    resetImportLockHeld:
+      'Сброс выполнен, но advisory lock ещё удерживается — перезапустите контейнер import',
     triggerRirImport: 'Импортировать RIR+IANA',
     importQueued: 'Импорт датасета ГРЧЦ поставлен в очередь',
     rirImportQueued: 'Импорт RIR+IANA поставлен в очередь',

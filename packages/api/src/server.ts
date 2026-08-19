@@ -5,7 +5,7 @@ import { migrate } from './db/migrate.js';
 import { closeDb } from './db/client.js';
 import { buildApp } from './app.js';
 import { ensureProductionIndexes, recreateMaterializedViewsInBackground } from './sql/swap.js';
-import { recoverStaleImportRuns } from './jobs/import-orphan-recovery.js';
+import { recoverOrphanedGrchcImportsIfLockFree } from './jobs/import-orphan-recovery.js';
 import { ensureAsnMappingsInBackground } from './sql/asn-backfill.js';
 import { ensureDatasetCachesInBackground } from './sql/filter-count-cache-ensure.js';
 import { ensureDatasetVolumesInBackground } from './sql/dataset-volumes-backfill.js';
@@ -13,13 +13,26 @@ import { ensureCcMismatchRebuildInBackground } from './jobs/geo-rir-cc-mismatch-
 import { subscribeConfigChanges } from './config/runtime-config.js';
 import { watchConfigFileChanges } from './config/config-reload-watcher.js';
 
+const ORPHAN_RECOVERY_INTERVAL_MS = 30_000;
+
+async function recoverOrphansAndMaybeBackfillAsn(): Promise<void> {
+  try {
+    const { clearedIds } = await recoverOrphanedGrchcImportsIfLockFree();
+    if (clearedIds.length > 0) {
+      ensureAsnMappingsInBackground(logger);
+    }
+  } catch (err) {
+    logger.error({ err }, 'GRChC orphan recovery failed');
+  }
+}
+
 async function main(): Promise<void> {
   const env = loadEnv();
   mkdirSync(env.IMPORT_DOWNLOAD_DIR, { recursive: true });
   mkdirSync(env.EXPORT_DIR, { recursive: true });
 
   await migrate();
-  await recoverStaleImportRuns();
+  await recoverOrphansAndMaybeBackfillAsn();
   await ensureProductionIndexes({ deferMvRecreate: true });
 
   const app = await buildApp();
@@ -34,8 +47,14 @@ async function main(): Promise<void> {
   });
   const stopConfigWatch = watchConfigFileChanges();
 
+  const orphanTimer = setInterval(() => {
+    void recoverOrphansAndMaybeBackfillAsn();
+  }, ORPHAN_RECOVERY_INTERVAL_MS);
+  orphanTimer.unref?.();
+
   const shutdown = async () => {
     logger.info('Shutting down');
+    clearInterval(orphanTimer);
     stopConfigWatch();
     await app.close();
     await closeDb();
