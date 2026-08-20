@@ -89,6 +89,9 @@ services:
     depends_on:
       pgbouncer:
         condition: service_healthy
+    networks:
+      - default
+      - proxy
     healthcheck:
       test: ["CMD", "node", "/app/scripts/api-docker-healthcheck.mjs"]
       interval: 15s
@@ -201,3 +204,8 @@ volumes:
   import_data:
   export_data:
   config_data:
+
+networks:
+  proxy:
+    name: proxy
+    external: true

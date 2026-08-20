@@ -47,20 +47,20 @@ Internet → NPM (443/TLS) → host:8080 → geoip_web (nginx)
 ### Предварительные условия
 
 1. GeoIP stack running, `geoip_web` на порту **8080**
-2. NPM имеет сетевой доступ к Docker-хосту
-3. DNS A/AAAA домена → сервер с NPM
+2. Внешняя Docker-сеть **`proxy`** существует (`docker network create proxy` при необходимости); `geoip_api` подключён к ней (Portainer / prod compose)
+3. NPM имеет сетевой доступ к Docker-хосту **или** состоит в сети `proxy`
+4. DNS A/AAAA домена → сервер с NPM
 
 ### Шаги
 
 1. NPM → **Hosts → Proxy Hosts → Add Proxy Host**
 2. **Domain Names:** `geoip.example.com`
 3. **Scheme:** `http`
-4. **Forward Hostname / IP:**
-   - NPM на том же хосте: `127.0.0.1`
-   - NPM в Docker на той же сети: IP хоста или имя контейнера
-5. **Forward Port:** `8080`
-6. **Block Common Exploits:** включить
-7. **Websockets Support:** выключить (не требуется)
+4. **Forward Hostname / IP** и **Forward Port:**
+   - Типичный путь (UI + `/api` через nginx): `127.0.0.1` / `8080`, или контейнер `geoip_web` / `80` если NPM в сети stack
+   - Прямо на API (только backend, сеть `proxy`): `geoip_api` / `3000`
+5. **Block Common Exploits:** включить
+6. **Websockets Support:** выключить (не требуется)
 
 Сохраните без SSL — сначала проверьте HTTP:
 
